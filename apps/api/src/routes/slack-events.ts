@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { IncomingMessage } from "node:http";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
@@ -10,6 +11,17 @@ import {
 } from "../db/schema/index.js";
 import { decrypt } from "../lib/crypto.js";
 import type { AppBindings } from "../types.js";
+
+// ── Read body from Node.js IncomingMessage (bypasses Hono body reading) ──
+
+function readIncomingBody(incoming: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+    incoming.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    incoming.on("error", reject);
+  });
+}
 
 // ── Slack signature verification ──────────────────────────────────────────
 
@@ -36,132 +48,163 @@ function verifySlackSignature(
 // ── Route registration ────────────────────────────────────────────────────
 
 export function registerSlackEvents(app: OpenAPIHono<AppBindings>) {
-  app.post("/api/slack/events", async (c) => {
-    // 1. Read raw body (needed for signature verification)
-    const rawBody = await c.req.text();
-
-    let payload: Record<string, unknown>;
+  app.on("POST", "/api/slack/events", async (c) => {
     try {
-      payload = JSON.parse(rawBody) as Record<string, unknown>;
-    } catch {
-      return c.json({ error: "Invalid JSON" }, 400);
-    }
-
-    // 2. Handle url_verification challenge (Slack endpoint validation)
-    if (payload.type === "url_verification") {
-      return c.json({ challenge: payload.challenge });
-    }
-
-    // 3. Extract team_id from event payload
-    const teamId = payload.team_id as string | undefined;
-    if (!teamId) {
-      return c.json({ error: "Missing team_id" }, 400);
-    }
-
-    // 4. Look up webhook route
-    const [route] = await db
-      .select()
-      .from(webhookRoutes)
-      .where(
-        and(
-          eq(webhookRoutes.channelType, "slack"),
-          eq(webhookRoutes.externalId, teamId),
-        ),
-      );
-
-    if (!route) {
-      console.warn(
-        `[slack-events] No webhook route for team_id=${teamId}`,
-      );
-      return c.json({ error: "Unknown workspace" }, 404);
-    }
-
-    // 5. Retrieve signing secret from credentials
-    const [signingSecretRow] = await db
-      .select({ encryptedValue: channelCredentials.encryptedValue })
-      .from(channelCredentials)
-      .where(
-        and(
-          eq(channelCredentials.botChannelId, route.botChannelId),
-          eq(channelCredentials.credentialType, "signingSecret"),
-        ),
-      );
-
-    if (!signingSecretRow) {
-      console.error(
-        `[slack-events] No signing secret for botChannelId=${route.botChannelId}`,
-      );
-      return c.json({ error: "Channel misconfigured" }, 500);
-    }
-
-    const signingSecret = decrypt(signingSecretRow.encryptedValue);
-
-    // 6. Verify Slack request signature
-    const timestamp = c.req.header("x-slack-request-timestamp") ?? "";
-    const signature = c.req.header("x-slack-signature") ?? "";
-
-    if (!timestamp || !signature) {
-      return c.json({ error: "Missing Slack signature headers" }, 401);
-    }
-
-    if (!verifySlackSignature(signingSecret, timestamp, rawBody, signature)) {
-      return c.json({ error: "Invalid signature" }, 401);
-    }
-
-    // 7. Find the gateway pod
-    const [channel] = await db
-      .select({ accountId: botChannels.accountId })
-      .from(botChannels)
-      .where(eq(botChannels.id, route.botChannelId));
-
-    const accountId = channel?.accountId ?? `slack-${teamId}`;
-
-    const [pool] = await db
-      .select({ podIp: gatewayPools.podIp })
-      .from(gatewayPools)
-      .where(eq(gatewayPools.id, route.poolId));
-
-    const podIp = pool?.podIp;
-
-    // 8. Forward to gateway or log locally
-    if (!podIp) {
-      // Dev mode: no gateway pod, just log the event
-      const eventType =
-        (payload.event as Record<string, unknown> | undefined)?.type ?? "unknown";
       console.log(
-        `[slack-events] team=${teamId} event=${eventType} (no gateway pod — logged only)`,
+        `[slack-events] incoming: method=${c.req.method} content-type=${c.req.header("content-type")} retry=${c.req.header("x-slack-retry-num") ?? "none"}`,
       );
-      if (payload.event) {
-        console.log(
-          "[slack-events] payload:",
-          JSON.stringify(payload.event, null, 2),
-        );
+
+      // Skip Slack retries — we already processed the original
+      if (c.req.header("x-slack-retry-num")) {
+        return c.json({ ok: true });
       }
-      return c.json({ ok: true });
-    }
 
-    // Forward to gateway pod
-    const gatewayUrl = `http://${podIp}:18789/slack/events/${accountId}`;
+      // Read body from Node.js IncomingMessage directly (avoids Hono body reading issue)
+      const incoming = (c.env as { incoming: IncomingMessage }).incoming;
+      let rawBody: string;
+      try {
+        rawBody = await readIncomingBody(incoming);
+        console.log(`[slack-events] body length=${rawBody.length}`);
+      } catch (err) {
+        console.error("[slack-events] Failed to read body:", err);
+        return c.json({ ok: true });
+      }
 
-    try {
-      const gatewayResp = await fetch(gatewayUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Slack-Request-Timestamp": timestamp,
-          "X-Slack-Signature": signature,
-        },
-        body: rawBody,
-      });
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(rawBody) as Record<string, unknown>;
+        console.log(
+          `[slack-events] type=${payload.type} team=${payload.team_id}`,
+        );
+      } catch {
+        console.error("[slack-events] Invalid JSON body");
+        return c.json({ error: "Invalid JSON" }, 400);
+      }
 
-      const respBody = await gatewayResp.text();
-      return new Response(respBody, {
-        status: gatewayResp.status,
-        headers: { "Content-Type": "application/json" },
-      });
+      // Handle url_verification challenge (Slack endpoint validation)
+      if (payload.type === "url_verification") {
+        return c.json({ challenge: payload.challenge });
+      }
+
+      // Extract team_id from event payload
+      const teamId = payload.team_id as string | undefined;
+      if (!teamId) {
+        return c.json({ error: "Missing team_id" }, 400);
+      }
+
+      // Look up webhook route
+      const [route] = await db
+        .select()
+        .from(webhookRoutes)
+        .where(
+          and(
+            eq(webhookRoutes.channelType, "slack"),
+            eq(webhookRoutes.externalId, teamId),
+          ),
+        );
+
+      if (!route) {
+        console.warn(
+          `[slack-events] No webhook route for team_id=${teamId}`,
+        );
+        return c.json({ error: "Unknown workspace" }, 404);
+      }
+
+      // Retrieve signing secret from credentials
+      const [signingSecretRow] = await db
+        .select({ encryptedValue: channelCredentials.encryptedValue })
+        .from(channelCredentials)
+        .where(
+          and(
+            eq(channelCredentials.botChannelId, route.botChannelId),
+            eq(channelCredentials.credentialType, "signingSecret"),
+          ),
+        );
+
+      if (!signingSecretRow) {
+        console.error(
+          `[slack-events] No signing secret for botChannelId=${route.botChannelId}`,
+        );
+        return c.json({ error: "Channel misconfigured" }, 500);
+      }
+
+      const signingSecret = decrypt(signingSecretRow.encryptedValue);
+
+      // Verify Slack request signature
+      const timestamp = c.req.header("x-slack-request-timestamp") ?? "";
+      const signature = c.req.header("x-slack-signature") ?? "";
+
+      if (!timestamp || !signature) {
+        console.warn("[slack-events] Missing signature headers");
+        return c.json({ error: "Missing Slack signature headers" }, 401);
+      }
+
+      if (
+        !verifySlackSignature(signingSecret, timestamp, rawBody, signature)
+      ) {
+        console.warn(
+          `[slack-events] Signature mismatch: ts=${timestamp} sig=${signature.slice(0, 20)}...`,
+        );
+        return c.json({ error: "Invalid signature" }, 401);
+      }
+
+      // Find the gateway pod
+      const [channel] = await db
+        .select({ accountId: botChannels.accountId })
+        .from(botChannels)
+        .where(eq(botChannels.id, route.botChannelId));
+
+      const accountId = channel?.accountId ?? `slack-${teamId}`;
+
+      const [pool] = await db
+        .select({ podIp: gatewayPools.podIp })
+        .from(gatewayPools)
+        .where(eq(gatewayPools.id, route.poolId));
+
+      const podIp = pool?.podIp;
+
+      // Forward to gateway or log locally
+      if (!podIp) {
+        const eventType =
+          (payload.event as Record<string, unknown> | undefined)?.type ??
+          "unknown";
+        console.log(
+          `[slack-events] team=${teamId} event=${eventType} (no gateway pod — logged only)`,
+        );
+        if (payload.event) {
+          console.log(
+            "[slack-events] payload:",
+            JSON.stringify(payload.event, null, 2),
+          );
+        }
+        return c.json({ ok: true });
+      }
+
+      // Forward to gateway pod
+      const gatewayUrl = `http://${podIp}:18789/slack/events/${accountId}`;
+
+      try {
+        const gatewayResp = await fetch(gatewayUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": signature,
+          },
+          body: rawBody,
+        });
+
+        const respBody = await gatewayResp.text();
+        return new Response(respBody, {
+          status: gatewayResp.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.error("[slack-events] Failed to forward to gateway:", err);
+        return c.json({ ok: true });
+      }
     } catch (err) {
-      console.error("[slack-events] Failed to forward to gateway:", err);
-      // Return 200 to Slack to avoid retries — we'll handle the error internally
+      console.error("[slack-events] Unhandled error:", err);
       return c.json({ ok: true });
     }
   });
