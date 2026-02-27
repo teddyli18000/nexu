@@ -9,10 +9,10 @@ export default {
     const url = new URL(request.url);
 
     // API reverse proxy
-    if (url.pathname.startsWith('/v1/') || url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith("/v1/") || url.pathname.startsWith("/api/")) {
       const target = new URL(url.pathname + url.search, env.API_ORIGIN);
       const headers = new Headers(request.headers);
-      headers.set('Host', new URL(env.API_ORIGIN).host);
+      headers.set("Host", new URL(env.API_ORIGIN).host);
       return fetch(target, {
         method: request.method,
         headers,
@@ -21,18 +21,23 @@ export default {
     }
 
     // Main app routes
-    if (url.pathname.startsWith('/workspace') ||
-        url.pathname.startsWith('/auth') ||
-        url.pathname.startsWith('/invite')) {
+    if (
+      url.pathname.startsWith("/workspace") ||
+      url.pathname.startsWith("/auth") ||
+      url.pathname.startsWith("/invite")
+    ) {
       return env.APP.fetch(request);
     }
 
     // Root path: check better-auth session cookie
-    if (url.pathname === '/') {
-      const cookie = request.headers.get('Cookie') || '';
-      const hasSession = cookie.includes('better-auth.session_token');
+    if (url.pathname === "/") {
+      const cookie = request.headers.get("Cookie") || "";
+      const hasSession = cookie.includes("better-auth.session_token");
       if (hasSession) {
-        return Response.redirect(new URL('/workspace', request.url).toString(), 302);
+        return Response.redirect(
+          new URL("/workspace", request.url).toString(),
+          302,
+        );
       }
     }
 

@@ -1,49 +1,151 @@
 ---
-import '../styles/global.css';
+import "../styles/global.css";
 import {
-  ArrowRight, Terminal, Zap, Clock, Code2, Rocket, MessageSquare,
-  Blocks, Brain, BarChart3, PenTool, Workflow, Search,
-} from 'lucide-react';
-import DemoSection from '../components/DemoSection';
-import FAQSection from '../components/FAQSection';
+  ArrowRight,
+  BarChart3,
+  Blocks,
+  Brain,
+  Clock,
+  Code2,
+  MessageSquare,
+  PenTool,
+  Rocket,
+  Search,
+  Terminal,
+  Workflow,
+  Zap,
+} from "lucide-react";
+import DemoSection from "../components/DemoSection";
+import FAQSection from "../components/FAQSection";
 
 const capabilities = [
-  { Icon: Code2, label: 'Build websites & tools' },
-  { Icon: BarChart3, label: 'Data analysis' },
-  { Icon: PenTool, label: 'Content writing' },
-  { Icon: Search, label: 'Research' },
-  { Icon: Workflow, label: 'Automation' },
+  { Icon: Code2, label: "Build websites & tools" },
+  { Icon: BarChart3, label: "Data analysis" },
+  { Icon: PenTool, label: "Content writing" },
+  { Icon: Search, label: "Research" },
+  { Icon: Workflow, label: "Automation" },
 ];
 
 const features = [
-  { Icon: Code2, title: 'Build websites & tools', desc: '"Build me a flashcard game for learning English" — your lobster writes the code, deploys it, and gives you a link.' },
-  { Icon: BarChart3, title: 'Analyze data & reports', desc: 'Drop in an Excel file and your lobster finds trends, builds charts, and delivers insights. Half a day of work, done in seconds.' },
-  { Icon: PenTool, title: 'Write & publish content', desc: 'Product blogs, weekly updates, Twitter Threads, investor emails — give it your materials and get polished content back.' },
-  { Icon: MessageSquare, title: 'Lives in your chat app', desc: 'No new app to download. Your lobster lives directly in Slack / Discord / Telegram / WhatsApp. Just type and it starts working.' },
-  { Icon: Workflow, title: 'Scheduled automation', desc: '"Every Friday, summarize our Slack and send a newsletter" — set it once, your lobster runs it every week.' },
-  { Icon: Brain, title: 'Gets smarter over time', desc: 'Your lobster remembers your preferences and context — no need to repeat yourself. The more you use it, the better it gets.' },
+  {
+    Icon: Code2,
+    title: "Build websites & tools",
+    desc: '"Build me a flashcard game for learning English" — your lobster writes the code, deploys it, and gives you a link.',
+  },
+  {
+    Icon: BarChart3,
+    title: "Analyze data & reports",
+    desc: "Drop in an Excel file and your lobster finds trends, builds charts, and delivers insights. Half a day of work, done in seconds.",
+  },
+  {
+    Icon: PenTool,
+    title: "Write & publish content",
+    desc: "Product blogs, weekly updates, Twitter Threads, investor emails — give it your materials and get polished content back.",
+  },
+  {
+    Icon: MessageSquare,
+    title: "Lives in your chat app",
+    desc: "No new app to download. Your lobster lives directly in Slack / Discord / Telegram / WhatsApp. Just type and it starts working.",
+  },
+  {
+    Icon: Workflow,
+    title: "Scheduled automation",
+    desc: '"Every Friday, summarize our Slack and send a newsletter" — set it once, your lobster runs it every week.',
+  },
+  {
+    Icon: Brain,
+    title: "Gets smarter over time",
+    desc: "Your lobster remembers your preferences and context — no need to repeat yourself. The more you use it, the better it gets.",
+  },
 ];
 
 const steps = [
-  { step: '01', title: 'Sign up', desc: 'Create an account with your email. Takes 30 seconds.', Icon: Rocket },
-  { step: '02', title: 'Add to your IM', desc: 'Connect Slack / Discord / Telegram / WhatsApp in 3 minutes. Your 🦞 moves right in.', Icon: Blocks },
-  { step: '03', title: 'Start talking', desc: '@Nexu in your chat — tell it what you need, and 🦞 builds it for you.', Icon: Terminal },
+  {
+    step: "01",
+    title: "Sign up",
+    desc: "Create an account with your email. Takes 30 seconds.",
+    Icon: Rocket,
+  },
+  {
+    step: "02",
+    title: "Add to your IM",
+    desc: "Connect Slack / Discord / Telegram / WhatsApp in 3 minutes. Your 🦞 moves right in.",
+    Icon: Blocks,
+  },
+  {
+    step: "03",
+    title: "Start talking",
+    desc: "@Nexu in your chat — tell it what you need, and 🦞 builds it for you.",
+    Icon: Terminal,
+  },
 ];
 
 const useCases = [
-  { Icon: Code2, tag: 'App', prompt: '"Build my daughter a vocabulary flashcard game — cute style"', result: 'Creates React game from scratch · 48 word cards · pronunciation · auto-deployed, share the link to play', time: '~45s' },
-  { Icon: BarChart3, tag: 'Data', prompt: '"Find the fastest-growing category in this sales data"', result: 'Analyzes 12,000+ records · generates trend charts + category rankings + growth forecast dashboard', time: '~35s' },
-  { Icon: PenTool, tag: 'Content', prompt: '"Write a blog post + Twitter Thread from this week\'s product updates"', result: '1,200-word blog + 8-tweet thread + SEO summary, ready to publish', time: '~30s' },
-  { Icon: Code2, tag: 'Tool', prompt: '"Build a customer feedback form that exports to CSV"', result: 'Full-stack form app · ratings + text + tag filters + one-click export · live in seconds', time: '~40s' },
-  { Icon: Workflow, tag: 'Automation', prompt: '"Every Friday, summarize our Slack discussions and send a newsletter"', result: 'Scheduled workflow · auto-fetch → AI summary → format → send email, fully hands-free', time: '~20s' },
-  { Icon: Search, tag: 'Research', prompt: '"Research AI coding competitors and build a pricing comparison table"', result: 'Covers 6 competitors · feature comparison + pricing matrix + differentiation recommendations', time: '~60s' },
+  {
+    Icon: Code2,
+    tag: "App",
+    prompt: '"Build my daughter a vocabulary flashcard game — cute style"',
+    result:
+      "Creates React game from scratch · 48 word cards · pronunciation · auto-deployed, share the link to play",
+    time: "~45s",
+  },
+  {
+    Icon: BarChart3,
+    tag: "Data",
+    prompt: '"Find the fastest-growing category in this sales data"',
+    result:
+      "Analyzes 12,000+ records · generates trend charts + category rankings + growth forecast dashboard",
+    time: "~35s",
+  },
+  {
+    Icon: PenTool,
+    tag: "Content",
+    prompt:
+      '"Write a blog post + Twitter Thread from this week\'s product updates"',
+    result: "1,200-word blog + 8-tweet thread + SEO summary, ready to publish",
+    time: "~30s",
+  },
+  {
+    Icon: Code2,
+    tag: "Tool",
+    prompt: '"Build a customer feedback form that exports to CSV"',
+    result:
+      "Full-stack form app · ratings + text + tag filters + one-click export · live in seconds",
+    time: "~40s",
+  },
+  {
+    Icon: Workflow,
+    tag: "Automation",
+    prompt:
+      '"Every Friday, summarize our Slack discussions and send a newsletter"',
+    result:
+      "Scheduled workflow · auto-fetch → AI summary → format → send email, fully hands-free",
+    time: "~20s",
+  },
+  {
+    Icon: Search,
+    tag: "Research",
+    prompt:
+      '"Research AI coding competitors and build a pricing comparison table"',
+    result:
+      "Covers 6 competitors · feature comparison + pricing matrix + differentiation recommendations",
+    time: "~60s",
+  },
 ];
 
 const stats = [
-  { num: '3 min', label: 'To get started', sub: "Add a bot and you're ready" },
-  { num: '10h+', label: 'Saved per week', sub: 'Let your lobster do the grunt work' },
-  { num: '4', label: 'IM platforms', sub: 'Slack · Discord · Telegram · WhatsApp' },
-  { num: '0', label: 'Things to install', sub: 'Just type and it works' },
+  { num: "3 min", label: "To get started", sub: "Add a bot and you're ready" },
+  {
+    num: "10h+",
+    label: "Saved per week",
+    sub: "Let your lobster do the grunt work",
+  },
+  {
+    num: "4",
+    label: "IM platforms",
+    sub: "Slack · Discord · Telegram · WhatsApp",
+  },
+  { num: "0", label: "Things to install", sub: "Just type and it works" },
 ];
 ---
 
