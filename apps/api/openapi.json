@@ -695,6 +695,218 @@
         }
       }
     },
+    "/api/internal/skills/latest": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest skills snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skillsHash": {
+                      "type": "string"
+                    },
+                    "skills": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "skillsHash",
+                    "skills",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/skills/{name}": {
+      "put": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "files": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill upserted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "name",
+                    "version"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "timestamp": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "timestamp"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -2369,6 +2581,49 @@
                               ]
                             }
                           }
+                        },
+                        "web": {
+                          "type": "object",
+                          "properties": {
+                            "search": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            },
+                            "fetch": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "skills": {
+                      "type": "object",
+                      "properties": {
+                        "load": {
+                          "type": "object",
+                          "properties": {
+                            "watch": {
+                              "type": "boolean"
+                            },
+                            "watchDebounceMs": {
+                              "type": "number"
+                            },
+                            "extraDirs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -2678,6 +2933,14 @@
                           ]
                         }
                       }
+                    },
+                    "cron": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
                     }
                   },
                   "required": [
@@ -2853,6 +3116,85 @@
                     "ok",
                     "poolId",
                     "status"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/pools/{poolId}/secrets": {
+      "put": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "poolId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secrets": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "secrets"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Secrets stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pool not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
                   ]
                 }
               }
@@ -3104,6 +3446,49 @@
                                     "gateway",
                                     "node"
                                   ]
+                                }
+                              }
+                            },
+                            "web": {
+                              "type": "object",
+                              "properties": {
+                                "search": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "fetch": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "skills": {
+                          "type": "object",
+                          "properties": {
+                            "load": {
+                              "type": "object",
+                              "properties": {
+                                "watch": {
+                                  "type": "boolean"
+                                },
+                                "watchDebounceMs": {
+                                  "type": "number"
+                                },
+                                "extraDirs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 }
                               }
                             }
@@ -3415,6 +3800,14 @@
                               ]
                             }
                           }
+                        },
+                        "cron": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            }
+                          }
                         }
                       },
                       "required": [
@@ -3423,6 +3816,29 @@
                         "channels",
                         "bindings"
                       ]
+                    },
+                    "agentMeta": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "botId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "botId"
+                        ]
+                      }
+                    },
+                    "poolSecrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secretsHash": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string"
@@ -3715,6 +4131,49 @@
                                   ]
                                 }
                               }
+                            },
+                            "web": {
+                              "type": "object",
+                              "properties": {
+                                "search": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "fetch": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "skills": {
+                          "type": "object",
+                          "properties": {
+                            "load": {
+                              "type": "object",
+                              "properties": {
+                                "watch": {
+                                  "type": "boolean"
+                                },
+                                "watchDebounceMs": {
+                                  "type": "number"
+                                },
+                                "extraDirs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -4024,6 +4483,14 @@
                               ]
                             }
                           }
+                        },
+                        "cron": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            }
+                          }
                         }
                       },
                       "required": [
@@ -4032,6 +4499,29 @@
                         "channels",
                         "bindings"
                       ]
+                    },
+                    "agentMeta": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "botId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "botId"
+                        ]
+                      }
+                    },
+                    "poolSecrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secretsHash": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string"

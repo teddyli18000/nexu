@@ -17,6 +17,7 @@ import {
   registerChannelRoutes,
   registerSlackOAuthCallback,
 } from "./routes/channel-routes.js";
+import { registerHealthRoutes } from "./routes/health-routes.js";
 import { registerInviteRoutes } from "./routes/invite-routes.js";
 import { registerModelRoutes } from "./routes/model-routes.js";
 import { registerOnboardingRoutes } from "./routes/onboarding-routes.js";
@@ -33,7 +34,6 @@ import type { AppBindings } from "./types.js";
 
 export function createApp() {
   const app = new OpenAPIHono<AppBindings>();
-  const commitHash = process.env.COMMIT_HASH;
 
   app.use("*", requestLoggerMiddleware);
   app.use("*", errorMiddleware);
@@ -51,6 +51,7 @@ export function createApp() {
   registerArtifactInternalRoutes(app);
   registerSessionInternalRoutes(app);
   registerSkillRoutes(app);
+  registerHealthRoutes(app);
 
   app.use("/api/v1/*", authMiddleware);
 
@@ -68,15 +69,6 @@ export function createApp() {
     openapi: "3.1.0",
     info: { title: "Nexu API", version: "1.0.0" },
   });
-
-  app.get("/health", (c) =>
-    c.json({
-      status: "ok",
-      metadata: {
-        commitHash: commitHash ?? null,
-      },
-    }),
-  );
 
   app.onError((error, c) => {
     const handled = resolveErrorHandling(c, error);

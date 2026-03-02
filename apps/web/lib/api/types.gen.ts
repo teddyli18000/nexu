@@ -233,6 +233,106 @@ export type PatchApiInternalSessionsByIdResponses = {
 
 export type PatchApiInternalSessionsByIdResponse = PatchApiInternalSessionsByIdResponses[keyof PatchApiInternalSessionsByIdResponses];
 
+export type GetApiInternalSkillsLatestData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal/skills/latest';
+};
+
+export type GetApiInternalSkillsLatestErrors = {
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type GetApiInternalSkillsLatestError = GetApiInternalSkillsLatestErrors[keyof GetApiInternalSkillsLatestErrors];
+
+export type GetApiInternalSkillsLatestResponses = {
+    /**
+     * Latest skills snapshot
+     */
+    200: {
+        version: number;
+        skillsHash: string;
+        skills: {
+            [key: string]: {
+                [key: string]: string;
+            };
+        };
+        createdAt: string;
+    };
+};
+
+export type GetApiInternalSkillsLatestResponse = GetApiInternalSkillsLatestResponses[keyof GetApiInternalSkillsLatestResponses];
+
+export type PutApiInternalSkillsByNameData = {
+    body?: {
+        content: string;
+        files?: {
+            [key: string]: string;
+        };
+        status?: 'active' | 'inactive';
+    };
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/internal/skills/{name}';
+};
+
+export type PutApiInternalSkillsByNameErrors = {
+    /**
+     * Invalid name or body
+     */
+    400: {
+        message: string;
+    };
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type PutApiInternalSkillsByNameError = PutApiInternalSkillsByNameErrors[keyof PutApiInternalSkillsByNameErrors];
+
+export type PutApiInternalSkillsByNameResponses = {
+    /**
+     * Skill upserted
+     */
+    200: {
+        ok: boolean;
+        name: string;
+        version: number;
+    };
+};
+
+export type PutApiInternalSkillsByNameResponse = PutApiInternalSkillsByNameResponses[keyof PutApiInternalSkillsByNameResponses];
+
+export type GetHealthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health';
+};
+
+export type GetHealthResponses = {
+    /**
+     * Service health check
+     */
+    200: {
+        status: 'ok';
+        timestamp: number;
+    };
+};
+
+export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
+
 export type GetApiV1MeData = {
     body?: never;
     path?: never;
@@ -891,6 +991,21 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
                 ask?: 'off' | 'on-miss' | 'always';
                 host?: 'sandbox' | 'gateway' | 'node';
             };
+            web?: {
+                search?: {
+                    enabled?: boolean;
+                };
+                fetch?: {
+                    enabled?: boolean;
+                };
+            };
+        };
+        skills?: {
+            load?: {
+                watch?: boolean;
+                watchDebounceMs?: number;
+                extraDirs?: Array<string>;
+            };
         };
         agents: {
             defaults?: {
@@ -959,6 +1074,9 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
             restart?: boolean;
             ownerDisplay?: 'raw' | 'friendly';
         };
+        cron?: {
+            enabled?: boolean;
+        };
     };
 };
 
@@ -1012,6 +1130,42 @@ export type PostApiInternalPoolsHeartbeatResponses = {
 };
 
 export type PostApiInternalPoolsHeartbeatResponse = PostApiInternalPoolsHeartbeatResponses[keyof PostApiInternalPoolsHeartbeatResponses];
+
+export type PutApiInternalPoolsByPoolIdSecretsData = {
+    body?: {
+        secrets: {
+            [key: string]: string;
+        };
+    };
+    path: {
+        poolId: string;
+    };
+    query?: never;
+    url: '/api/internal/pools/{poolId}/secrets';
+};
+
+export type PutApiInternalPoolsByPoolIdSecretsErrors = {
+    /**
+     * Pool not found
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type PutApiInternalPoolsByPoolIdSecretsError = PutApiInternalPoolsByPoolIdSecretsErrors[keyof PutApiInternalPoolsByPoolIdSecretsErrors];
+
+export type PutApiInternalPoolsByPoolIdSecretsResponses = {
+    /**
+     * Secrets stored
+     */
+    200: {
+        ok: boolean;
+        count: number;
+    };
+};
+
+export type PutApiInternalPoolsByPoolIdSecretsResponse = PutApiInternalPoolsByPoolIdSecretsResponses[keyof PutApiInternalPoolsByPoolIdSecretsResponses];
 
 export type GetApiInternalPoolsByPoolIdConfigLatestData = {
     body?: never;
@@ -1091,6 +1245,21 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                     ask?: 'off' | 'on-miss' | 'always';
                     host?: 'sandbox' | 'gateway' | 'node';
                 };
+                web?: {
+                    search?: {
+                        enabled?: boolean;
+                    };
+                    fetch?: {
+                        enabled?: boolean;
+                    };
+                };
+            };
+            skills?: {
+                load?: {
+                    watch?: boolean;
+                    watchDebounceMs?: number;
+                    extraDirs?: Array<string>;
+                };
             };
             agents: {
                 defaults?: {
@@ -1159,7 +1328,19 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                 restart?: boolean;
                 ownerDisplay?: 'raw' | 'friendly';
             };
+            cron?: {
+                enabled?: boolean;
+            };
         };
+        agentMeta?: {
+            [key: string]: {
+                botId: string;
+            };
+        };
+        poolSecrets?: {
+            [key: string]: string;
+        };
+        secretsHash?: string;
         createdAt: string;
     };
 };
@@ -1245,6 +1426,21 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                     ask?: 'off' | 'on-miss' | 'always';
                     host?: 'sandbox' | 'gateway' | 'node';
                 };
+                web?: {
+                    search?: {
+                        enabled?: boolean;
+                    };
+                    fetch?: {
+                        enabled?: boolean;
+                    };
+                };
+            };
+            skills?: {
+                load?: {
+                    watch?: boolean;
+                    watchDebounceMs?: number;
+                    extraDirs?: Array<string>;
+                };
             };
             agents: {
                 defaults?: {
@@ -1313,7 +1509,19 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                 restart?: boolean;
                 ownerDisplay?: 'raw' | 'friendly';
             };
+            cron?: {
+                enabled?: boolean;
+            };
         };
+        agentMeta?: {
+            [key: string]: {
+                botId: string;
+            };
+        };
+        poolSecrets?: {
+            [key: string]: string;
+        };
+        secretsHash?: string;
         createdAt: string;
     };
 };
