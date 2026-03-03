@@ -91,6 +91,10 @@ async function runCliProbe(
       {
         timeout: env.RUNTIME_GATEWAY_CLI_TIMEOUT_MS,
         windowsHide: true,
+        env: {
+          ...process.env,
+          OPENCLAW_LOG_LEVEL: "error",
+        },
       },
       (error, stdout) => {
         if (error) {
