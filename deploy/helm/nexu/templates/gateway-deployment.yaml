@@ -39,6 +39,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "nexu.secretName" . }}
                   key: INTERNAL_API_TOKEN
+            - name: SKILL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nexu.secretName" . }}
+                  key: SKILL_API_TOKEN
             - name: ORDINAL
               valueFrom:
                 fieldRef:

@@ -22,6 +22,7 @@ import { registerInviteRoutes } from "./routes/invite-routes.js";
 import { registerModelRoutes } from "./routes/model-routes.js";
 import { registerOnboardingRoutes } from "./routes/onboarding-routes.js";
 import { registerPoolRoutes } from "./routes/pool-routes.js";
+import { registerSecretRoutes } from "./routes/secret-routes.js";
 import {
   registerSessionInternalRoutes,
   registerSessionRoutes,
@@ -51,6 +52,7 @@ export function createApp() {
   registerSlackEvents(app);
   registerArtifactInternalRoutes(app);
   registerSessionInternalRoutes(app);
+  registerSecretRoutes(app);
   registerSkillRoutes(app);
   registerFeedbackRoutes(app);
 

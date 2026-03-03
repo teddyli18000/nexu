@@ -51,10 +51,16 @@ export function startManagedOpenclawGateway(): void {
   }
 
   const args = buildOpenclawGatewayArgs();
+  const {
+    INTERNAL_API_TOKEN: _internalToken,
+    ENCRYPTION_KEY: _encryptionKey,
+    ...safeEnv
+  } = process.env;
   const child = spawn(env.OPENCLAW_BIN, args, {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
-      ...process.env,
+      ...safeEnv,
+      SKILL_API_TOKEN: env.SKILL_API_TOKEN,
       OPENCLAW_LOG_LEVEL: "error",
     },
   });
