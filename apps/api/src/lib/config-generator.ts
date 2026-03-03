@@ -346,11 +346,14 @@ export async function generatePoolConfig(
   }
 
   // Enable skill hot-reload watcher so OpenClaw picks up managed skills
-  // written to ~/.openclaw/skills/ by the sidecar without requiring a restart.
+  // written by the sidecar without requiring a restart.
+  // extraDirs ensures OpenClaw scans the sidecar's write directory
+  // (${stateDir}/skills) which may differ from OpenClaw's CONFIG_DIR/skills.
   config.skills = {
     load: {
       watch: true,
       watchDebounceMs: 250,
+      extraDirs: [`${stateDir}/skills`],
     },
   };
 
