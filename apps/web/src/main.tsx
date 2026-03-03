@@ -6,6 +6,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { App } from "./app";
+import { PreviewBanner } from "./components/preview-banner";
 import "./index.css";
 
 const amplitudeApiKey = import.meta.env.VITE_AMPLITUDE_API_KEY;
@@ -35,6 +36,7 @@ ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <PreviewBanner />
         <App />
         <Toaster position="top-right" />
       </BrowserRouter>
