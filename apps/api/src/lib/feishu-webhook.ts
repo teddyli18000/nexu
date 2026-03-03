@@ -124,9 +124,10 @@ export async function sendFeishuWebhook(
       header: {
         title: {
           tag: "plain_text",
-          content: payload.content.length > 60
-            ? `${payload.content.slice(0, 60)}...`
-            : payload.content,
+          content:
+            payload.content.length > 60
+              ? `${payload.content.slice(0, 60)}...`
+              : payload.content,
         },
         template: "orange",
       },

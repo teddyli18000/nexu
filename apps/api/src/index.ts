@@ -52,7 +52,11 @@ async function main() {
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE" && retries > 0) {
       retries--;
-      logger.warn({ message: "port_in_use_retrying", port, retries_left: retries });
+      logger.warn({
+        message: "port_in_use_retrying",
+        port,
+        retries_left: retries,
+      });
       setTimeout(() => server.listen(port), 1000);
     }
   });

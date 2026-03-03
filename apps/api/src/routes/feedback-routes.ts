@@ -86,9 +86,7 @@ export function registerFeedbackRoutes(app: OpenAPIHono<AppBindings>) {
 
     const body = c.req.valid("json");
 
-    const botOwner = body.agentId
-      ? await lookupBotOwner(body.agentId)
-      : null;
+    const botOwner = body.agentId ? await lookupBotOwner(body.agentId) : null;
 
     logger.info({
       message: "feedback_received",
