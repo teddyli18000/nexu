@@ -161,6 +161,26 @@ export const botFeatureFlags = pgTable(
   ],
 );
 
+export const botFeatureFlagAudits = pgTable(
+  "bot_feature_flag_audits",
+  {
+    pk: serial("pk").primaryKey(),
+    id: text("id").notNull().unique(),
+    botId: text("bot_id").notNull(),
+    featureKey: text("feature_key").notNull(),
+    previousStatus: text("previous_status"),
+    nextStatus: text("next_status").notNull(),
+    changedBy: text("changed_by").notNull(),
+    changedAt: text("changed_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("bot_feature_flag_audits_bot_id_idx").on(table.botId),
+    index("bot_feature_flag_audits_feature_key_idx").on(table.featureKey),
+  ],
+);
+
 export const webhookRoutes = pgTable(
   "webhook_routes",
   {
