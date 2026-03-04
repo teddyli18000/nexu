@@ -144,6 +144,7 @@ export const botFeatureFlags = pgTable(
     id: text("id").notNull().unique(),
     botId: text("bot_id").notNull(),
     featureKey: text("feature_key").notNull(),
+    description: text("description"),
     status: text("status").notNull().default("disabled"),
     rolloutPercentage: integer("rollout_percentage").notNull().default(0),
     createdAt: text("created_at")
