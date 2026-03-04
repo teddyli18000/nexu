@@ -521,7 +521,7 @@ export function AuthPage() {
                 type="button"
                 onClick={() => handleOAuth("google")}
                 disabled={loading !== null}
-                className="w-full flex items-center justify-center gap-2.5 py-3 rounded-lg text-[14px] font-medium bg-[#111111] text-white hover:bg-[#222222] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2.5 py-3 rounded-lg text-[14px] font-medium bg-accent text-accent-foreground hover:bg-accent-hover transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading === "google" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

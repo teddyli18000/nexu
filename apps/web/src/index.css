@@ -56,6 +56,62 @@
   --color-danger: #dc2626;
 }
 
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* shadcn tokens */
+  --color-background: #0f1115;
+  --color-foreground: #f5f5f4;
+  --color-card: #161920;
+  --color-card-foreground: #f5f5f4;
+  --color-popover: #161920;
+  --color-popover-foreground: #f5f5f4;
+  --color-primary: #f5f5f4;
+  --color-primary-foreground: #0f1115;
+  --color-secondary: #1b1f28;
+  --color-secondary-foreground: #f5f5f4;
+  --color-muted: #1a1d24;
+  --color-muted-foreground: #a4acba;
+  --color-accent: #f5f5f4;
+  --color-accent-foreground: #0f1115;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #2c3340;
+  --color-input: #2c3340;
+  --color-ring: #c7ced9;
+
+  /* Design system — Surface */
+  --color-surface-0: #0d1015;
+  --color-surface-1: #141821;
+  --color-surface-2: #1b202a;
+  --color-surface-3: #242b37;
+  --color-surface-4: #313a49;
+  --color-surface-5: #3d4858;
+
+  /* Design system — Text */
+  --color-text-primary: #f5f7fb;
+  --color-text-secondary: #d1d8e3;
+  --color-text-tertiary: #a6afbe;
+  --color-text-muted: #7f899b;
+
+  /* Design system — Accent */
+  --color-accent-hover: #e8edf5;
+  --color-accent-subtle: rgba(245, 247, 251, 0.1);
+  --color-accent-fg: #0f1115;
+
+  /* Design system — Border */
+  --color-border-subtle: #232a36;
+  --color-border-hover: #495468;
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+}
+
 @layer base {
   * {
     @apply border-border;

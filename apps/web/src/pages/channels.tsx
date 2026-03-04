@@ -463,7 +463,7 @@ function WhatsAppQRView() {
         <p className="text-[12px] text-text-muted mb-6 leading-relaxed">
           Open WhatsApp and scan the QR code below to start chatting with Nexu.
         </p>
-        <div className="mx-auto mb-4 w-full max-w-[240px] rounded-xl border border-border bg-white p-2">
+        <div className="mx-auto mb-4 w-full max-w-[240px] rounded-xl border border-border bg-surface-0 p-2">
           <img
             src={whatsappQrImageUrl}
             alt="WhatsApp QR code"

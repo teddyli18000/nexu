@@ -827,7 +827,7 @@ function ChannelConnectModal({
           <p className="text-[11px] text-text-muted mb-4">
             Use your WhatsApp app to scan this QR code.
           </p>
-          <div className="mx-auto mb-4 w-full max-w-[220px] rounded-xl border border-border bg-white p-2">
+          <div className="mx-auto mb-4 w-full max-w-[220px] rounded-xl border border-border bg-surface-0 p-2">
             <img
               src={whatsappQrImageUrl}
               alt="WhatsApp QR code"

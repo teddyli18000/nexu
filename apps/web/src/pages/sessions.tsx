@@ -167,7 +167,7 @@ export function SessionsPage() {
             <MetaTag
               className={
                 session.status === "active"
-                  ? "bg-emerald-500/10 text-emerald-600"
+                  ? "bg-emerald-500/10 text-emerald-500"
                   : "bg-surface-3 text-text-muted"
               }
             >
@@ -239,7 +239,7 @@ export function SessionsPage() {
                           href={d.previewUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[11px] text-emerald-600 shrink-0 hover:underline"
+                          className="text-[11px] text-emerald-500 shrink-0 hover:underline"
                         >
                           Preview <ExternalLink size={9} className="inline" />
                         </a>

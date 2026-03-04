@@ -6,6 +6,11 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { App } from "./app";
+import {
+  ThemeProvider,
+  initializeTheme,
+  useTheme,
+} from "./components/theme-provider";
 import "./index.css";
 
 const amplitudeApiKey = import.meta.env.VITE_AMPLITUDE_API_KEY;
@@ -28,16 +33,30 @@ const queryClient = new QueryClient({
   },
 });
 
+initializeTheme();
+
+function AppContent() {
+  const { resolvedTheme } = useTheme();
+
+  return (
+    <>
+      <App />
+      <Toaster position="top-right" theme={resolvedTheme} />
+    </>
+  );
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element not found");
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-        <Toaster position="top-right" />
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

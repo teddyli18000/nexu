@@ -226,10 +226,10 @@ export function InvitePage() {
                   <Button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="w-full py-3 h-auto text-[14px] font-semibold bg-[#111111] hover:bg-[#222222] text-white"
+                    className="w-full py-3 h-auto text-[14px] font-semibold bg-accent hover:bg-accent-hover text-accent-foreground"
                   >
                     {mutation.isPending ? (
-                      <div className="w-4 h-4 rounded-full border-2 animate-spin border-white/30 border-t-white" />
+                      <div className="w-4 h-4 rounded-full border-2 animate-spin border-current/30 border-t-current" />
                     ) : (
                       <>
                         Continue <ArrowRight size={14} />

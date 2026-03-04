@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { ThemeToggle } from "./components/theme-toggle";
 import { AuthLayout } from "./layouts/auth-layout";
 import { InviteGuardLayout } from "./layouts/invite-guard-layout";
 import { WorkspaceLayout } from "./layouts/workspace-layout";
@@ -11,26 +12,32 @@ import { SlackOAuthCallbackPage } from "./pages/slack-oauth-callback";
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/workspace" replace />} />
-      <Route path="/auth" element={<AuthPage />} />
-      <Route element={<AuthLayout />}>
-        <Route path="/invite" element={<InvitePage />} />
-        <Route element={<InviteGuardLayout />}>
-          <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route element={<WorkspaceLayout />}>
-            <Route path="/workspace" element={<SessionsPage />} />
-            <Route path="/workspace/sessions" element={<SessionsPage />} />
-            <Route path="/workspace/sessions/:id" element={<SessionsPage />} />
-            <Route path="/workspace/channels" element={<ChannelsPage />} />
-            <Route
-              path="/workspace/channels/slack/callback"
-              element={<SlackOAuthCallbackPage />}
-            />
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to="/workspace" replace />} />
+        <Route path="/auth" element={<AuthPage />} />
+        <Route element={<AuthLayout />}>
+          <Route path="/invite" element={<InvitePage />} />
+          <Route element={<InviteGuardLayout />}>
+            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route element={<WorkspaceLayout />}>
+              <Route path="/workspace" element={<SessionsPage />} />
+              <Route path="/workspace/sessions" element={<SessionsPage />} />
+              <Route
+                path="/workspace/sessions/:id"
+                element={<SessionsPage />}
+              />
+              <Route path="/workspace/channels" element={<ChannelsPage />} />
+              <Route
+                path="/workspace/channels/slack/callback"
+                element={<SlackOAuthCallbackPage />}
+              />
+            </Route>
           </Route>
         </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <ThemeToggle />
+    </>
   );
 }
