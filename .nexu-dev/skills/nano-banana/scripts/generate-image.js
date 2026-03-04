@@ -86,9 +86,7 @@ function parseCliArgs() {
     process.exit(1);
   }
   if (!VALID_MODELS.includes(values.model)) {
-    console.error(
-      `Error: --model must be one of: ${VALID_MODELS.join(", ")}`,
-    );
+    console.error(`Error: --model must be one of: ${VALID_MODELS.join(", ")}`);
     process.exit(1);
   }
   if (!RESOLUTIONS.includes(values.resolution)) {
@@ -308,7 +306,14 @@ async function generateImage(args, apiKey) {
     path.join(process.env.HOME || process.env.USERPROFILE || "~", ".openclaw");
   const outputPath = path.isAbsolute(args.filename)
     ? args.filename
-    : path.join(stateDir, "media", "outbound", path.basename(process.cwd()), "nano-banana", args.filename);
+    : path.join(
+        stateDir,
+        "media",
+        "outbound",
+        path.basename(process.cwd()),
+        "nano-banana",
+        args.filename,
+      );
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
   let imageSaved = false;
@@ -329,7 +334,9 @@ async function generateImage(args, apiKey) {
       process.exit(1);
     }
     const stat = fs.statSync(outputPath);
-    console.log(`Image saved: ${outputPath} (${Math.round(stat.size / 1024)}KB)`);
+    console.log(
+      `Image saved: ${outputPath} (${Math.round(stat.size / 1024)}KB)`,
+    );
     console.log(`MEDIA: ${outputPath}`);
   } else {
     console.error("Error: No image was generated in the response.");
