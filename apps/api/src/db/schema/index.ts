@@ -137,6 +137,30 @@ export const usageMetrics = pgTable("usage_metrics", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+export const botFeatureFlags = pgTable(
+  "bot_feature_flags",
+  {
+    pk: serial("pk").primaryKey(),
+    id: text("id").notNull().unique(),
+    botId: text("bot_id").notNull(),
+    featureKey: text("feature_key").notNull(),
+    status: text("status").notNull().default("disabled"),
+    rolloutPercentage: integer("rollout_percentage").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("bot_feature_flags_bot_feature_key_idx").on(
+      table.botId,
+      table.featureKey,
+    ),
+  ],
+);
+
 export const webhookRoutes = pgTable(
   "webhook_routes",
   {

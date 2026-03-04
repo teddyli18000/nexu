@@ -31,6 +31,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify DB migration sync
+        run: pnpm --filter @nexu/api db:check-sync
+
+      - name: Check dangerous migration SQL
+        run: pnpm --filter @nexu/api db:check-dangerous
+
       - name: Typecheck
         run: pnpm typecheck
 
