@@ -6,6 +6,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { App } from "./app";
+import { DebugPanel } from "./components/debug/debug-panel";
 import "./index.css";
 
 const amplitudeApiKey = import.meta.env.VITE_AMPLITUDE_API_KEY;
@@ -36,6 +37,7 @@ ReactDOM.createRoot(root).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
+        <DebugPanel />
         <Toaster position="top-right" />
       </BrowserRouter>
     </QueryClientProvider>

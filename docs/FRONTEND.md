@@ -46,3 +46,43 @@ After any API route/schema change: `pnpm generate-types` then `pnpm typecheck`.
 - `src/app.tsx` — Router setup
 - `src/lib/auth-client.ts` — better-auth client
 - `lib/api/` — Auto-generated SDK (do not edit manually)
+
+## Debug Panel (Dev only)
+
+A floating Debug Panel is integrated in `apps/web/src/main.tsx` and rendered only when:
+
+- `import.meta.env.DEV === true`
+- `VITE_DEBUG_PANEL_ENABLED !== "false"`
+
+### Features
+
+- Environment info: mode, build version, git commit hash
+- API monitor: recent request list (URL, status, duration, request/response payload)
+- State tree viewer: expandable nested objects
+- Web Vitals: FCP / LCP / CLS
+- Console capture: `console.log/warn/error`
+
+### Shortcut
+
+- Toggle visibility: `Ctrl + Shift + D`
+
+### Reporting API
+
+Use the API in `apps/web/src/lib/debug-panel.ts` from any component:
+
+```ts
+import { reportDebugState } from "@/lib/debug-panel";
+
+reportDebugState("feature.checkout", {
+  step: "payment",
+  selectedPlan: "pro",
+  isSubmitting: false,
+});
+```
+
+Useful exports:
+
+- `reportDebugState(path, value)`
+- `clearDebugState(path?)`
+- `reportDebugApiRequest(payload)` (manual reporting if needed)
+- `reportDebugConsole(level, args)` (manual reporting if needed)
