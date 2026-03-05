@@ -347,6 +347,154 @@ export type PutApiInternalSkillsByNameResponses = {
 
 export type PutApiInternalSkillsByNameResponse = PutApiInternalSkillsByNameResponses[keyof PutApiInternalSkillsByNameResponses];
 
+export type GetApiInternalWorkspaceTemplatesLatestData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal/workspace-templates/latest';
+};
+
+export type GetApiInternalWorkspaceTemplatesLatestErrors = {
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type GetApiInternalWorkspaceTemplatesLatestError = GetApiInternalWorkspaceTemplatesLatestErrors[keyof GetApiInternalWorkspaceTemplatesLatestErrors];
+
+export type GetApiInternalWorkspaceTemplatesLatestResponses = {
+    /**
+     * Latest workspace templates snapshot
+     */
+    200: {
+        version: number;
+        templatesHash: string;
+        templates: {
+            [key: string]: {
+                content: string;
+                writeMode: 'seed' | 'inject';
+            };
+        };
+        createdAt: string;
+    };
+};
+
+export type GetApiInternalWorkspaceTemplatesLatestResponse = GetApiInternalWorkspaceTemplatesLatestResponses[keyof GetApiInternalWorkspaceTemplatesLatestResponses];
+
+export type PutApiInternalWorkspaceTemplatesByNameData = {
+    body?: {
+        content: string;
+        writeMode?: 'seed' | 'inject';
+        status?: 'active' | 'inactive';
+    };
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/internal/workspace-templates/{name}';
+};
+
+export type PutApiInternalWorkspaceTemplatesByNameErrors = {
+    /**
+     * Invalid name or body
+     */
+    400: {
+        message: string;
+    };
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type PutApiInternalWorkspaceTemplatesByNameError = PutApiInternalWorkspaceTemplatesByNameErrors[keyof PutApiInternalWorkspaceTemplatesByNameErrors];
+
+export type PutApiInternalWorkspaceTemplatesByNameResponses = {
+    /**
+     * Template upserted
+     */
+    200: {
+        ok: boolean;
+        name: string;
+        version: number;
+    };
+};
+
+export type PutApiInternalWorkspaceTemplatesByNameResponse = PutApiInternalWorkspaceTemplatesByNameResponses[keyof PutApiInternalWorkspaceTemplatesByNameResponses];
+
+export type PostApiInternalFeedbackData = {
+    body?: {
+        content: string;
+        channel?: string;
+        sender?: string;
+        agentId?: string;
+        conversationContext?: string;
+        imageUrls?: Array<string>;
+        imageData?: Array<{
+            data: string;
+            mimeType: string;
+        }>;
+        fileData?: Array<{
+            data: string;
+            fileName: string;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal/feedback';
+};
+
+export type PostApiInternalFeedbackErrors = {
+    /**
+     * Invalid body
+     */
+    400: {
+        message: string;
+    };
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type PostApiInternalFeedbackError = PostApiInternalFeedbackErrors[keyof PostApiInternalFeedbackErrors];
+
+export type PostApiInternalFeedbackResponses = {
+    /**
+     * Feedback received
+     */
+    200: {
+        ok: boolean;
+    };
+};
+
+export type PostApiInternalFeedbackResponse = PostApiInternalFeedbackResponses[keyof PostApiInternalFeedbackResponses];
+
+export type GetApiV1StatsUserCountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/stats/user-count';
+};
+
+export type GetApiV1StatsUserCountResponses = {
+    /**
+     * Total user count
+     */
+    200: {
+        userCount: number;
+    };
+};
+
+export type GetApiV1StatsUserCountResponse = GetApiV1StatsUserCountResponses[keyof GetApiV1StatsUserCountResponses];
+
 export type GetApiV1MeData = {
     body?: never;
     path?: never;
@@ -716,6 +864,7 @@ export type GetApiV1ChannelsSlackOauthUrlResponses = {
      */
     200: {
         url: string;
+        redirectUri: string;
     };
 };
 
@@ -752,7 +901,7 @@ export type PostApiV1ChannelsSlackConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord';
+        channelType: 'slack' | 'discord' | 'feishu';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -794,7 +943,7 @@ export type PostApiV1ChannelsDiscordConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord';
+        channelType: 'slack' | 'discord' | 'feishu';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -821,7 +970,7 @@ export type GetApiV1ChannelsResponses = {
         channels: Array<{
             id: string;
             botId: string;
-            channelType: 'slack' | 'discord';
+            channelType: 'slack' | 'discord' | 'feishu';
             accountId: string;
             status: 'pending' | 'connected' | 'disconnected' | 'error';
             teamName: string;
@@ -892,7 +1041,7 @@ export type GetApiV1ChannelsByChannelIdStatusResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord';
+        channelType: 'slack' | 'discord' | 'feishu';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1044,6 +1193,31 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
                 model?: string | {
                     primary: string;
                 };
+                compaction?: {
+                    mode?: 'default' | 'safeguard';
+                    reserveTokens?: number;
+                    keepRecentTokens?: number;
+                    reserveTokensFloor?: number;
+                    maxHistoryShare?: number;
+                    memoryFlush?: {
+                        enabled?: boolean;
+                        softThresholdTokens?: number;
+                        prompt?: string;
+                    };
+                };
+                memorySearch?: {
+                    enabled?: boolean;
+                    sources?: Array<'memory' | 'sessions'>;
+                    provider?: 'openai' | 'gemini' | 'local' | 'voyage' | 'mistral';
+                    model?: string;
+                    remote?: {
+                        baseUrl?: string;
+                        apiKey?: string;
+                    };
+                    sync?: {
+                        intervalMinutes?: number;
+                    };
+                };
             };
             list: Array<{
                 id: string;
@@ -1065,6 +1239,7 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
                 requireMention?: boolean;
                 dmPolicy?: 'pairing' | 'allowlist' | 'open';
                 allowFrom?: Array<string>;
+                ackReaction?: string;
                 accounts: {
                     [key: string]: {
                         enabled?: boolean;
@@ -1092,6 +1267,21 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
                     };
                 };
             };
+            feishu?: {
+                enabled?: boolean;
+                connectionMode?: 'websocket' | 'webhook';
+                dmPolicy?: 'pairing' | 'allowlist' | 'open';
+                groupPolicy?: 'open' | 'allowlist' | 'disabled';
+                requireMention?: boolean;
+                allowFrom?: Array<string>;
+                accounts: {
+                    [key: string]: {
+                        enabled?: boolean;
+                        appId: string;
+                        appSecret: string;
+                    };
+                };
+            };
         };
         bindings: Array<{
             agentId: string;
@@ -1108,6 +1298,23 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
         };
         cron?: {
             enabled?: boolean;
+        };
+        messages?: {
+            ackReaction?: string;
+            ackReactionScope?: 'off' | 'none' | 'all' | 'direct' | 'group-all' | 'group-mentions';
+            removeAckAfterReply?: boolean;
+        };
+        diagnostics?: {
+            enabled?: boolean;
+            otel?: {
+                enabled?: boolean;
+                endpoint?: string;
+                serviceName?: string;
+                traces?: boolean;
+                metrics?: boolean;
+                logs?: boolean;
+                flushIntervalMs?: number;
+            };
         };
     };
 };
@@ -1301,6 +1508,31 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                     model?: string | {
                         primary: string;
                     };
+                    compaction?: {
+                        mode?: 'default' | 'safeguard';
+                        reserveTokens?: number;
+                        keepRecentTokens?: number;
+                        reserveTokensFloor?: number;
+                        maxHistoryShare?: number;
+                        memoryFlush?: {
+                            enabled?: boolean;
+                            softThresholdTokens?: number;
+                            prompt?: string;
+                        };
+                    };
+                    memorySearch?: {
+                        enabled?: boolean;
+                        sources?: Array<'memory' | 'sessions'>;
+                        provider?: 'openai' | 'gemini' | 'local' | 'voyage' | 'mistral';
+                        model?: string;
+                        remote?: {
+                            baseUrl?: string;
+                            apiKey?: string;
+                        };
+                        sync?: {
+                            intervalMinutes?: number;
+                        };
+                    };
                 };
                 list: Array<{
                     id: string;
@@ -1322,6 +1554,7 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                     requireMention?: boolean;
                     dmPolicy?: 'pairing' | 'allowlist' | 'open';
                     allowFrom?: Array<string>;
+                    ackReaction?: string;
                     accounts: {
                         [key: string]: {
                             enabled?: boolean;
@@ -1349,6 +1582,21 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                         };
                     };
                 };
+                feishu?: {
+                    enabled?: boolean;
+                    connectionMode?: 'websocket' | 'webhook';
+                    dmPolicy?: 'pairing' | 'allowlist' | 'open';
+                    groupPolicy?: 'open' | 'allowlist' | 'disabled';
+                    requireMention?: boolean;
+                    allowFrom?: Array<string>;
+                    accounts: {
+                        [key: string]: {
+                            enabled?: boolean;
+                            appId: string;
+                            appSecret: string;
+                        };
+                    };
+                };
             };
             bindings: Array<{
                 agentId: string;
@@ -1365,6 +1613,23 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
             };
             cron?: {
                 enabled?: boolean;
+            };
+            messages?: {
+                ackReaction?: string;
+                ackReactionScope?: 'off' | 'none' | 'all' | 'direct' | 'group-all' | 'group-mentions';
+                removeAckAfterReply?: boolean;
+            };
+            diagnostics?: {
+                enabled?: boolean;
+                otel?: {
+                    enabled?: boolean;
+                    endpoint?: string;
+                    serviceName?: string;
+                    traces?: boolean;
+                    metrics?: boolean;
+                    logs?: boolean;
+                    flushIntervalMs?: number;
+                };
             };
         };
         agentMeta?: {
@@ -1482,6 +1747,31 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                     model?: string | {
                         primary: string;
                     };
+                    compaction?: {
+                        mode?: 'default' | 'safeguard';
+                        reserveTokens?: number;
+                        keepRecentTokens?: number;
+                        reserveTokensFloor?: number;
+                        maxHistoryShare?: number;
+                        memoryFlush?: {
+                            enabled?: boolean;
+                            softThresholdTokens?: number;
+                            prompt?: string;
+                        };
+                    };
+                    memorySearch?: {
+                        enabled?: boolean;
+                        sources?: Array<'memory' | 'sessions'>;
+                        provider?: 'openai' | 'gemini' | 'local' | 'voyage' | 'mistral';
+                        model?: string;
+                        remote?: {
+                            baseUrl?: string;
+                            apiKey?: string;
+                        };
+                        sync?: {
+                            intervalMinutes?: number;
+                        };
+                    };
                 };
                 list: Array<{
                     id: string;
@@ -1503,6 +1793,7 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                     requireMention?: boolean;
                     dmPolicy?: 'pairing' | 'allowlist' | 'open';
                     allowFrom?: Array<string>;
+                    ackReaction?: string;
                     accounts: {
                         [key: string]: {
                             enabled?: boolean;
@@ -1530,6 +1821,21 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                         };
                     };
                 };
+                feishu?: {
+                    enabled?: boolean;
+                    connectionMode?: 'websocket' | 'webhook';
+                    dmPolicy?: 'pairing' | 'allowlist' | 'open';
+                    groupPolicy?: 'open' | 'allowlist' | 'disabled';
+                    requireMention?: boolean;
+                    allowFrom?: Array<string>;
+                    accounts: {
+                        [key: string]: {
+                            enabled?: boolean;
+                            appId: string;
+                            appSecret: string;
+                        };
+                    };
+                };
             };
             bindings: Array<{
                 agentId: string;
@@ -1546,6 +1852,23 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
             };
             cron?: {
                 enabled?: boolean;
+            };
+            messages?: {
+                ackReaction?: string;
+                ackReactionScope?: 'off' | 'none' | 'all' | 'direct' | 'group-all' | 'group-mentions';
+                removeAckAfterReply?: boolean;
+            };
+            diagnostics?: {
+                enabled?: boolean;
+                otel?: {
+                    enabled?: boolean;
+                    endpoint?: string;
+                    serviceName?: string;
+                    traces?: boolean;
+                    metrics?: boolean;
+                    logs?: boolean;
+                    flushIntervalMs?: number;
+                };
             };
         };
         agentMeta?: {

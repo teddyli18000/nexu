@@ -31,6 +31,7 @@ import {
 } from "./routes/session-routes.js";
 import { registerSkillRoutes } from "./routes/skill-routes.js";
 import { registerSlackEvents } from "./routes/slack-events.js";
+import { registerStatsRoutes } from "./routes/stats-routes.js";
 import { registerUserRoutes } from "./routes/user-routes.js";
 import { registerWorkspaceTemplateRoutes } from "./routes/workspace-template-routes.js";
 
@@ -83,6 +84,7 @@ export function createApp() {
   registerSkillRoutes(app);
   registerWorkspaceTemplateRoutes(app);
   registerFeedbackRoutes(app);
+  registerStatsRoutes(app);
 
   app.use("/api/v1/*", authMiddleware);
 

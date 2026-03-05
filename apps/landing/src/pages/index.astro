@@ -230,7 +230,15 @@ const stats = [
             <a href="/auth" class="flex gap-2 items-center px-6 sm:px-8 py-3 text-sm font-semibold rounded-lg transition-all bg-accent hover:bg-accent-hover text-accent-fg hover:shadow-lg hover:shadow-accent/20">
               Get started free <ArrowRight size={14} />
             </a>
+            <button
+              id="get-user-count-btn"
+              type="button"
+              class="flex gap-2 items-center px-6 sm:px-8 py-3 text-sm font-semibold rounded-lg transition-all border border-border bg-surface-1 text-text-primary hover:border-border-hover"
+            >
+              Get User Count
+            </button>
           </div>
+          <div id="user-count-result" class="text-[13px] text-text-muted min-h-[20px]"></div>
           <div class="flex items-center justify-center text-[13px] text-text-muted">
             <span>3-minute setup · Unlimited free Claude models</span>
           </div>
@@ -394,6 +402,30 @@ const stats = [
           });
         });
       }
+
+      type UserCountResponse = {
+        userCount: number;
+      };
+
+      const userCountButton = document.getElementById("get-user-count-btn");
+      const userCountResult = document.getElementById("user-count-result");
+
+      userCountButton?.addEventListener("click", async () => {
+        if (!userCountResult) return;
+
+        userCountResult.textContent = "Loading user count...";
+        try {
+          const response = await fetch("/api/v1/stats/user-count");
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+
+          const data = (await response.json()) as UserCountResponse;
+          userCountResult.textContent = `Total users: ${data.userCount}`;
+        } catch {
+          userCountResult.textContent = "Failed to load user count";
+        }
+      });
     </script>
   </body>
 </html>

@@ -934,6 +934,367 @@
         }
       }
     },
+    "/api/internal/workspace-templates/latest": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest workspace templates snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "templatesHash": {
+                      "type": "string"
+                    },
+                    "templates": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "content": {
+                            "type": "string"
+                          },
+                          "writeMode": {
+                            "type": "string",
+                            "enum": [
+                              "seed",
+                              "inject"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "writeMode"
+                        ]
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "templatesHash",
+                    "templates",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/workspace-templates/{name}": {
+      "put": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "writeMode": {
+                    "type": "string",
+                    "enum": [
+                      "seed",
+                      "inject"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Template upserted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "name",
+                    "version"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/feedback": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "channel": {
+                    "type": "string"
+                  },
+                  "sender": {
+                    "type": "string"
+                  },
+                  "agentId": {
+                    "type": "string"
+                  },
+                  "conversationContext": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "imageUrls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "maxItems": 10
+                  },
+                  "imageData": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "mimeType"
+                      ]
+                    },
+                    "maxItems": 5
+                  },
+                  "fileData": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "string"
+                        },
+                        "fileName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "fileName"
+                      ]
+                    },
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback received",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stats/user-count": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "responses": {
+          "200": {
+            "description": "Total user count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "userCount"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -1802,10 +2163,14 @@
                   "properties": {
                     "url": {
                       "type": "string"
+                    },
+                    "redirectUri": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "url"
+                    "url",
+                    "redirectUri"
                   ]
                 }
               }
@@ -1887,7 +2252,8 @@
                       "type": "string",
                       "enum": [
                         "slack",
-                        "discord"
+                        "discord",
+                        "feishu"
                       ]
                     },
                     "accountId": {
@@ -2004,7 +2370,8 @@
                       "type": "string",
                       "enum": [
                         "slack",
-                        "discord"
+                        "discord",
+                        "feishu"
                       ]
                     },
                     "accountId": {
@@ -2097,7 +2464,8 @@
                             "type": "string",
                             "enum": [
                               "slack",
-                              "discord"
+                              "discord",
+                              "feishu"
                             ]
                           },
                           "accountId": {
@@ -2238,7 +2606,8 @@
                       "type": "string",
                       "enum": [
                         "slack",
-                        "discord"
+                        "discord",
+                        "feishu"
                       ]
                     },
                     "accountId": {
@@ -2704,6 +3073,94 @@
                                   ]
                                 }
                               ]
+                            },
+                            "compaction": {
+                              "type": "object",
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "default",
+                                    "safeguard"
+                                  ]
+                                },
+                                "reserveTokens": {
+                                  "type": "number"
+                                },
+                                "keepRecentTokens": {
+                                  "type": "number"
+                                },
+                                "reserveTokensFloor": {
+                                  "type": "number"
+                                },
+                                "maxHistoryShare": {
+                                  "type": "number"
+                                },
+                                "memoryFlush": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    },
+                                    "softThresholdTokens": {
+                                      "type": "number"
+                                    },
+                                    "prompt": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "memorySearch": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "sources": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "memory",
+                                      "sessions"
+                                    ]
+                                  }
+                                },
+                                "provider": {
+                                  "type": "string",
+                                  "enum": [
+                                    "openai",
+                                    "gemini",
+                                    "local",
+                                    "voyage",
+                                    "mistral"
+                                  ]
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "remote": {
+                                  "type": "object",
+                                  "properties": {
+                                    "baseUrl": {
+                                      "type": "string"
+                                    },
+                                    "apiKey": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "sync": {
+                                  "type": "object",
+                                  "properties": {
+                                    "intervalMinutes": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -2802,6 +3259,9 @@
                               "items": {
                                 "type": "string"
                               }
+                            },
+                            "ackReaction": {
+                              "type": "string"
                             },
                             "accounts": {
                               "type": "object",
@@ -2927,6 +3387,71 @@
                           "required": [
                             "accounts"
                           ]
+                        },
+                        "feishu": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "connectionMode": {
+                              "type": "string",
+                              "enum": [
+                                "websocket",
+                                "webhook"
+                              ]
+                            },
+                            "dmPolicy": {
+                              "type": "string",
+                              "enum": [
+                                "pairing",
+                                "allowlist",
+                                "open"
+                              ]
+                            },
+                            "groupPolicy": {
+                              "type": "string",
+                              "enum": [
+                                "open",
+                                "allowlist",
+                                "disabled"
+                              ]
+                            },
+                            "requireMention": {
+                              "type": "boolean"
+                            },
+                            "allowFrom": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "accounts": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "enabled": {
+                                    "type": "boolean",
+                                    "default": true
+                                  },
+                                  "appId": {
+                                    "type": "string"
+                                  },
+                                  "appSecret": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "appId",
+                                  "appSecret"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "accounts"
+                          ]
                         }
                       }
                     },
@@ -2993,6 +3518,62 @@
                       "properties": {
                         "enabled": {
                           "type": "boolean"
+                        }
+                      }
+                    },
+                    "messages": {
+                      "type": "object",
+                      "properties": {
+                        "ackReaction": {
+                          "type": "string"
+                        },
+                        "ackReactionScope": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "none",
+                            "all",
+                            "direct",
+                            "group-all",
+                            "group-mentions"
+                          ]
+                        },
+                        "removeAckAfterReply": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "diagnostics": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "otel": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "serviceName": {
+                              "type": "string"
+                            },
+                            "traces": {
+                              "type": "boolean"
+                            },
+                            "metrics": {
+                              "type": "boolean"
+                            },
+                            "logs": {
+                              "type": "boolean"
+                            },
+                            "flushIntervalMs": {
+                              "type": "number"
+                            }
+                          }
                         }
                       }
                     }
@@ -3590,6 +4171,94 @@
                                       ]
                                     }
                                   ]
+                                },
+                                "compaction": {
+                                  "type": "object",
+                                  "properties": {
+                                    "mode": {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "safeguard"
+                                      ]
+                                    },
+                                    "reserveTokens": {
+                                      "type": "number"
+                                    },
+                                    "keepRecentTokens": {
+                                      "type": "number"
+                                    },
+                                    "reserveTokensFloor": {
+                                      "type": "number"
+                                    },
+                                    "maxHistoryShare": {
+                                      "type": "number"
+                                    },
+                                    "memoryFlush": {
+                                      "type": "object",
+                                      "properties": {
+                                        "enabled": {
+                                          "type": "boolean"
+                                        },
+                                        "softThresholdTokens": {
+                                          "type": "number"
+                                        },
+                                        "prompt": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "memorySearch": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    },
+                                    "sources": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "memory",
+                                          "sessions"
+                                        ]
+                                      }
+                                    },
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "local",
+                                        "voyage",
+                                        "mistral"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    },
+                                    "remote": {
+                                      "type": "object",
+                                      "properties": {
+                                        "baseUrl": {
+                                          "type": "string"
+                                        },
+                                        "apiKey": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "sync": {
+                                      "type": "object",
+                                      "properties": {
+                                        "intervalMinutes": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -3688,6 +4357,9 @@
                                   "items": {
                                     "type": "string"
                                   }
+                                },
+                                "ackReaction": {
+                                  "type": "string"
                                 },
                                 "accounts": {
                                   "type": "object",
@@ -3813,6 +4485,71 @@
                               "required": [
                                 "accounts"
                               ]
+                            },
+                            "feishu": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "connectionMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "websocket",
+                                    "webhook"
+                                  ]
+                                },
+                                "dmPolicy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pairing",
+                                    "allowlist",
+                                    "open"
+                                  ]
+                                },
+                                "groupPolicy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "open",
+                                    "allowlist",
+                                    "disabled"
+                                  ]
+                                },
+                                "requireMention": {
+                                  "type": "boolean"
+                                },
+                                "allowFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "accounts": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "properties": {
+                                      "enabled": {
+                                        "type": "boolean",
+                                        "default": true
+                                      },
+                                      "appId": {
+                                        "type": "string"
+                                      },
+                                      "appSecret": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "appId",
+                                      "appSecret"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "accounts"
+                              ]
                             }
                           }
                         },
@@ -3879,6 +4616,62 @@
                           "properties": {
                             "enabled": {
                               "type": "boolean"
+                            }
+                          }
+                        },
+                        "messages": {
+                          "type": "object",
+                          "properties": {
+                            "ackReaction": {
+                              "type": "string"
+                            },
+                            "ackReactionScope": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "none",
+                                "all",
+                                "direct",
+                                "group-all",
+                                "group-mentions"
+                              ]
+                            },
+                            "removeAckAfterReply": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "diagnostics": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "otel": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "endpoint": {
+                                  "type": "string"
+                                },
+                                "serviceName": {
+                                  "type": "string"
+                                },
+                                "traces": {
+                                  "type": "boolean"
+                                },
+                                "metrics": {
+                                  "type": "boolean"
+                                },
+                                "logs": {
+                                  "type": "boolean"
+                                },
+                                "flushIntervalMs": {
+                                  "type": "number"
+                                }
+                              }
                             }
                           }
                         }
@@ -4273,6 +5066,94 @@
                                       ]
                                     }
                                   ]
+                                },
+                                "compaction": {
+                                  "type": "object",
+                                  "properties": {
+                                    "mode": {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "safeguard"
+                                      ]
+                                    },
+                                    "reserveTokens": {
+                                      "type": "number"
+                                    },
+                                    "keepRecentTokens": {
+                                      "type": "number"
+                                    },
+                                    "reserveTokensFloor": {
+                                      "type": "number"
+                                    },
+                                    "maxHistoryShare": {
+                                      "type": "number"
+                                    },
+                                    "memoryFlush": {
+                                      "type": "object",
+                                      "properties": {
+                                        "enabled": {
+                                          "type": "boolean"
+                                        },
+                                        "softThresholdTokens": {
+                                          "type": "number"
+                                        },
+                                        "prompt": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "memorySearch": {
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    },
+                                    "sources": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "memory",
+                                          "sessions"
+                                        ]
+                                      }
+                                    },
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "local",
+                                        "voyage",
+                                        "mistral"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    },
+                                    "remote": {
+                                      "type": "object",
+                                      "properties": {
+                                        "baseUrl": {
+                                          "type": "string"
+                                        },
+                                        "apiKey": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "sync": {
+                                      "type": "object",
+                                      "properties": {
+                                        "intervalMinutes": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -4371,6 +5252,9 @@
                                   "items": {
                                     "type": "string"
                                   }
+                                },
+                                "ackReaction": {
+                                  "type": "string"
                                 },
                                 "accounts": {
                                   "type": "object",
@@ -4496,6 +5380,71 @@
                               "required": [
                                 "accounts"
                               ]
+                            },
+                            "feishu": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "connectionMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "websocket",
+                                    "webhook"
+                                  ]
+                                },
+                                "dmPolicy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pairing",
+                                    "allowlist",
+                                    "open"
+                                  ]
+                                },
+                                "groupPolicy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "open",
+                                    "allowlist",
+                                    "disabled"
+                                  ]
+                                },
+                                "requireMention": {
+                                  "type": "boolean"
+                                },
+                                "allowFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "accounts": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "properties": {
+                                      "enabled": {
+                                        "type": "boolean",
+                                        "default": true
+                                      },
+                                      "appId": {
+                                        "type": "string"
+                                      },
+                                      "appSecret": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "appId",
+                                      "appSecret"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "accounts"
+                              ]
                             }
                           }
                         },
@@ -4562,6 +5511,62 @@
                           "properties": {
                             "enabled": {
                               "type": "boolean"
+                            }
+                          }
+                        },
+                        "messages": {
+                          "type": "object",
+                          "properties": {
+                            "ackReaction": {
+                              "type": "string"
+                            },
+                            "ackReactionScope": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "none",
+                                "all",
+                                "direct",
+                                "group-all",
+                                "group-mentions"
+                              ]
+                            },
+                            "removeAckAfterReply": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "diagnostics": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "otel": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "endpoint": {
+                                  "type": "string"
+                                },
+                                "serviceName": {
+                                  "type": "string"
+                                },
+                                "traces": {
+                                  "type": "boolean"
+                                },
+                                "metrics": {
+                                  "type": "boolean"
+                                },
+                                "logs": {
+                                  "type": "boolean"
+                                },
+                                "flushIntervalMs": {
+                                  "type": "number"
+                                }
+                              }
                             }
                           }
                         }
