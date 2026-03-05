@@ -126,7 +126,7 @@ export async function generatePoolConfig(
     const agent: AgentConfig = {
       id: bot.id,
       name: bot.name,
-      workspace: `${stateDir}/workspaces/${bot.id}`,
+      workspace: `${stateDir}/agents/${bot.id}`,
     };
 
     if (index === 0) {
