@@ -3,7 +3,7 @@ import type { OpenAPIHono } from "@hono/zod-openapi";
 import { userCountResponseSchema } from "@nexu/shared";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users } from "../db/schema/index.js";
+import { authUsers } from "../db/schema/index.js";
 import type { AppBindings } from "../types.js";
 
 const getUserCountRoute = createRoute({
@@ -24,7 +24,7 @@ export function registerStatsRoutes(app: OpenAPIHono<AppBindings>) {
   app.openapi(getUserCountRoute, async (c) => {
     const [result] = await db
       .select({ userCount: sql<number>`count(*)::int` })
-      .from(users);
+      .from(authUsers);
 
     return c.json(
       {
