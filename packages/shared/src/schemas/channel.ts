@@ -50,6 +50,34 @@ export const slackOAuthUrlResponseSchema = z.object({
   redirectUri: z.string(),
 });
 
+export const claimTokenSchema = z.object({
+  claimToken: z.string().min(1),
+});
+
+export const claimInfoResponseSchema = z.object({
+  valid: z.boolean(),
+  expired: z.boolean(),
+  used: z.boolean(),
+  teamName: z.string().nullable(),
+  memberCount: z.number().int().nonnegative(),
+  isExistingWorkspace: z.boolean(),
+});
+
+export const claimResponseSchema = z.object({
+  success: z.boolean(),
+  teamName: z.string().nullable(),
+  botId: z.string(),
+  slackTeamId: z.string(),
+});
+
+export const slackMembershipResponseSchema = z.object({
+  hasMembership: z.boolean(),
+  teamName: z.string().nullable(),
+  memberCount: z.number().int().nonnegative(),
+  slackTeamId: z.string().nullable(),
+  botId: z.string().nullable(),
+});
+
 export type ChannelType = z.infer<typeof channelTypeSchema>;
 export type ChannelStatus = z.infer<typeof channelStatusSchema>;
 export type ConnectSlackInput = z.infer<typeof connectSlackSchema>;
@@ -57,6 +85,12 @@ export type ConnectDiscordInput = z.infer<typeof connectDiscordSchema>;
 export type ConnectFeishuInput = z.infer<typeof connectFeishuSchema>;
 export type ChannelResponse = z.infer<typeof channelResponseSchema>;
 export type SlackOAuthUrlResponse = z.infer<typeof slackOAuthUrlResponseSchema>;
+export type ClaimTokenInput = z.infer<typeof claimTokenSchema>;
+export type ClaimInfoResponse = z.infer<typeof claimInfoResponseSchema>;
+export type ClaimResponse = z.infer<typeof claimResponseSchema>;
+export type SlackMembershipResponse = z.infer<
+  typeof slackMembershipResponseSchema
+>;
 
 export const botQuotaResponseSchema = z.object({
   available: z.boolean(),

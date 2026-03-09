@@ -11,6 +11,7 @@ import {
   gatewayPools,
   sessions,
   webhookRoutes,
+  workspaceMemberships,
 } from "../db/schema/index.js";
 import { decrypt } from "../lib/crypto.js";
 import { BaseError } from "../lib/error.js";
@@ -22,14 +23,16 @@ import type { AppBindings } from "../types.js";
 export function buildSlackSessionKey(params: {
   botId: string;
   channelId: string;
+  slackUserId?: string | null;
   threadTs?: string | null;
   isIm: boolean;
 }): string {
   const botId = params.botId.trim().toLowerCase();
   const channelId = params.channelId.trim().toLowerCase();
+  const slackUserId = params.slackUserId?.trim().toLowerCase();
   const threadTs = params.threadTs?.trim().toLowerCase();
   const baseKey = params.isIm
-    ? `agent:${botId}:main`
+    ? `agent:${botId}:slack:direct:${slackUserId || channelId}`
     : `agent:${botId}:slack:channel:${channelId}`;
   return threadTs ? `${baseKey}:thread:${threadTs}` : baseKey;
 }
@@ -286,12 +289,17 @@ class SlackEventsTraceHandler {
         event?.type === "message" || event?.type === "app_mention";
       if (isMessageEvent && channel?.botId && event?.channel) {
         const channelId = event.channel as string;
+        const eventSlackUserId =
+          typeof event.user === "string" && event.user.length > 0
+            ? event.user
+            : null;
         const threadTs =
           typeof event.thread_ts === "string" && event.thread_ts.length > 0
             ? event.thread_ts
             : null;
         const now = new Date().toISOString();
         let isIm = false;
+        let slackUserId = eventSlackUserId;
 
         let channelName = channelId;
         const [botTokenRow] = await db
@@ -319,6 +327,7 @@ class SlackEventsTraceHandler {
               if (infoData.channel.is_im) {
                 const userId = infoData.channel.user;
                 if (userId) {
+                  slackUserId = userId;
                   const userResp = await fetch(
                     `https://slack.com/api/users.info?user=${userId}`,
                     { headers: { Authorization: `Bearer ${botToken}` } },
@@ -355,9 +364,25 @@ class SlackEventsTraceHandler {
         const sessionKey = buildSlackSessionKey({
           botId: channel.botId,
           channelId,
+          slackUserId,
           threadTs,
           isIm,
         });
+
+        let nexuUserId: string | null = null;
+        if (isIm && slackUserId) {
+          const [membership] = await db
+            .select({ nexuUserId: workspaceMemberships.nexuUserId })
+            .from(workspaceMemberships)
+            .where(
+              and(
+                eq(workspaceMemberships.slackTeamId, teamId),
+                eq(workspaceMemberships.slackUserId, slackUserId),
+                eq(workspaceMemberships.status, "active"),
+              ),
+            );
+          nexuUserId = membership?.nexuUserId ?? null;
+        }
 
         const title =
           channelName === channelId ? `Slack #${channelId}` : `#${channelName}`;
@@ -366,6 +391,7 @@ class SlackEventsTraceHandler {
           .values({
             id: createId(),
             botId: channel.botId,
+            nexuUserId,
             sessionKey,
             channelType: "slack",
             channelId,
@@ -380,6 +406,7 @@ class SlackEventsTraceHandler {
             target: sessions.sessionKey,
             set: {
               botId: channel.botId,
+              nexuUserId,
               title,
               messageCount: sql`${sessions.messageCount} + 1`,
               lastMessageAt: now,

@@ -11,6 +11,7 @@ export const createSessionSchema = z.object({
   botId: z.string().min(1),
   sessionKey: z.string().min(1),
   title: z.string().min(1).max(500),
+  nexuUserId: z.string().optional(),
   channelType: z.string().optional(),
   channelId: z.string().optional(),
   status: sessionStatusSchema.optional(),
@@ -34,6 +35,7 @@ export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;
 export const sessionResponseSchema = z.object({
   id: z.string(),
   botId: z.string(),
+  nexuUserId: z.string().nullable(),
   sessionKey: z.string(),
   channelType: z.string().nullable(),
   channelId: z.string().nullable(),

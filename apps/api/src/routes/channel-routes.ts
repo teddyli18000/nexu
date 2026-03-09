@@ -4,12 +4,16 @@ import {
   botQuotaResponseSchema,
   channelListResponseSchema,
   channelResponseSchema,
+  claimInfoResponseSchema,
+  claimResponseSchema,
+  claimTokenSchema,
   connectDiscordSchema,
   connectSlackSchema,
+  slackMembershipResponseSchema,
   slackOAuthUrlResponseSchema,
 } from "@nexu/shared";
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   botChannels,
@@ -17,9 +21,11 @@ import {
   channelCredentials,
   oauthStates,
   webhookRoutes,
+  workspaceMemberships,
 } from "../db/schema/index.js";
 import { findOrCreateDefaultBot } from "../lib/bot-helpers.js";
 import { checkBotQuota } from "../lib/bot-quota.js";
+import { verifyClaimToken } from "../lib/claim-token.js";
 import { encrypt } from "../lib/crypto.js";
 import { BaseError, ServiceError } from "../lib/error.js";
 import { logger } from "../lib/logger.js";
@@ -191,6 +197,39 @@ const SLACK_BOT_SCOPES = [
   "users.profile:read",
 ].join(",");
 
+function parseChannelConfig(
+  channelConfig: string | null,
+): Record<string, unknown> {
+  if (!channelConfig) {
+    return {};
+  }
+  try {
+    return JSON.parse(channelConfig) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function findWorkspaceSlackChannel(slackTeamId: string) {
+  const candidates = await db
+    .select({
+      botId: botChannels.botId,
+      accountId: botChannels.accountId,
+      channelConfig: botChannels.channelConfig,
+      updatedAt: botChannels.updatedAt,
+    })
+    .from(botChannels)
+    .where(
+      and(
+        eq(botChannels.channelType, "slack"),
+        sql`${botChannels.accountId} LIKE ${`slack-%-${slackTeamId}`}`,
+      ),
+    )
+    .orderBy(desc(botChannels.updatedAt));
+
+  return candidates[0] ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // OpenAPI route definitions (user-scoped, no botId param)
 // ---------------------------------------------------------------------------
@@ -249,6 +288,76 @@ const connectSlackRoute = createRoute({
     409: {
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Slack already connected",
+    },
+  },
+});
+
+const claimInfoRoute = createRoute({
+  method: "get",
+  path: "/api/v1/channels/slack/claim-info",
+  tags: ["Channels"],
+  request: {
+    query: z.object({
+      token: z.string().min(1),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: claimInfoResponseSchema,
+        },
+      },
+      description: "Claim token workspace information",
+    },
+  },
+});
+
+const claimRoute = createRoute({
+  method: "post",
+  path: "/api/v1/channels/slack/claim",
+  tags: ["Channels"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: claimTokenSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: claimResponseSchema,
+        },
+      },
+      description: "Claim workspace membership",
+    },
+    400: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "Invalid or expired claim token",
+    },
+    409: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "Claim token already used",
+    },
+  },
+});
+
+const slackMembershipRoute = createRoute({
+  method: "get",
+  path: "/api/v1/channels/slack/membership",
+  tags: ["Channels"],
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: slackMembershipResponseSchema,
+        },
+      },
+      description: "Current user's shared Slack workspace membership",
     },
   },
 });
@@ -349,6 +458,222 @@ export function registerChannelRoutes(app: OpenAPIHono<AppBindings>) {
   app.openapi(botQuotaRoute, async (c) => {
     const quota = await checkBotQuota();
     return c.json(quota, 200);
+  });
+
+  // -- Public claim info (token decode only; no auth required) --
+  app.openapi(claimInfoRoute, async (c) => {
+    const { token } = c.req.valid("query");
+    const verification = verifyClaimToken(token);
+
+    if (
+      !verification.valid ||
+      !verification.slackTeamId ||
+      !verification.slackUserId
+    ) {
+      return c.json(
+        {
+          valid: false,
+          expired: verification.expired,
+          used: false,
+          teamName: null,
+          memberCount: 0,
+          isExistingWorkspace: false,
+        },
+        200,
+      );
+    }
+
+    const [existingMembership] = await db
+      .select({
+        id: workspaceMemberships.id,
+        status: workspaceMemberships.status,
+      })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.slackTeamId, verification.slackTeamId),
+          eq(workspaceMemberships.slackUserId, verification.slackUserId),
+        ),
+      );
+
+    const [memberCountResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.slackTeamId, verification.slackTeamId),
+          eq(workspaceMemberships.status, "active"),
+        ),
+      );
+
+    const workspaceChannel = await findWorkspaceSlackChannel(
+      verification.slackTeamId,
+    );
+    const channelConfig = parseChannelConfig(
+      workspaceChannel?.channelConfig ?? null,
+    );
+    const teamNameValue = channelConfig.teamName;
+    const teamName = typeof teamNameValue === "string" ? teamNameValue : null;
+
+    return c.json(
+      {
+        valid: true,
+        expired: false,
+        used: existingMembership?.status === "active",
+        teamName,
+        memberCount: memberCountResult?.count ?? 0,
+        isExistingWorkspace: Boolean(workspaceChannel),
+      },
+      200,
+    );
+  });
+
+  // -- Claim Slack workspace membership (authenticated) --
+  app.openapi(claimRoute, async (c) => {
+    const userId = c.get("userId");
+    const { claimToken } = c.req.valid("json");
+    const verification = verifyClaimToken(claimToken);
+
+    if (
+      !verification.valid ||
+      !verification.slackTeamId ||
+      !verification.slackUserId
+    ) {
+      return c.json(
+        {
+          message: verification.expired
+            ? "Claim token has expired"
+            : "Invalid claim token",
+        },
+        400,
+      );
+    }
+
+    const [existingMembership] = await db
+      .select({
+        id: workspaceMemberships.id,
+        status: workspaceMemberships.status,
+      })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.slackTeamId, verification.slackTeamId),
+          eq(workspaceMemberships.slackUserId, verification.slackUserId),
+        ),
+      );
+
+    if (existingMembership?.status === "active") {
+      return c.json({ message: "Claim token already used" }, 409);
+    }
+
+    const workspaceChannel = await findWorkspaceSlackChannel(
+      verification.slackTeamId,
+    );
+    if (!workspaceChannel) {
+      return c.json({ message: "Workspace is not connected yet" }, 400);
+    }
+
+    const now = new Date().toISOString();
+    if (existingMembership) {
+      await db
+        .update(workspaceMemberships)
+        .set({
+          nexuUserId: userId,
+          botId: workspaceChannel.botId,
+          status: "active",
+          updatedAt: now,
+        })
+        .where(eq(workspaceMemberships.id, existingMembership.id));
+    } else {
+      await db.insert(workspaceMemberships).values({
+        id: createId(),
+        slackTeamId: verification.slackTeamId,
+        slackUserId: verification.slackUserId,
+        nexuUserId: userId,
+        botId: workspaceChannel.botId,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const channelConfig = parseChannelConfig(workspaceChannel.channelConfig);
+    const teamNameValue = channelConfig.teamName;
+    const teamName = typeof teamNameValue === "string" ? teamNameValue : null;
+
+    return c.json(
+      {
+        success: true,
+        teamName,
+        botId: workspaceChannel.botId,
+        slackTeamId: verification.slackTeamId,
+      },
+      200,
+    );
+  });
+
+  // -- Current user's shared Slack membership --
+  app.openapi(slackMembershipRoute, async (c) => {
+    const userId = c.get("userId");
+    const memberships = await db
+      .select({
+        id: workspaceMemberships.id,
+        slackTeamId: workspaceMemberships.slackTeamId,
+        botId: workspaceMemberships.botId,
+        updatedAt: workspaceMemberships.updatedAt,
+      })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.nexuUserId, userId),
+          eq(workspaceMemberships.status, "active"),
+        ),
+      )
+      .orderBy(desc(workspaceMemberships.updatedAt));
+
+    const membership = memberships[0];
+    if (!membership) {
+      return c.json(
+        {
+          hasMembership: false,
+          teamName: null,
+          memberCount: 0,
+          slackTeamId: null,
+          botId: null,
+        },
+        200,
+      );
+    }
+
+    const workspaceChannel = await findWorkspaceSlackChannel(
+      membership.slackTeamId,
+    );
+    const [memberCountResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.slackTeamId, membership.slackTeamId),
+          eq(workspaceMemberships.status, "active"),
+        ),
+      );
+
+    const channelConfig = parseChannelConfig(
+      workspaceChannel?.channelConfig ?? null,
+    );
+    const teamNameValue = channelConfig.teamName;
+    const teamName = typeof teamNameValue === "string" ? teamNameValue : null;
+
+    return c.json(
+      {
+        hasMembership: true,
+        teamName,
+        memberCount: memberCountResult?.count ?? 0,
+        slackTeamId: membership.slackTeamId,
+        botId: membership.botId,
+      },
+      200,
+    );
   });
   // -- Slack redirect URI (lightweight, no state creation) --
   app.openapi(slackRedirectUriRoute, async (c) => {

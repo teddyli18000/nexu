@@ -8,9 +8,14 @@ import {
   updateArtifactSchema,
 } from "@nexu/shared";
 import { createId } from "@paralleldrive/cuid2";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { artifacts, bots, sessions } from "../db/schema/index.js";
+import {
+  artifacts,
+  bots,
+  sessions,
+  workspaceMemberships,
+} from "../db/schema/index.js";
 import { ServiceError } from "../lib/error.js";
 import { requireSkillToken } from "../middleware/internal-auth.js";
 import type { AppBindings } from "../types.js";
@@ -62,7 +67,11 @@ async function resolveArtifactSessionKey(input: {
 
   const normalizedBotId = input.botId.trim().toLowerCase();
   if (rawChatId.startsWith("user:")) {
-    const base = `agent:${normalizedBotId}:main`;
+    const slackUserId = rawChatId.slice("user:".length).trim().toLowerCase();
+    if (!slackUserId) {
+      return { error: "chatId user id is required" };
+    }
+    const base = `agent:${normalizedBotId}:slack:direct:${slackUserId}`;
     return {
       sessionKey: normalizedThreadId
         ? `${base}:thread:${normalizedThreadId}`
@@ -184,6 +193,7 @@ function formatArtifact(row: typeof artifacts.$inferSelect) {
   return {
     id: row.id,
     botId: row.botId,
+    ownerUserId: row.ownerUserId ?? null,
     sessionKey: row.sessionKey ?? null,
     channelType: row.channelType ?? null,
     channelId: row.channelId ?? null,
@@ -401,6 +411,20 @@ export function registerArtifactInternalRoutes(app: OpenAPIHono<AppBindings>) {
       return c.json({ message: resolved.error }, 400);
     }
 
+    let ownerUserId: string | null = input.ownerUserId ?? null;
+    if (resolved.sessionKey) {
+      const [session] = await db
+        .select({ nexuUserId: sessions.nexuUserId })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.botId, input.botId),
+            eq(sessions.sessionKey, resolved.sessionKey),
+          ),
+        );
+      ownerUserId = session?.nexuUserId ?? ownerUserId;
+    }
+
     const normalizedPreviewUrl = input.previewUrl
       ? normalizePreviewUrl(input.previewUrl)
       : undefined;
@@ -439,6 +463,7 @@ export function registerArtifactInternalRoutes(app: OpenAPIHono<AppBindings>) {
         .update(artifacts)
         .set({
           botId: input.botId,
+          ownerUserId,
           title: input.title,
           sessionKey: resolved.sessionKey,
           channelType: input.channelType,
@@ -460,6 +485,7 @@ export function registerArtifactInternalRoutes(app: OpenAPIHono<AppBindings>) {
       await db.insert(artifacts).values({
         id,
         botId: input.botId,
+        ownerUserId,
         title: input.title,
         sessionKey: resolved.sessionKey,
         channelType: input.channelType,
@@ -635,13 +661,41 @@ const deleteArtifactRoute = createRoute({
 });
 
 export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
-  // Helper: get all botIds belonging to the current user
-  async function getUserBotIds(userId: string): Promise<string[]> {
-    const userBots = await db
-      .select({ id: bots.id })
-      .from(bots)
-      .where(eq(bots.userId, userId));
-    return userBots.map((b) => b.id);
+  async function getAccessibleBotIds(userId: string): Promise<string[]> {
+    const [userBots, membershipBots] = await Promise.all([
+      db.select({ id: bots.id }).from(bots).where(eq(bots.userId, userId)),
+      db
+        .select({ botId: workspaceMemberships.botId })
+        .from(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.nexuUserId, userId),
+            eq(workspaceMemberships.status, "active"),
+          ),
+        ),
+    ]);
+    return [
+      ...new Set([
+        ...userBots.map((b) => b.id),
+        ...membershipBots.map((m) => m.botId),
+      ]),
+    ];
+  }
+
+  async function getSharedBotIdSet(botIds: string[]): Promise<Set<string>> {
+    if (botIds.length === 0) {
+      return new Set();
+    }
+    const rows = await db
+      .select({ botId: workspaceMemberships.botId })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          inArray(workspaceMemberships.botId, botIds),
+          eq(workspaceMemberships.status, "active"),
+        ),
+      );
+    return new Set(rows.map((row) => row.botId));
   }
 
   // GET /v1/artifacts — list with filters
@@ -650,7 +704,7 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
     const query = c.req.valid("query");
     const { limit, offset } = query;
 
-    const botIds = await getUserBotIds(userId);
+    const botIds = await getAccessibleBotIds(userId);
     if (botIds.length === 0) {
       return c.json({ artifacts: [], total: 0, limit, offset }, 200);
     }
@@ -661,8 +715,35 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
     }
 
     const targetBotIds = query.botId ? [query.botId] : botIds;
+    const sharedBotIdSet = await getSharedBotIdSet(targetBotIds);
+    const sharedBotIds = Array.from(sharedBotIdSet);
+    const nonSharedBotIds = targetBotIds.filter(
+      (botId) => !sharedBotIdSet.has(botId),
+    );
 
     const conditions = [inArray(artifacts.botId, targetBotIds)];
+    if (sharedBotIds.length > 0) {
+      const visibilityConditions = [];
+      if (nonSharedBotIds.length > 0) {
+        visibilityConditions.push(inArray(artifacts.botId, nonSharedBotIds));
+      }
+      visibilityConditions.push(
+        and(
+          inArray(artifacts.botId, sharedBotIds),
+          or(
+            eq(artifacts.ownerUserId, userId),
+            sql`${artifacts.ownerUserId} IS NULL`,
+          ),
+        ),
+      );
+      const visibilityClause =
+        visibilityConditions.length === 1
+          ? visibilityConditions[0]
+          : or(...visibilityConditions);
+      if (visibilityClause) {
+        conditions.push(visibilityClause);
+      }
+    }
     if (query.sessionKey) {
       conditions.push(eq(artifacts.sessionKey, query.sessionKey));
     }
@@ -702,7 +783,7 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
   // GET /v1/artifacts/stats — aggregate stats (must be before :id)
   app.openapi(artifactStatsRoute, async (c) => {
     const userId = c.get("userId");
-    const botIds = await getUserBotIds(userId);
+    const botIds = await getAccessibleBotIds(userId);
 
     if (botIds.length === 0) {
       return c.json(
@@ -719,6 +800,35 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
       );
     }
 
+    const sharedBotIdSet = await getSharedBotIdSet(botIds);
+    const sharedBotIds = Array.from(sharedBotIdSet);
+    const nonSharedBotIds = botIds.filter(
+      (botId) => !sharedBotIdSet.has(botId),
+    );
+    const statsConditions = [inArray(artifacts.botId, botIds)];
+    if (sharedBotIds.length > 0) {
+      const visibilityConditions = [];
+      if (nonSharedBotIds.length > 0) {
+        visibilityConditions.push(inArray(artifacts.botId, nonSharedBotIds));
+      }
+      visibilityConditions.push(
+        and(
+          inArray(artifacts.botId, sharedBotIds),
+          or(
+            eq(artifacts.ownerUserId, userId),
+            sql`${artifacts.ownerUserId} IS NULL`,
+          ),
+        ),
+      );
+      const visibilityClause =
+        visibilityConditions.length === 1
+          ? visibilityConditions[0]
+          : or(...visibilityConditions);
+      if (visibilityClause) {
+        statsConditions.push(visibilityClause);
+      }
+    }
+
     const [stats] = await db
       .select({
         totalArtifacts: sql<number>`count(*)::int`,
@@ -730,7 +840,7 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
         totalLinesOfCode: sql<number>`coalesce(sum(lines_of_code), 0)::int`,
       })
       .from(artifacts)
-      .where(inArray(artifacts.botId, botIds));
+      .where(and(...statsConditions));
 
     return c.json(stats, 200);
   });
@@ -749,13 +859,17 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
       return c.json({ message: "Artifact not found" }, 404);
     }
 
-    // Verify ownership via bot
-    const [bot] = await db
-      .select({ id: bots.id })
-      .from(bots)
-      .where(and(eq(bots.id, artifact.botId), eq(bots.userId, userId)));
+    const botIds = await getAccessibleBotIds(userId);
+    if (!botIds.includes(artifact.botId)) {
+      return c.json({ message: "Artifact not found" }, 404);
+    }
 
-    if (!bot) {
+    const sharedBotIdSet = await getSharedBotIdSet([artifact.botId]);
+    if (
+      sharedBotIdSet.has(artifact.botId) &&
+      artifact.ownerUserId &&
+      artifact.ownerUserId !== userId
+    ) {
       return c.json({ message: "Artifact not found" }, 404);
     }
 
@@ -776,13 +890,17 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
       return c.json({ message: "Artifact not found" }, 404);
     }
 
-    // Verify ownership via bot
-    const [bot] = await db
-      .select({ id: bots.id })
-      .from(bots)
-      .where(and(eq(bots.id, artifact.botId), eq(bots.userId, userId)));
+    const botIds = await getAccessibleBotIds(userId);
+    if (!botIds.includes(artifact.botId)) {
+      return c.json({ message: "Artifact not found" }, 404);
+    }
 
-    if (!bot) {
+    const sharedBotIdSet = await getSharedBotIdSet([artifact.botId]);
+    if (
+      sharedBotIdSet.has(artifact.botId) &&
+      artifact.ownerUserId &&
+      artifact.ownerUserId !== userId
+    ) {
       return c.json({ message: "Artifact not found" }, 404);
     }
 

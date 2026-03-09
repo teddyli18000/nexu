@@ -7,7 +7,7 @@ import {
   updateSessionSchema,
 } from "@nexu/shared";
 import { createId } from "@paralleldrive/cuid2";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { Context } from "hono";
 import { db } from "../db/index.js";
 import {
@@ -15,6 +15,7 @@ import {
   bots,
   channelCredentials,
   sessions,
+  workspaceMemberships,
 } from "../db/schema/index.js";
 import { decrypt } from "../lib/crypto.js";
 import { BaseError, ServiceError } from "../lib/error.js";
@@ -50,6 +51,7 @@ function formatSession(row: typeof sessions.$inferSelect) {
   return {
     id: row.id,
     botId: row.botId,
+    nexuUserId: row.nexuUserId ?? null,
     sessionKey: row.sessionKey,
     channelType: row.channelType ?? null,
     channelId: row.channelId ?? null,
@@ -505,6 +507,7 @@ export function registerSessionInternalRoutes(app: OpenAPIHono<AppBindings>) {
       .values({
         id,
         botId: input.botId,
+        nexuUserId: input.nexuUserId,
         sessionKey: normalizedSessionKey,
         title: input.title,
         channelType: input.channelType,
@@ -520,6 +523,9 @@ export function registerSessionInternalRoutes(app: OpenAPIHono<AppBindings>) {
         target: sessions.sessionKey,
         set: {
           botId: input.botId,
+          ...(input.nexuUserId !== undefined && {
+            nexuUserId: input.nexuUserId,
+          }),
           title: input.title,
           ...(input.channelType !== undefined && {
             channelType: input.channelType,
@@ -665,12 +671,41 @@ const getSessionRoute = createRoute({
 });
 
 export function registerSessionRoutes(app: OpenAPIHono<AppBindings>) {
-  async function getUserBotIds(userId: string): Promise<string[]> {
-    const userBots = await db
-      .select({ id: bots.id })
-      .from(bots)
-      .where(eq(bots.userId, userId));
-    return userBots.map((b) => b.id);
+  async function getAccessibleBotIds(userId: string): Promise<string[]> {
+    const [userBots, membershipBots] = await Promise.all([
+      db.select({ id: bots.id }).from(bots).where(eq(bots.userId, userId)),
+      db
+        .select({ botId: workspaceMemberships.botId })
+        .from(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.nexuUserId, userId),
+            eq(workspaceMemberships.status, "active"),
+          ),
+        ),
+    ]);
+    return [
+      ...new Set([
+        ...userBots.map((b) => b.id),
+        ...membershipBots.map((m) => m.botId),
+      ]),
+    ];
+  }
+
+  async function getSharedBotIdSet(botIds: string[]): Promise<Set<string>> {
+    if (botIds.length === 0) {
+      return new Set();
+    }
+    const rows = await db
+      .select({ botId: workspaceMemberships.botId })
+      .from(workspaceMemberships)
+      .where(
+        and(
+          inArray(workspaceMemberships.botId, botIds),
+          eq(workspaceMemberships.status, "active"),
+        ),
+      );
+    return new Set(rows.map((row) => row.botId));
   }
 
   // GET /v1/sessions — list with filters
@@ -679,7 +714,7 @@ export function registerSessionRoutes(app: OpenAPIHono<AppBindings>) {
     const query = c.req.valid("query");
     const { limit, offset } = query;
 
-    const botIds = await getUserBotIds(userId);
+    const botIds = await getAccessibleBotIds(userId);
     if (botIds.length === 0) {
       return c.json({ sessions: [], total: 0, limit, offset }, 200);
     }
@@ -690,8 +725,35 @@ export function registerSessionRoutes(app: OpenAPIHono<AppBindings>) {
     }
 
     const targetBotIds = query.botId ? [query.botId] : botIds;
+    const sharedBotIdSet = await getSharedBotIdSet(targetBotIds);
+    const sharedBotIds = Array.from(sharedBotIdSet);
+    const nonSharedBotIds = targetBotIds.filter(
+      (botId) => !sharedBotIdSet.has(botId),
+    );
 
     const conditions = [inArray(sessions.botId, targetBotIds)];
+    if (sharedBotIds.length > 0) {
+      const visibilityConditions = [];
+      if (nonSharedBotIds.length > 0) {
+        visibilityConditions.push(inArray(sessions.botId, nonSharedBotIds));
+      }
+      visibilityConditions.push(
+        and(
+          inArray(sessions.botId, sharedBotIds),
+          or(
+            eq(sessions.nexuUserId, userId),
+            sql`${sessions.nexuUserId} IS NULL`,
+          ),
+        ),
+      );
+      const visibilityClause =
+        visibilityConditions.length === 1
+          ? visibilityConditions[0]
+          : or(...visibilityConditions);
+      if (visibilityClause) {
+        conditions.push(visibilityClause);
+      }
+    }
     if (query.channelType) {
       conditions.push(eq(sessions.channelType, query.channelType));
     }
@@ -742,13 +804,17 @@ export function registerSessionRoutes(app: OpenAPIHono<AppBindings>) {
       return c.json({ message: "Session not found" }, 404);
     }
 
-    // Verify ownership via bot
-    const [bot] = await db
-      .select({ id: bots.id })
-      .from(bots)
-      .where(and(eq(bots.id, session.botId), eq(bots.userId, userId)));
+    const botIds = await getAccessibleBotIds(userId);
+    if (!botIds.includes(session.botId)) {
+      return c.json({ message: "Session not found" }, 404);
+    }
 
-    if (!bot) {
+    const sharedBotIdSet = await getSharedBotIdSet([session.botId]);
+    if (
+      sharedBotIdSet.has(session.botId) &&
+      session.nexuUserId &&
+      session.nexuUserId !== userId
+    ) {
       return c.json({ message: "Session not found" }, 404);
     }
 

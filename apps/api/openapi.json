@@ -9,6 +9,118 @@
     "parameters": {}
   },
   "paths": {
+    "/api/internal/artifacts/check-domain": {
+      "post": {
+        "tags": [
+          "Artifacts (Internal)"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "botId": {
+                    "type": "string"
+                  },
+                  "sessionKey": {
+                    "type": "string"
+                  },
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "threadId": {
+                    "type": "string"
+                  },
+                  "channelType": {
+                    "type": "string"
+                  },
+                  "previewUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "botId",
+                  "previewUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Domain availability result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "sessionKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "existingArtifactId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "existingSessionKey": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "sessionKey",
+                    "existingArtifactId",
+                    "existingSessionKey"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Domain already in use by another session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/artifacts": {
       "post": {
         "tags": [
@@ -29,7 +141,16 @@
                     "minLength": 1,
                     "maxLength": 500
                   },
+                  "ownerUserId": {
+                    "type": "string"
+                  },
                   "sessionKey": {
+                    "type": "string"
+                  },
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "threadId": {
                     "type": "string"
                   },
                   "channelType": {
@@ -110,6 +231,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "ownerUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string",
                       "nullable": true
@@ -177,6 +302,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "ownerUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",
@@ -200,6 +326,24 @@
           },
           "400": {
             "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Preview URL already in use by another session",
             "content": {
               "application/json": {
                 "schema": {
@@ -295,6 +439,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "ownerUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string",
                       "nullable": true
@@ -362,6 +510,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "ownerUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",
@@ -428,6 +577,9 @@
                     "minLength": 1,
                     "maxLength": 500
                   },
+                  "nexuUserId": {
+                    "type": "string"
+                  },
                   "channelType": {
                     "type": "string"
                   },
@@ -477,6 +629,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "nexuUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string"
                     },
@@ -518,6 +674,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "nexuUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",
@@ -618,6 +775,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "nexuUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string"
                     },
@@ -659,6 +820,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "nexuUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",
@@ -2106,6 +2268,207 @@
                   "required": [
                     "available",
                     "resetsAt"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/channels/slack/claim-info": {
+      "get": {
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "token",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claim token workspace information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "expired": {
+                      "type": "boolean"
+                    },
+                    "used": {
+                      "type": "boolean"
+                    },
+                    "teamName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "memberCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "isExistingWorkspace": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "valid",
+                    "expired",
+                    "used",
+                    "teamName",
+                    "memberCount",
+                    "isExistingWorkspace"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/channels/slack/claim": {
+      "post": {
+        "tags": [
+          "Channels"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "claimToken": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "claimToken"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim workspace membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "teamName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "botId": {
+                      "type": "string"
+                    },
+                    "slackTeamId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "teamName",
+                    "botId",
+                    "slackTeamId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired claim token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Claim token already used",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/channels/slack/membership": {
+      "get": {
+        "tags": [
+          "Channels"
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user's shared Slack workspace membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hasMembership": {
+                      "type": "boolean"
+                    },
+                    "teamName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "memberCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "slackTeamId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "botId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "hasMembership",
+                    "teamName",
+                    "memberCount",
+                    "slackTeamId",
+                    "botId"
                   ]
                 }
               }
@@ -5699,6 +6062,91 @@
         }
       }
     },
+    "/api/internal/pools/{poolId}/check-slack-tokens": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "poolId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slack token health check results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checked": {
+                      "type": "integer"
+                    },
+                    "invalidated": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "botChannelId": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "botChannelId",
+                          "accountId",
+                          "ok"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "checked",
+                    "invalidated",
+                    "results"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pool not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/artifacts": {
       "get": {
         "tags": [
@@ -5779,6 +6227,10 @@
                           "botId": {
                             "type": "string"
                           },
+                          "ownerUserId": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "sessionKey": {
                             "type": "string",
                             "nullable": true
@@ -5846,6 +6298,7 @@
                         "required": [
                           "id",
                           "botId",
+                          "ownerUserId",
                           "sessionKey",
                           "channelType",
                           "channelId",
@@ -5968,6 +6421,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "ownerUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string",
                       "nullable": true
@@ -6035,6 +6492,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "ownerUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",
@@ -6202,6 +6660,10 @@
                           "botId": {
                             "type": "string"
                           },
+                          "nexuUserId": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "sessionKey": {
                             "type": "string"
                           },
@@ -6243,6 +6705,7 @@
                         "required": [
                           "id",
                           "botId",
+                          "nexuUserId",
                           "sessionKey",
                           "channelType",
                           "channelId",
@@ -6308,6 +6771,10 @@
                     "botId": {
                       "type": "string"
                     },
+                    "nexuUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "sessionKey": {
                       "type": "string"
                     },
@@ -6349,6 +6816,7 @@
                   "required": [
                     "id",
                     "botId",
+                    "nexuUserId",
                     "sessionKey",
                     "channelType",
                     "channelId",

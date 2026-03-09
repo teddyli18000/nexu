@@ -21,6 +21,7 @@ export type ArtifactStatus = z.infer<typeof artifactStatusSchema>;
 export const createArtifactSchema = z.object({
   botId: z.string().min(1),
   title: z.string().min(1).max(500),
+  ownerUserId: z.string().optional(),
   sessionKey: z.string().optional(),
   chatId: z.string().optional(),
   threadId: z.string().optional(),
@@ -56,6 +57,7 @@ export type UpdateArtifactInput = z.infer<typeof updateArtifactSchema>;
 export const artifactResponseSchema = z.object({
   id: z.string(),
   botId: z.string(),
+  ownerUserId: z.string().nullable(),
   sessionKey: z.string().nullable(),
   channelType: z.string().nullable(),
   channelId: z.string().nullable(),

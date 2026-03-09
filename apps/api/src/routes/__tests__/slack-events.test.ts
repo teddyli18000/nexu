@@ -25,24 +25,26 @@ describe("buildSlackSessionKey", () => {
     );
   });
 
-  it("collapses DMs to the main session key", () => {
+  it("builds canonical direct message session keys", () => {
     expect(
       buildSlackSessionKey({
         botId: "Bot-Test-1",
         channelId: "D0AJKG60H6D",
+        slackUserId: "U09ZZZ1",
         isIm: true,
       }),
-    ).toBe("agent:bot-test-1:main");
+    ).toBe("agent:bot-test-1:slack:direct:u09zzz1");
   });
 
-  it("appends thread ids to DM main session keys", () => {
+  it("appends thread ids to direct message session keys", () => {
     expect(
       buildSlackSessionKey({
         botId: "Bot-Test-1",
         channelId: "D0AJKG60H6D",
+        slackUserId: "U09ZZZ1",
         threadTs: "1770408518.451689",
         isIm: true,
       }),
-    ).toBe("agent:bot-test-1:main:thread:1770408518.451689");
+    ).toBe("agent:bot-test-1:slack:direct:u09zzz1:thread:1770408518.451689");
   });
 });
