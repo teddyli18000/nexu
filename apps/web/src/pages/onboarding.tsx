@@ -12,7 +12,11 @@ import { toast } from "sonner";
 import "@/lib/api";
 import { client } from "@/lib/api";
 import { whatsappQrImageUrl, whatsappWaMeUrl } from "@/lib/whatsapp";
-import { getApiV1Channels, getApiV1Me } from "../../lib/api/sdk.gen";
+import {
+  getApiV1Channels,
+  getApiV1ChannelsSlackMembership,
+  getApiV1Me,
+} from "../../lib/api/sdk.gen";
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -35,6 +39,8 @@ const STEPS = [
   { id: "channels", label: "Channels" },
   { id: "avatar", label: "Avatar" },
 ];
+
+const CLAIM_CONTEXT_STORAGE_KEY = "nexu_claim_context";
 
 const CAPABILITY_PILLS = [
   { emoji: "\u{1F4BB}", label: "Code & Deploy" },
@@ -958,8 +964,40 @@ function ChannelsStep({
   const [modal, setModal] = useState<string | null>(null);
   const [slackManualFallback, setSlackManualFallback] = useState(false);
   const [slackErrorMsg, setSlackErrorMsg] = useState<string | undefined>();
+  const [hasWorkspaceMembership, setHasWorkspaceMembership] = useState(false);
+  const [membershipTeamName, setMembershipTeamName] = useState<string | null>(
+    null,
+  );
+  const [membershipMemberCount, setMembershipMemberCount] = useState(0);
   const { available: quotaAvailable, resetsAt } = useBotQuota();
   const quotaBlocked = !quotaAvailable && connected.length === 0;
+
+  useEffect(() => {
+    try {
+      const rawClaimContext = sessionStorage.getItem(CLAIM_CONTEXT_STORAGE_KEY);
+      if (rawClaimContext) {
+        const parsed = JSON.parse(rawClaimContext) as {
+          teamName?: string | null;
+        };
+        setHasWorkspaceMembership(true);
+        setMembershipTeamName(parsed.teamName ?? null);
+        return;
+      }
+    } catch {
+      // Ignore sessionStorage parse errors
+    }
+
+    getApiV1ChannelsSlackMembership()
+      .then(({ data }) => {
+        if (!data?.hasMembership) {
+          return;
+        }
+        setHasWorkspaceMembership(true);
+        setMembershipTeamName(data.teamName ?? null);
+        setMembershipMemberCount(data.memberCount ?? 0);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load already-connected channels from backend on mount
   useEffect(() => {
@@ -1034,6 +1072,47 @@ function ChannelsStep({
   const modalChannel = modal
     ? CHANNEL_OPTIONS.find((c) => c.id === modal)
     : null;
+
+  if (hasWorkspaceMembership) {
+    return (
+      <div className="relative">
+        <div className="mb-6">
+          <h2 className="text-[22px] font-bold text-text-primary tracking-tight">
+            Connect your channels
+          </h2>
+          <p className="mt-1 text-[13px] text-text-secondary">
+            Your Slack workspace is already authorized
+          </p>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-[12px] text-emerald-700">
+          Your Workspace {membershipTeamName ?? "Team"} is already connected to
+          Nexu
+          {membershipMemberCount > 0
+            ? ` · ${membershipMemberCount} member${membershipMemberCount > 1 ? "s" : ""}`
+            : ""}{" "}
+          .
+        </div>
+
+        <div className="mt-6 flex justify-between items-center">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
+          >
+            &larr; Back
+          </button>
+          <button
+            type="button"
+            onClick={() => onNext({ channelVotes: votes })}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-accent hover:bg-accent-hover text-accent-foreground font-medium rounded-md text-[13px] transition-colors cursor-pointer"
+          >
+            Continue <span className="text-[11px]">&rarr;</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

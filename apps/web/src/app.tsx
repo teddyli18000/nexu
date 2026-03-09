@@ -5,6 +5,7 @@ import { InviteGuardLayout } from "./layouts/invite-guard-layout";
 import { WorkspaceLayout } from "./layouts/workspace-layout";
 import { AuthPage } from "./pages/auth";
 import { ChannelsPage } from "./pages/channels";
+import { ClaimPage } from "./pages/claim";
 import { OnboardingPage } from "./pages/onboarding";
 import { SessionsPage } from "./pages/sessions";
 import { SlackOAuthCallbackPage } from "./pages/slack-oauth-callback";
@@ -15,6 +16,7 @@ function DocumentTitleSync() {
   useEffect(() => {
     const titleByPathname: Record<string, string> = {
       "/auth": "Sign In · Nexu",
+      "/claim": "Claim Workspace · Nexu",
       "/onboarding": "Get Started · Nexu",
       "/workspace": "Workspace · Nexu",
     };
@@ -32,6 +34,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/workspace" replace />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/claim" element={<ClaimPage />} />
         <Route element={<AuthLayout />}>
           <Route element={<InviteGuardLayout />}>
             <Route path="/onboarding" element={<OnboardingPage />} />

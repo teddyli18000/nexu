@@ -20,6 +20,21 @@ const OTP_SLOTS = Array.from({ length: OTP_LENGTH }, (_, i) => ({
   i,
 }));
 const RESEND_COOLDOWN = 30;
+const AUTH_SOURCE_STORAGE_KEY = "nexu_auth_source";
+const CLAIM_TOKEN_STORAGE_KEY = "nexu_claim_token";
+
+function getStoredAuthSource(): "IM" | "Landingpage" {
+  const source = sessionStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
+  return source === "IM" ? "IM" : "Landingpage";
+}
+
+function getPostAuthRedirectPath(): string {
+  const claimToken = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY);
+  if (claimToken) {
+    return `/claim?token=${encodeURIComponent(claimToken)}`;
+  }
+  return "/workspace";
+}
 
 function OtpInput({
   value,
@@ -100,6 +115,21 @@ export function AuthPage() {
   const [verifying, setVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
+  useEffect(() => {
+    const sourceParam = searchParams.get("source");
+    if (sourceParam === "IM" || sourceParam === "Landingpage") {
+      sessionStorage.setItem(AUTH_SOURCE_STORAGE_KEY, sourceParam);
+    } else if (!sessionStorage.getItem(AUTH_SOURCE_STORAGE_KEY)) {
+      sessionStorage.setItem(AUTH_SOURCE_STORAGE_KEY, "Landingpage");
+    }
+
+    const claimTokenParam =
+      searchParams.get("claimToken") ?? searchParams.get("token");
+    if (claimTokenParam) {
+      sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, claimTokenParam);
+    }
+  }, [searchParams]);
+
   // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -151,13 +181,15 @@ export function AuthPage() {
           return;
         }
       }
-      track(isLogin ? "login_email_success" : "signup_email_success");
+      track(isLogin ? "login_email_success" : "signup_email_success", {
+        source: getStoredAuthSource(),
+      });
       identify({
         auth_method: "email",
         user_email: email,
         ...(isLogin ? {} : { signup_date: new Date().toISOString() }),
       });
-      navigate("/workspace");
+      navigate(getPostAuthRedirectPath());
     } catch {
       toast.error("Verification failed");
       setVerifying(false);
@@ -176,7 +208,7 @@ export function AuthPage() {
         mode === "login"
           ? `login_${provider}_success`
           : `signup_${provider}_success`;
-      track(event);
+      track(event, { source: getStoredAuthSource() });
       identify({
         auth_method: provider,
         user_email: session.user.email,
@@ -193,7 +225,7 @@ export function AuthPage() {
   }
 
   if (session?.user) {
-    return <Navigate to="/workspace" replace />;
+    return <Navigate to={getPostAuthRedirectPath()} replace />;
   }
 
   const handleOAuth = async (provider: "google") => {
@@ -203,7 +235,7 @@ export function AuthPage() {
     try {
       await authClient.signIn.social({
         provider,
-        callbackURL: `${window.location.origin}/workspace`,
+        callbackURL: `${window.location.origin}/auth`,
       });
     } catch {
       setLoading(null);
@@ -240,9 +272,9 @@ export function AuthPage() {
           setLoading(null);
           return;
         }
-        track("login_email_success");
+        track("login_email_success", { source: getStoredAuthSource() });
         identify({ auth_method: "email", user_email: email });
-        navigate("/workspace");
+        navigate(getPostAuthRedirectPath());
       } else {
         const { error } = await authClient.signUp.email({
           email,

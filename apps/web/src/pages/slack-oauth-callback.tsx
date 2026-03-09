@@ -27,14 +27,29 @@ export function SlackOAuthCallbackPage() {
   }, []);
 
   useEffect(() => {
+    const withQuery = (base: string, extra: Record<string, string>) => {
+      const [path, queryString] = base.split("?");
+      const params = new URLSearchParams(queryString ?? "");
+      for (const [key, value] of Object.entries(extra)) {
+        params.set(key, value);
+      }
+      return `${path}?${params.toString()}`;
+    };
+
     if (success) {
       // Success path: show brief confirmation, then redirect
       queryClient.invalidateQueries({ queryKey: ["channels"] });
       toast.success(`Slack workspace "${teamName}" connected!`);
 
       const timer = setTimeout(() => {
-        if (returnTo === "/onboarding") {
-          navigate("/onboarding?slackConnected=true", { replace: true });
+        if (returnTo) {
+          if (returnTo.startsWith("/onboarding")) {
+            navigate("/onboarding?slackConnected=true", { replace: true });
+            return;
+          }
+          navigate(withQuery(returnTo, { slackConnected: "true" }), {
+            replace: true,
+          });
         } else {
           navigate("/workspace/channels", { replace: true });
         }
@@ -44,16 +59,31 @@ export function SlackOAuthCallbackPage() {
 
     // Error path: immediately redirect back with error info in query params
     const errorMsg = error ?? "Authorization was not completed";
-    const encodedError = encodeURIComponent(errorMsg);
-
-    if (returnTo === "/onboarding") {
+    if (returnTo) {
+      if (returnTo.startsWith("/onboarding")) {
+        navigate(
+          withQuery(returnTo, {
+            openModal: "slack",
+            slackManual: "true",
+            slackError: errorMsg,
+          }),
+          { replace: true },
+        );
+        return;
+      }
       navigate(
-        `/onboarding?openModal=slack&slackManual=true&slackError=${encodedError}`,
+        withQuery(returnTo, {
+          slackManual: "true",
+          slackError: errorMsg,
+        }),
         { replace: true },
       );
     } else {
       navigate(
-        `/workspace/channels?slackManual=true&slackError=${encodedError}`,
+        `/workspace/channels?${new URLSearchParams({
+          slackManual: "true",
+          slackError: errorMsg,
+        }).toString()}`,
         { replace: true },
       );
     }
