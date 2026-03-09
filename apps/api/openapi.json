@@ -9,6 +9,118 @@
     "parameters": {}
   },
   "paths": {
+    "/api/internal/artifacts/check-domain": {
+      "post": {
+        "tags": [
+          "Artifacts (Internal)"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "botId": {
+                    "type": "string"
+                  },
+                  "sessionKey": {
+                    "type": "string"
+                  },
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "threadId": {
+                    "type": "string"
+                  },
+                  "channelType": {
+                    "type": "string"
+                  },
+                  "previewUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "botId",
+                  "previewUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Domain availability result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "sessionKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "existingArtifactId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "existingSessionKey": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "sessionKey",
+                    "existingArtifactId",
+                    "existingSessionKey"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Domain already in use by another session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/artifacts": {
       "post": {
         "tags": [
@@ -30,6 +142,12 @@
                     "maxLength": 500
                   },
                   "sessionKey": {
+                    "type": "string"
+                  },
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "threadId": {
                     "type": "string"
                   },
                   "channelType": {
@@ -200,6 +318,24 @@
           },
           "400": {
             "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Preview URL already in use by another session",
             "content": {
               "application/json": {
                 "schema": {
@@ -5699,6 +5835,91 @@
         }
       }
     },
+    "/api/internal/pools/{poolId}/check-slack-tokens": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "poolId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slack token health check results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checked": {
+                      "type": "integer"
+                    },
+                    "invalidated": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "botChannelId": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "botChannelId",
+                          "accountId",
+                          "ok"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "checked",
+                    "invalidated",
+                    "results"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pool not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/artifacts": {
       "get": {
         "tags": [
@@ -6366,6 +6587,1060 @@
           },
           "404": {
             "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations": {
+      "get": {
+        "tags": [
+          "Integrations"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of integrations with user status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "integrations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "toolkit": {
+                            "type": "object",
+                            "properties": {
+                              "slug": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "iconUrl": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string"
+                              },
+                              "authScheme": {
+                                "type": "string",
+                                "enum": [
+                                  "oauth2",
+                                  "api_key_global",
+                                  "api_key_user"
+                                ]
+                              },
+                              "authFields": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "label": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "secret"
+                                      ]
+                                    },
+                                    "placeholder": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "label",
+                                    "type"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "slug",
+                              "displayName",
+                              "description",
+                              "iconUrl",
+                              "category",
+                              "authScheme"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "initiated",
+                              "active",
+                              "failed",
+                              "expired",
+                              "disconnected"
+                            ]
+                          },
+                          "connectUrl": {
+                            "type": "string"
+                          },
+                          "connectedAt": {
+                            "type": "string"
+                          },
+                          "credentialHints": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "toolkit",
+                          "status"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "integrations"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/connect": {
+      "post": {
+        "tags": [
+          "Integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolkitSlug": {
+                    "type": "string"
+                  },
+                  "credentials": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "page",
+                      "chat"
+                    ]
+                  },
+                  "returnTo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "toolkitSlug"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Connection initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "integration": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "toolkit": {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "iconUrl": {
+                              "type": "string"
+                            },
+                            "category": {
+                              "type": "string"
+                            },
+                            "authScheme": {
+                              "type": "string",
+                              "enum": [
+                                "oauth2",
+                                "api_key_global",
+                                "api_key_user"
+                              ]
+                            },
+                            "authFields": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text",
+                                      "secret"
+                                    ]
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "label",
+                                  "type"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "displayName",
+                            "description",
+                            "iconUrl",
+                            "category",
+                            "authScheme"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "initiated",
+                            "active",
+                            "failed",
+                            "expired",
+                            "disconnected"
+                          ]
+                        },
+                        "connectUrl": {
+                          "type": "string"
+                        },
+                        "connectedAt": {
+                          "type": "string"
+                        },
+                        "credentialHints": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "toolkit",
+                        "status"
+                      ]
+                    },
+                    "connectUrl": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Toolkit not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{integrationId}/refresh": {
+      "post": {
+        "tags": [
+          "Integrations"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "integrationId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Integration status refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "toolkit": {
+                      "type": "object",
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "iconUrl": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "authScheme": {
+                          "type": "string",
+                          "enum": [
+                            "oauth2",
+                            "api_key_global",
+                            "api_key_user"
+                          ]
+                        },
+                        "authFields": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "secret"
+                                ]
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "label",
+                              "type"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "displayName",
+                        "description",
+                        "iconUrl",
+                        "category",
+                        "authScheme"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "initiated",
+                        "active",
+                        "failed",
+                        "expired",
+                        "disconnected"
+                      ]
+                    },
+                    "connectUrl": {
+                      "type": "string"
+                    },
+                    "connectedAt": {
+                      "type": "string"
+                    },
+                    "credentialHints": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "toolkit",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "State verification failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Integration not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{integrationId}": {
+      "delete": {
+        "tags": [
+          "Integrations"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "integrationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Integration disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "toolkit": {
+                      "type": "object",
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "iconUrl": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "authScheme": {
+                          "type": "string",
+                          "enum": [
+                            "oauth2",
+                            "api_key_global",
+                            "api_key_user"
+                          ]
+                        },
+                        "authFields": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "secret"
+                                ]
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "label",
+                              "type"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "displayName",
+                        "description",
+                        "iconUrl",
+                        "category",
+                        "authScheme"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "initiated",
+                        "active",
+                        "failed",
+                        "expired",
+                        "disconnected"
+                      ]
+                    },
+                    "connectUrl": {
+                      "type": "string"
+                    },
+                    "connectedAt": {
+                      "type": "string"
+                    },
+                    "credentialHints": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "toolkit",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cannot disconnect global toolkit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Integration not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of available skills",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "longDescription": {
+                            "type": "string"
+                          },
+                          "iconName": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "examples": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tag": {
+                            "type": "string",
+                            "enum": [
+                              "office-collab",
+                              "file-knowledge",
+                              "creative-design",
+                              "biz-analysis",
+                              "av-generation",
+                              "info-content",
+                              "dev-tools"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "official",
+                              "custom"
+                            ]
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "slug",
+                                "name",
+                                "provider"
+                              ]
+                            }
+                          },
+                          "githubUrl": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "description",
+                          "iconName",
+                          "prompt",
+                          "tag",
+                          "source"
+                        ]
+                      }
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "office-collab",
+                              "file-knowledge",
+                              "creative-design",
+                              "biz-analysis",
+                              "av-generation",
+                              "info-content",
+                              "dev-tools"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "count"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "skills",
+                    "tags"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills/{slug}": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "slug",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill detail with tool auth status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "longDescription": {
+                      "type": "string"
+                    },
+                    "iconName": {
+                      "type": "string"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "examples": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "tag": {
+                      "type": "string",
+                      "enum": [
+                        "office-collab",
+                        "file-knowledge",
+                        "creative-design",
+                        "biz-analysis",
+                        "av-generation",
+                        "info-content",
+                        "dev-tools"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "official",
+                        "custom"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "authScheme": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "connected",
+                              "not_connected",
+                              "initiated",
+                              "expired"
+                            ]
+                          },
+                          "integrationId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "provider",
+                          "authScheme",
+                          "status"
+                        ]
+                      }
+                    },
+                    "githubUrl": {
+                      "type": "string"
+                    },
+                    "relatedSkills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "longDescription": {
+                            "type": "string"
+                          },
+                          "iconName": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "examples": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tag": {
+                            "type": "string",
+                            "enum": [
+                              "office-collab",
+                              "file-knowledge",
+                              "creative-design",
+                              "biz-analysis",
+                              "av-generation",
+                              "info-content",
+                              "dev-tools"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "official",
+                              "custom"
+                            ]
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "slug",
+                                "name",
+                                "provider"
+                              ]
+                            }
+                          },
+                          "githubUrl": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "description",
+                          "iconName",
+                          "prompt",
+                          "tag",
+                          "source"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "slug",
+                    "name",
+                    "description",
+                    "iconName",
+                    "prompt",
+                    "tag",
+                    "source"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Skill not found",
             "content": {
               "application/json": {
                 "schema": {
