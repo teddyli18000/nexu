@@ -14,7 +14,7 @@ export const userProfileResponseSchema = z.object({
 export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
 
 export const updateAuthSourceSchema = z.object({
-  source: z.string().min(1),
+  source: z.enum(["email", "google", "slack_shared_claim", "IM", "Landing"]),
   detail: z.string().optional(),
 });
 

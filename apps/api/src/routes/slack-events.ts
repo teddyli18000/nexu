@@ -381,7 +381,7 @@ class SlackEventsTraceHandler {
         }
 
         const eventUserId = typeof event.user === "string" ? event.user : null;
-        const ownerSlackUserId = dmUserId ?? eventUserId;
+        const ownerSlackUserId = isIm ? (dmUserId ?? eventUserId) : null;
         let ownerUserId: string | null = null;
         if (ownerSlackUserId) {
           const [claim] = await this.lookupClaim(teamId, ownerSlackUserId);

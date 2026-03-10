@@ -633,6 +633,29 @@ export function registerSessionInternalRoutes(app: OpenAPIHono<AppBindings>) {
 }
 
 // ============================================================
+// Access control helper
+// ============================================================
+
+function buildAccessClause(
+  table: {
+    botId: typeof sessions.botId;
+    ownerUserId: typeof sessions.ownerUserId;
+  },
+  userId: string,
+  botIds: string[],
+  queryBotId?: string,
+) {
+  if (queryBotId) {
+    return botIds.includes(queryBotId)
+      ? eq(table.botId, queryBotId)
+      : and(eq(table.ownerUserId, userId), eq(table.botId, queryBotId));
+  }
+  return botIds.length > 0
+    ? or(inArray(table.botId, botIds), eq(table.ownerUserId, userId))
+    : eq(table.ownerUserId, userId);
+}
+
+// ============================================================
 // User routes (after auth middleware)
 // ============================================================
 
@@ -695,19 +718,12 @@ export function registerSessionRoutes(app: OpenAPIHono<AppBindings>) {
 
     const botIds = await getUserBotIds(userId);
 
-    const accessClause = query.botId
-      ? botIds.includes(query.botId)
-        ? or(
-            eq(sessions.botId, query.botId),
-            and(
-              eq(sessions.ownerUserId, userId),
-              eq(sessions.botId, query.botId),
-            ),
-          )
-        : and(eq(sessions.ownerUserId, userId), eq(sessions.botId, query.botId))
-      : botIds.length > 0
-        ? or(inArray(sessions.botId, botIds), eq(sessions.ownerUserId, userId))
-        : eq(sessions.ownerUserId, userId);
+    const accessClause = buildAccessClause(
+      sessions,
+      userId,
+      botIds,
+      query.botId,
+    );
 
     const conditions = [accessClause];
     if (query.channelType) {

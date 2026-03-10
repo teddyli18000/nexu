@@ -203,6 +203,8 @@ async function findArtifactBySessionPreview(input: {
   return rows[0];
 }
 
+// TODO: Optimize by passing ownerUserId from session upsert instead of a separate query.
+// Acceptable for now — hits an indexed column and artifact creation is less frequent than messages.
 async function resolveArtifactOwnerUserId(input: {
   botId: string;
   sessionKey?: string;
@@ -614,6 +616,29 @@ export function registerArtifactInternalRoutes(app: OpenAPIHono<AppBindings>) {
 }
 
 // ============================================================
+// Access control helper
+// ============================================================
+
+function buildAccessClause(
+  table: {
+    botId: typeof artifacts.botId;
+    ownerUserId: typeof artifacts.ownerUserId;
+  },
+  userId: string,
+  botIds: string[],
+  queryBotId?: string,
+) {
+  if (queryBotId) {
+    return botIds.includes(queryBotId)
+      ? eq(table.botId, queryBotId)
+      : and(eq(table.ownerUserId, userId), eq(table.botId, queryBotId));
+  }
+  return botIds.length > 0
+    ? or(inArray(table.botId, botIds), eq(table.ownerUserId, userId))
+    : eq(table.ownerUserId, userId);
+}
+
+// ============================================================
 // User routes (after auth middleware)
 // ============================================================
 
@@ -714,25 +739,12 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
     const { limit, offset } = query;
 
     const botIds = await getUserBotIds(userId);
-    const accessClause = query.botId
-      ? botIds.includes(query.botId)
-        ? or(
-            eq(artifacts.botId, query.botId),
-            and(
-              eq(artifacts.ownerUserId, userId),
-              eq(artifacts.botId, query.botId),
-            ),
-          )
-        : and(
-            eq(artifacts.ownerUserId, userId),
-            eq(artifacts.botId, query.botId),
-          )
-      : botIds.length > 0
-        ? or(
-            inArray(artifacts.botId, botIds),
-            eq(artifacts.ownerUserId, userId),
-          )
-        : eq(artifacts.ownerUserId, userId);
+    const accessClause = buildAccessClause(
+      artifacts,
+      userId,
+      botIds,
+      query.botId,
+    );
 
     const conditions = [accessClause];
     if (query.sessionKey) {
@@ -776,13 +788,7 @@ export function registerArtifactRoutes(app: OpenAPIHono<AppBindings>) {
     const userId = c.get("userId");
     const botIds = await getUserBotIds(userId);
 
-    const accessClause =
-      botIds.length > 0
-        ? or(
-            inArray(artifacts.botId, botIds),
-            eq(artifacts.ownerUserId, userId),
-          )
-        : eq(artifacts.ownerUserId, userId);
+    const accessClause = buildAccessClause(artifacts, userId, botIds);
 
     const [stats] = await db
       .select({

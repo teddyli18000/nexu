@@ -213,7 +213,7 @@ export function SlackClaimPage() {
     session?.user,
     resolved?.valid,
     claimMutation.isSuccess,
-    claimMutation,
+    claimMutation.mutate,
     isReturnFromAuth,
     userConfirmed,
   ]);

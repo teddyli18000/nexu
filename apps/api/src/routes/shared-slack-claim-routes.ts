@@ -203,7 +203,23 @@ export function registerSharedSlackClaimRoutes(app: OpenAPIHono<AppBindings>) {
         .where(eq(users.authUserId, authUserId));
     }
 
-    // Upsert slack user claim
+    // Check if Slack identity already claimed by another user
+    const [existingClaim] = await db
+      .select({ authUserId: slackUserClaims.authUserId })
+      .from(slackUserClaims)
+      .where(
+        and(
+          eq(slackUserClaims.teamId, keyRow.teamId),
+          eq(slackUserClaims.slackUserId, keyRow.slackUserId),
+        ),
+      );
+    if (existingClaim && existingClaim.authUserId !== authUserId) {
+      throw new HTTPException(409, {
+        message: "Slack identity already claimed by another user",
+      });
+    }
+
+    // Insert slack user claim (onConflictDoNothing for idempotency of same user)
     await db
       .insert(slackUserClaims)
       .values({
@@ -215,13 +231,8 @@ export function registerSharedSlackClaimRoutes(app: OpenAPIHono<AppBindings>) {
         createdAt: now,
         updatedAt: now,
       })
-      .onConflictDoUpdate({
+      .onConflictDoNothing({
         target: [slackUserClaims.teamId, slackUserClaims.slackUserId],
-        set: {
-          teamName: keyRow.teamName,
-          authUserId,
-          updatedAt: now,
-        },
       });
 
     // Update user auth source
