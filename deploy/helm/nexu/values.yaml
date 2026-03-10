@@ -94,6 +94,16 @@ gateway:
       memory: 4Gi
   persistence:
     size: 20Gi
+  probes:
+    cliTimeoutMs: 10000
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 24
   sandbox:
     enabled: false
     dindImage: "docker:27-dind"

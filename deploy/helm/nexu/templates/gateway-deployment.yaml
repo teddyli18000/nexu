@@ -83,12 +83,28 @@ spec:
             - name: openclaw-data
               mountPath: /tmp/openclaw
               subPath: logs
+          startupProbe:
+            exec:
+              command:
+                - openclaw
+                - health
+                - --json
+                - --timeout
+                - {{ .Values.gateway.probes.cliTimeoutMs | quote }}
+            periodSeconds: {{ .Values.gateway.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.gateway.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.gateway.probes.startup.failureThreshold }}
           readinessProbe:
-            tcpSocket:
-              port: gateway
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
+            exec:
+              command:
+                - openclaw
+                - health
+                - --json
+                - --timeout
+                - {{ .Values.gateway.probes.cliTimeoutMs | quote }}
+            periodSeconds: {{ .Values.gateway.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.gateway.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.gateway.probes.readiness.failureThreshold }}
           livenessProbe:
             tcpSocket:
               port: gateway

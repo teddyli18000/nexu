@@ -2590,6 +2590,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "botUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2708,6 +2712,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "botUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2799,6 +2807,10 @@
                             "nullable": true
                           },
                           "appId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "botUserId": {
                             "type": "string",
                             "nullable": true
                           },
@@ -2941,6 +2953,10 @@
                       "nullable": true
                     },
                     "appId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "botUserId": {
                       "type": "string",
                       "nullable": true
                     },

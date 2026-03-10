@@ -1033,6 +1033,7 @@ export type PostApiV1ChannelsSlackConnectResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -1075,6 +1076,7 @@ export type PostApiV1ChannelsDiscordConnectResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -1102,6 +1104,7 @@ export type GetApiV1ChannelsResponses = {
             status: 'pending' | 'connected' | 'disconnected' | 'error';
             teamName: string;
             appId?: string;
+            botUserId?: string;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -1173,6 +1176,7 @@ export type GetApiV1ChannelsByChannelIdStatusResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import type { Dirent } from "node:fs";
 import { readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import {
   enableAutoRestart,
   startManagedOpenclawGateway,
 } from "./openclaw-process.js";
+import { syncPluginDocs } from "./plugin-docs.js";
 import { pollLatestSkills } from "./skills.js";
 import type { RuntimeState } from "./state.js";
 import { runWithRetry, sleep } from "./utils.js";
@@ -311,6 +313,18 @@ export async function bootstrapGateway(state: RuntimeState): Promise<void> {
   await syncInitialSkillsWithRetry(state);
   logger.info({ poolId: env.RUNTIME_POOL_ID }, "initial skills synced");
 
+  // Copy extension SKILL.md files to PVC so sandbox containers can read them.
+  // Runs after skills sync to avoid interfering with managed skills.
+  try {
+    await syncPluginDocs();
+  } catch (error) {
+    const baseError = BaseError.from(error);
+    logger.warn(
+      { reason: baseError.message },
+      "plugin docs sync failed; continuing with startup",
+    );
+  }
+
   await syncInitialWorkspaceTemplatesWithRetry(state);
   logger.info(
     { poolId: env.RUNTIME_POOL_ID },
@@ -319,6 +333,29 @@ export async function bootstrapGateway(state: RuntimeState): Promise<void> {
 
   await clearStaleSessionLocks();
   await clearStaleGatewayLocks();
+
+  // When sandbox mode is enabled, wait for the DinD sidecar's Docker daemon
+  // to become reachable before starting OpenClaw.  Without this, early
+  // messages fail with "Cannot connect to the Docker daemon".
+  if (process.env.SANDBOX_ENABLED === "true") {
+    const maxAttempts = 30;
+    for (let i = 1; i <= maxAttempts; i++) {
+      try {
+        execFileSync("docker", ["info"], { timeout: 5000, stdio: "ignore" });
+        logger.info("docker daemon reachable");
+        break;
+      } catch {
+        if (i === maxAttempts) {
+          logger.warn(
+            { attempts: maxAttempts },
+            "docker daemon not reachable; starting OpenClaw anyway",
+          );
+        } else {
+          await sleep(2000);
+        }
+      }
+    }
+  }
 
   if (env.RUNTIME_MANAGE_OPENCLAW_PROCESS) {
     startManagedOpenclawGateway();

@@ -95,6 +95,7 @@ When changing DB structure, follow this workflow.
 | API coding patterns | `docs/references/api-patterns.md` |
 | Infrastructure | `docs/references/infrastructure.md` |
 | Gateway environment (dev vs prod) | `docs/guides/gateway-environment-guide.md` |
+| Workspace templates | `docs/guides/workspace-templates.md` |
 | Local Slack testing | `docs/references/local-slack-testing.md` |
 | Frontend conventions | `docs/FRONTEND.md` |
 | Security posture | `docs/SECURITY.md` |
@@ -104,8 +105,10 @@ When changing DB structure, follow this workflow.
 | Product specs | `docs/product-specs/` |
 | Execution plans | `docs/exec-plans/` |
 | DB schema reference | `docs/generated/db-schema.md` |
-| Documentation sync | `.nexu-dev/skills/sync-docs/SKILL.md` |
-| E2E gateway testing | `.nexu-dev/skills/nexu-e2e-test/SKILL.md` |
+| Documentation sync | `skills/localdev/sync-docs/SKILL.md` |
+| E2E gateway testing | `skills/localdev/nexu-e2e-test/SKILL.md` |
+| Production operations | `skills/localdev/prod-ops/SKILL.md` |
+| Nano Banana (image gen) | `skills/nexubot/nano-banana/SKILL.md` |
 
 ## Documentation maintenance
 
@@ -125,16 +128,15 @@ git diff --name-only $(git merge-base HEAD origin/main)...HEAD
 | `apps/api/src/routes/` | `docs/references/api-patterns.md`, `docs/product-specs/*.md` |
 | `apps/web/src/pages/` or routing | `docs/FRONTEND.md` |
 | `apps/gateway/src/` | `ARCHITECTURE.md`, `docs/RELIABILITY.md` |
-| `package.json` scripts | `CLAUDE.md` + `AGENTS.md` Commands sections |
-| New/moved doc files | `CLAUDE.md` Doc Map, `AGENTS.md` Where to look |
+| `package.json` scripts | `AGENTS.md` Commands section |
+| New/moved doc files | `AGENTS.md` Where to look |
 
 ### Cross-reference checklist
 
-1. `CLAUDE.md` Commands <-> `AGENTS.md` Commands (same entries)
-2. `CLAUDE.md` Doc Map <-> `AGENTS.md` Where to look (valid paths)
-3. `docs/DESIGN.md` <-> `docs/design-docs/` + `docs/designs/` (indexed)
-4. `docs/product-specs/index.md` <-> actual spec files
-5. `docs/FRONTEND.md` Pages <-> `apps/web/src/app.tsx` routes
+1. `AGENTS.md` Where to look table — all paths valid
+2. `docs/DESIGN.md` <-> `docs/design-docs/` + `docs/designs/` (indexed)
+3. `docs/product-specs/index.md` <-> actual spec files
+4. `docs/FRONTEND.md` Pages <-> `apps/web/src/app.tsx` routes
 
 ### Rules
 
@@ -142,7 +144,7 @@ git diff --name-only $(git merge-base HEAD origin/main)...HEAD
 - Preserve original language (English/Chinese)
 - Do not auto-commit; present changes for review
 
-Full reference: `.nexu-dev/skills/sync-docs/SKILL.md`
+Full reference: `skills/localdev/sync-docs/SKILL.md`
 
 ## Cross-project sync rules
 

@@ -296,6 +296,7 @@ export async function generatePoolConfig(
               sandbox: {
                 mode: "all" as const,
                 scope: "agent" as const,
+                workspaceAccess: "rw" as const,
                 docker: {
                   image: process.env.SANDBOX_IMAGE ?? "nexu-sandbox:latest",
                   memory: "256m",
@@ -303,10 +304,14 @@ export async function generatePoolConfig(
                   pidsLimit: 128,
                   network: "bridge",
                   capDrop: ["ALL"],
+                  dangerouslyAllowExternalBindSources: true,
                   binds: [
                     `${stateDir}/skills:${stateDir}/skills:ro`,
                     `${stateDir}/media:${stateDir}/media:rw`,
                     `${stateDir}/nexu-context.json:${stateDir}/nexu-context.json:ro`,
+                    // Map PVC plugin-docs to the OpenClaw extensions path so
+                    // agents can read extension SKILL.md files from sandbox.
+                    `${stateDir}/plugin-docs:${process.env.SANDBOX_EXTENSIONS_TARGET ?? "/usr/local/lib/node_modules/openclaw/extensions"}:ro`,
                   ],
                   env: {
                     OPENCLAW_STATE_DIR: stateDir,
@@ -315,6 +320,9 @@ export async function generatePoolConfig(
                       process.env.NEXU_API_URL ||
                       "",
                     SKILL_API_TOKEN: process.env.SKILL_API_TOKEN ?? "",
+                    // Ensure skill scripts can resolve globally-installed
+                    // npm packages (e.g. sharp in nano-banana).
+                    NODE_PATH: "/usr/local/lib/node_modules",
                   },
                 },
                 prune: {
@@ -331,7 +339,7 @@ export async function generatePoolConfig(
       exec: {
         security: "full",
         ask: "off",
-        host: "gateway",
+        host: process.env.SANDBOX_ENABLED === "true" ? "sandbox" : "gateway",
       },
       web: {
         search: {
@@ -342,6 +350,18 @@ export async function generatePoolConfig(
         },
         fetch: { enabled: true },
       },
+      // Override sandbox tool policy:
+      // - Empty allow list = "allow everything not in the deny list"
+      //   (unblocks plugin tools like feishu_doc, feishu_chat, etc.)
+      // - Custom deny list = only "gateway" (direct gateway control)
+      //   All other DEFAULT_TOOL_DENY entries (browser, canvas, nodes,
+      //   cron, channel tools) are intentionally unblocked.
+      ...(process.env.SANDBOX_ENABLED === "true"
+        ? { sandbox: { tools: { allow: [], deny: ["gateway"] } } }
+        : {}),
+    },
+    session: {
+      dmScope: "per-channel-peer",
     },
     cron: {
       enabled: true,
@@ -414,6 +434,16 @@ export async function generatePoolConfig(
       requireMention: true,
       allowFrom: ["*"],
       accounts: feishuAccounts,
+    };
+
+    // Feishu is a plugin-based channel; explicitly enable it so OpenClaw
+    // loads the plugin without needing `openclaw doctor --fix`.
+    config.plugins = {
+      ...config.plugins,
+      entries: {
+        ...config.plugins?.entries,
+        feishu: { enabled: true },
+      },
     };
   }
 
