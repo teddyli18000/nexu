@@ -307,14 +307,14 @@ export const oauthStates = pgTable("oauth_states", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const slackUserClaims = pgTable(
-  "slack_user_claims",
+export const workspaceMemberships = pgTable(
+  "workspace_memberships",
   {
     pk: serial("pk").primaryKey(),
     id: text("id").notNull().unique(),
     teamId: text("team_id").notNull(),
     teamName: text("team_name"),
-    slackUserId: text("slack_user_id").notNull(),
+    imUserId: text("im_user_id").notNull(),
     authUserId: text("auth_user_id").notNull(),
     createdAt: text("created_at")
       .notNull()
@@ -324,23 +324,23 @@ export const slackUserClaims = pgTable(
       .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
-    uniqueIndex("slack_user_claims_team_user_idx").on(
+    uniqueIndex("workspace_memberships_team_user_idx").on(
       table.teamId,
-      table.slackUserId,
+      table.imUserId,
     ),
-    index("slack_user_claims_auth_user_idx").on(table.authUserId),
+    index("workspace_memberships_auth_user_idx").on(table.authUserId),
   ],
 );
 
-export const slackClaimKeys = pgTable(
-  "slack_claim_keys",
+export const claimTokens = pgTable(
+  "claim_tokens",
   {
     pk: serial("pk").primaryKey(),
     id: text("id").notNull().unique(),
-    key: text("key").notNull().unique(),
+    token: text("token").notNull().unique(),
     teamId: text("team_id").notNull(),
     teamName: text("team_name"),
-    slackUserId: text("slack_user_id").notNull(),
+    imUserId: text("im_user_id").notNull(),
     expiresAt: text("expires_at").notNull(),
     usedAt: text("used_at"),
     claimedBy: text("claimed_by"),
@@ -349,7 +349,7 @@ export const slackClaimKeys = pgTable(
       .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
-    index("slack_claim_keys_team_user_idx").on(table.teamId, table.slackUserId),
+    index("claim_tokens_team_user_idx").on(table.teamId, table.imUserId),
   ],
 );
 

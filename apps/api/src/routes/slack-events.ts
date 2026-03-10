@@ -10,8 +10,8 @@ import {
   channelCredentials,
   gatewayPools,
   sessions,
-  slackUserClaims,
   webhookRoutes,
+  workspaceMemberships,
 } from "../db/schema/index.js";
 import { decrypt } from "../lib/crypto.js";
 import { BaseError } from "../lib/error.js";
@@ -102,12 +102,12 @@ class SlackEventsTraceHandler {
   })
   async lookupClaim(teamId: string, slackUserId: string) {
     return db
-      .select({ authUserId: slackUserClaims.authUserId })
-      .from(slackUserClaims)
+      .select({ authUserId: workspaceMemberships.authUserId })
+      .from(workspaceMemberships)
       .where(
         and(
-          eq(slackUserClaims.teamId, teamId),
-          eq(slackUserClaims.slackUserId, slackUserId),
+          eq(workspaceMemberships.teamId, teamId),
+          eq(workspaceMemberships.imUserId, slackUserId),
         ),
       );
   }

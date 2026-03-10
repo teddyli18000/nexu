@@ -50,6 +50,13 @@
       "when": 1773124731958,
       "tag": "0006_nifty_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1741612800000,
+      "tag": "0007_im_branch_alignment",
+      "breakpoints": true
     }
   ]
 }

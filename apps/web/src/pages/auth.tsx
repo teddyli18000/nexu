@@ -200,9 +200,20 @@ export function AuthPage() {
         user_email: session.user.email,
       });
     }
-    if (source) {
+    const validSources = [
+      "email",
+      "google",
+      "slack_shared_claim",
+      "IM",
+      "Landing",
+    ] as const;
+    type AuthSource = (typeof validSources)[number];
+    if (source && validSources.includes(source as AuthSource)) {
       postApiV1MeAuthSource({
-        body: { source, detail: provider ? `provider:${provider}` : undefined },
+        body: {
+          source: source as AuthSource,
+          detail: provider ? `provider:${provider}` : undefined,
+        },
       }).catch(() => {
         // Best-effort tracking; do not block login success flow.
       });

@@ -136,7 +136,10 @@ export function SlackClaimPage() {
   const claimSubmittedRef = useRef(false);
   const [userConfirmed, setUserConfirmed] = useState(false);
 
-  const claimKey = useMemo(() => searchParams.get("key") ?? "", [searchParams]);
+  const claimKey = useMemo(
+    () => searchParams.get("token") ?? "",
+    [searchParams],
+  );
 
   // Check if user just came back from auth page (returnTo flow)
   const isReturnFromAuth = useMemo(() => {
@@ -153,7 +156,7 @@ export function SlackClaimPage() {
     queryKey: ["resolve-claim-key", claimKey],
     queryFn: async () => {
       const { data, error } = await getApiSharedSlackResolveClaimKey({
-        query: { key: claimKey },
+        query: { token: claimKey },
       });
       if (error) {
         throw new Error("Failed to validate claim link");
@@ -173,7 +176,7 @@ export function SlackClaimPage() {
   const claimMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await postApiV1SharedSlackClaim({
-        body: { key: claimKey },
+        body: { token: claimKey },
       });
       if (error) {
         const message =
@@ -316,7 +319,7 @@ export function SlackClaimPage() {
   if (phase === "needs-auth") {
     const isExisting = resolved?.isExistingWorkspace ?? false;
     const returnTo = encodeURIComponent(
-      `/claim?key=${encodeURIComponent(claimKey)}`,
+      `/claim?token=${encodeURIComponent(claimKey)}`,
     );
 
     return (
