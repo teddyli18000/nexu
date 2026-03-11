@@ -34,6 +34,8 @@ CREATE TABLE "user_integrations" (
 	"composio_account_id" text,
 	"status" text DEFAULT 'pending',
 	"oauth_state" text,
+	"return_to" text,
+	"source" text,
 	"connected_at" text,
 	"disconnected_at" text,
 	"created_at" text NOT NULL,

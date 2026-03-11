@@ -32,7 +32,7 @@ const token =
   process.env.INTERNAL_API_TOKEN ||
   "gw-secret-token";
 
-const MAX_MESSAGES = 30;
+const MAX_MESSAGES = 10;
 const MAX_IMAGES = 5;
 const MAX_FILES = 5;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -80,7 +80,11 @@ function findSessionFile() {
 // Parse JSONL → messages + image paths
 // ---------------------------------------------------------------------------
 
-const MAX_ASSISTANT_MSG_LEN = 300;
+const MAX_ASSISTANT_MSG_LEN = 200;
+const MAX_USER_MSG_LEN = 300;
+
+// Whitelist regex: only System messages with "from <sender>:" are real user messages
+const ENVELOPE_RE = /^System:\s*\[[^\]]*\]\s+.*?\bfrom\s+[^:]+:\s*([\s\S]+)$/;
 
 /**
  * Clean assistant text: strip code blocks, long paths, JSON blobs, etc.
@@ -105,6 +109,15 @@ function cleanAssistantText(input) {
     /\[(?:tool_use|tool_result|function_call|exec)[^\]]*\]\n?/gi,
     "",
   );
+
+  // Strip inline JSON fragments
+  text = text.replace(/\{"[^"]*":\s*"[^"]*"(?:,\s*"[^"]*":\s*"[^"]*")*\}/g, "");
+
+  // Strip numbered/bulleted list noise (long instructional lists)
+  text = text.replace(/^\d+\.\s+.{0,20}(联系|通过|直接|建议|或者).*$/gm, "");
+
+  // Strip lines that look like internal skill/path references (require path-like patterns)
+  text = text.replace(/^.*(?:\/[\w._-]+){2,}.*(?:skill|snapshot).*$/gim, "");
 
   // Collapse multiple blank lines into one
   text = text.replace(/\n{3,}/g, "\n\n");
@@ -143,14 +156,48 @@ function parseSession(filePath) {
 
         let text = block.text;
 
-        // Strip system envelope: "System: [timestamp] Feishu/Slack[...] DM/Channel from ...: actual message"
-        text = text.replace(
-          /^System:\s*\[.*?\]\s*(?:Feishu|Slack|Discord)\[.*?\]\s*(?:DM|Channel)\s+from\s+\S+:\s*/,
-          "",
-        );
-
-        // Extract media paths from user messages — classify as image or file
+        // --- Whitelist mode for user messages ---
         if (msg.role === "user") {
+          // Strip MEDIA instruction prefix (OpenClaw injects this before the real content)
+          text = text.replace(
+            /^,?\s*prefer the message tool[\s\S]*?Keep caption in the text body\.\n?/i,
+            "",
+          );
+          text = text.trim();
+
+          if (text.startsWith("System:")) {
+            const envelopeMatch = text.match(ENVELOPE_RE);
+            if (envelopeMatch) {
+              text = envelopeMatch[1]; // extract the actual message content
+            } else {
+              // Fallback: strip known system-noise prefixes but keep the rest
+              // Skip exec output, tool results, and pure system notifications
+              if (
+                /^System:\s*\[.*?\]\s*(?:exec|tool_result|notification)\b/i.test(
+                  text,
+                )
+              )
+                continue;
+              // Strip the "System: [timestamp] ..." prefix and keep remaining content
+              text = text.replace(/^System:\s*\[[^\]]*\]\s*/, "");
+            }
+          }
+
+          // Skip /feedback command invocations (not real conversation)
+          if (/^\/feedback\b/i.test(text)) continue;
+
+          // Skip small pure JSON payloads (Feishu media keys, file keys, etc.)
+          // Keep longer JSON that might be user-sent config/data
+          if (/^\s*[\[{][\s\S]*[\]}]\s*$/.test(text) && text.length < 200)
+            continue;
+
+          // Strip platform echo lines: [Feishu ...] sender: ... or [Slack ...] ...
+          text = text.replace(
+            /^\[(?:Feishu|Slack|Discord)\s[^\]]*\][^\n]*\n?/gm,
+            "",
+          );
+
+          // Extract media paths before cleaning — classify as image or file
           // Format: [media attached: /path (mime)]
           text = text.replace(
             /\[media attached: ([^\s]+) \(([^)]+)\)[^\]]*\]\n?/g,
@@ -189,44 +236,122 @@ function parseSession(filePath) {
             },
           );
 
-          // Strip system-injected metadata blocks
+          // Strip injected metadata blocks from message body
           text = text.replace(
-            /,?\s*prefer the message tool[^\n]*(?:\n(?!Conversation info|Sender \(|<@|\[message_id)[^\n]*)*/i,
+            /Conversation info \(untrusted metadata\):[\s\S]*?```\n?/g,
             "",
           );
           text = text.replace(
-            /Conversation info \(untrusted metadata\):\s*```json\s*\{[\s\S]*?\}\s*```\n?/g,
+            /Sender \(untrusted metadata\):[\s\S]*?```\n?/g,
             "",
           );
           text = text.replace(
-            /Sender \(untrusted metadata\):\s*```json\s*\{[\s\S]*?\}\s*```\n?/g,
+            /Untrusted context[\s\S]*?<<<END_EXTERNAL_UNTRUSTED_CONTENT[^>]*>>>\n?/g,
             "",
           );
           text = text.replace(/\[message_id: [^\]]+\]\n?/g, "");
+          text = text.replace(/<@[A-Z0-9]+>/g, "");
+          text = text.replace(/,?\s*prefer the message tool[^\n]*/i, "");
+
+          // Extract useful content from "Replied message" JSON blocks
+          text = text.replace(
+            /Replied message \(untrusted, for context\):\s*```json\s*([\s\S]*?)```\n?/g,
+            (_match, json) => {
+              try {
+                const obj = JSON.parse(json);
+                const body = obj.body?.trim();
+                return body ? `↩️ ${body}\n` : "";
+              } catch {
+                return "";
+              }
+            },
+          );
+
+          // Extract useful content from "Chat history" JSON blocks
+          text = text.replace(
+            /Chat history since last reply \(untrusted, for context\):\s*```json\s*([\s\S]*?)```\n?/g,
+            (_match, json) => {
+              try {
+                const arr = JSON.parse(json);
+                if (!Array.isArray(arr) || arr.length === 0) return "";
+                const lines = arr
+                  .slice(-3) // keep last 3 messages max
+                  .map((m) => m.body?.trim())
+                  .filter(Boolean);
+                return lines.length > 0 ? `💬 ${lines.join(" → ")}\n` : "";
+              } catch {
+                return "";
+              }
+            },
+          );
+
+          // Strip [System: ...] lines (Feishu mention hints etc.)
+          text = text.replace(/\[System: [^\]]*\]\n?/g, "");
+
+          // Strip MEDIA instruction block injected by OpenClaw
+          text = text.replace(
+            /MEDIA:https?:\/\/\S+[\s\S]*?Keep caption in the text body\.\n?/g,
+            "",
+          );
 
           // Strip Slack-specific noise
           text = text.replace(/\[Slack file: [^\]]*\]\n?/g, "");
+
+          // Strip Feishu at-mention tags: <at user_id="...">name</at> → name
+          text = text.replace(/<at user_id="[^"]*">([^<]*)<\/at>/g, "$1");
+
+          text = text.replace(/To send an image back.*?\n?/g, "");
+
+          // Truncate very long text (e.g. extracted documents, PDFs) instead of dropping
+          const lineCount = text.split("\n").filter(Boolean).length;
+          if (lineCount > 15 && text.length > 500) {
+            const truncatedLines = text.split("\n").filter(Boolean).slice(0, 5);
+            text = `${truncatedLines.join("\n")}…[长文本已截断]`;
+          }
+
+          // Strip remaining JSON-like fragments inline
           text = text.replace(
-            /Untrusted context \(metadata[^)]*\):[\s\S]*?<<<END_EXTERNAL_UNTRUSTED_CONTENT[^>]*>>>\n?/g,
+            /\{"[^"]*":\s*"[^"]*"(?:,\s*"[^"]*":\s*"[^"]*")*\}/g,
             "",
           );
-          // Strip Slack user mentions: <@U0AJB581Q2D> → ""
-          text = text.replace(/<@[A-Z0-9]+>/g, "");
-        }
 
-        text = text.replace(/To send an image back.*?\n?/g, "");
+          text = text.trim();
+
+          // Skip empty or trivially short after cleaning
+          if (text.length < 2) continue;
+
+          // Truncate user messages
+          if (text.length > MAX_USER_MSG_LEN) {
+            text = `${text.slice(0, MAX_USER_MSG_LEN)}…`;
+          }
+        }
 
         // Clean assistant messages to remove technical noise
         if (msg.role === "assistant") {
+          text = text.replace(/To send an image back.*?\n?/g, "");
           text = cleanAssistantText(text);
-        } else {
-          text = text.trim();
         }
 
         if (!text) continue;
 
+        // Skip bot messages about feedback skill itself (narrow match)
+        if (
+          msg.role === "assistant" &&
+          /(?:feedback.*skill|skill.*feedback|授权问题|已经.*反馈.*发送)/i.test(
+            text,
+          )
+        ) {
+          continue;
+        }
+
         const prefix = msg.role === "user" ? "👤" : "🤖";
-        messages.push(`${prefix} ${text}`);
+        const entry = `${prefix} ${text}`;
+
+        // Deduplicate: skip if identical to last message
+        if (messages.length > 0 && messages[messages.length - 1] === entry)
+          continue;
+
+        messages.push(entry);
       }
     }
   }

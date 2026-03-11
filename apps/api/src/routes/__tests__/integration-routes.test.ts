@@ -84,6 +84,8 @@ async function createTables(pool: pg.Pool) {
       composio_account_id TEXT,
       status TEXT DEFAULT 'pending',
       oauth_state TEXT,
+      return_to TEXT,
+      source TEXT,
       connected_at TEXT,
       disconnected_at TEXT,
       created_at TEXT NOT NULL,
@@ -511,8 +513,15 @@ describe("Integration Routes", () => {
         "notion",
         "user-1",
         expect.any(String),
-        { source: "chat", returnTo: "/workspace/sessions/abc" },
+        expect.any(String),
       );
+
+      // Verify returnTo and source stored in DB
+      const { rows } = await setupPool.query(
+        "SELECT return_to, source FROM user_integrations WHERE user_id = 'user-1' AND toolkit_slug = 'notion'",
+      );
+      expect(rows[0].return_to).toBe("/workspace/sessions/abc");
+      expect(rows[0].source).toBe("chat");
     });
   });
 
@@ -573,7 +582,7 @@ describe("Integration Routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("state already cleared (replay) returns 403", async () => {
+    it("already active integration returns 200 idempotently", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
       const integration = await seedIntegration(setupPool, {
         id: "int-replay",
@@ -591,7 +600,9 @@ describe("Integration Routes", () => {
         },
       );
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("active");
     });
 
     it("cross-user refresh returns 404", async () => {
@@ -666,7 +677,7 @@ describe("Integration Routes", () => {
       expect(rows[0].oauth_state).toBe("pending-state");
     });
 
-    it("refresh on api_key_user integration returns 400", async () => {
+    it("refresh on active api_key_user integration returns 200 idempotently", async () => {
       await seedToolkit(setupPool, {
         slug: "shopify",
         authScheme: "api_key_user",
@@ -690,7 +701,10 @@ describe("Integration Routes", () => {
         },
       );
 
-      expect(res.status).toBe(400);
+      // Active integration returns 200 idempotently regardless of auth scheme
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("active");
     });
   });
 

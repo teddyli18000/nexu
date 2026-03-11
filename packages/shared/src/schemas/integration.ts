@@ -27,6 +27,7 @@ export const toolkitInfoSchema = z.object({
   displayName: z.string(),
   description: z.string(),
   iconUrl: z.string(),
+  fallbackIconUrl: z.string(),
   category: z.string(),
   authScheme: authSchemeSchema,
   authFields: z.array(authFieldSchema).optional(),
@@ -39,6 +40,8 @@ export const integrationResponseSchema = z.object({
   connectUrl: z.string().optional(),
   connectedAt: z.string().optional(),
   credentialHints: z.record(z.string(), z.string()).optional(),
+  returnTo: z.string().optional(),
+  source: z.enum(["page", "chat"]).optional(),
 });
 
 export const integrationListResponseSchema = z.object({
@@ -59,5 +62,5 @@ export const connectIntegrationResponseSchema = z.object({
 });
 
 export const refreshIntegrationSchema = z.object({
-  state: z.string(),
+  state: z.string().optional(),
 });

@@ -1,3 +1,4 @@
+import { ToolkitIcon } from "@/components/toolkit-icon";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -97,7 +98,7 @@ const ICON_MAP: Record<string, ElementType> = {
   Code,
 };
 
-function SkillIcon({
+function SkillLucideIcon({
   iconName,
   size = "md",
 }: {
@@ -247,11 +248,12 @@ function ToolAuthCard({
   return (
     <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-surface-1 hover:border-border-hover transition-colors">
       <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-surface-3 flex items-center justify-center">
-          <span className="text-[15px] font-bold text-text-muted">
-            {tool.name[0]}
-          </span>
-        </div>
+        <ToolkitIcon
+          iconUrl={tool.iconUrl}
+          fallbackIconUrl={tool.fallbackIconUrl}
+          name={tool.name}
+          size="lg"
+        />
         <div>
           <div className="text-[14px] font-semibold text-text-primary">
             {tool.name}
@@ -308,7 +310,16 @@ function RelatedSkillCard({ skill }: { skill: RelatedSkill }) {
       className="group flex flex-col p-4 rounded-xl border border-border bg-surface-1 hover:border-accent/30 hover:shadow-md hover:shadow-accent/5 transition-all"
     >
       <div className="flex items-center gap-2.5 mb-2">
-        <SkillIcon iconName={skill.iconName} size="sm" />
+        {skill.iconUrl ? (
+          <ToolkitIcon
+            iconUrl={skill.iconUrl}
+            fallbackIconUrl={skill.fallbackIconUrl}
+            name={skill.name}
+            size="sm"
+          />
+        ) : (
+          <SkillLucideIcon iconName={skill.iconName} size="sm" />
+        )}
         <span className="text-[13px] font-semibold text-text-primary group-hover:text-accent transition-colors">
           {skill.name}
         </span>
@@ -417,13 +428,23 @@ export function SkillDetailPage() {
   const connectMutation = useMutation({
     mutationFn: async (toolkitSlug: string) => {
       const { data } = await postApiV1IntegrationsConnect({
-        body: { toolkitSlug, source: "page" },
+        body: {
+          toolkitSlug,
+          source: "page",
+          returnTo: `/workspace/skills/${slug}`,
+        },
       });
       return data;
     },
     onSuccess: (result) => {
       if (!result) return;
       if (result.connectUrl) {
+        if (result.integration.id && result.state) {
+          localStorage.setItem(
+            `nexu-oauth-pending-${result.integration.id}`,
+            JSON.stringify({ state: result.state }),
+          );
+        }
         window.open(result.connectUrl, "_blank", "noopener");
         toast.info("Complete the authorization in the new tab");
         if (result.integration.id && result.state) {
@@ -531,7 +552,16 @@ export function SkillDetailPage() {
             {/* Left: info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-5">
-                <SkillIcon iconName={skill.iconName} size="lg" />
+                {skill.iconUrl ? (
+                  <ToolkitIcon
+                    iconUrl={skill.iconUrl}
+                    fallbackIconUrl={skill.fallbackIconUrl}
+                    name={skill.name}
+                    size="lg"
+                  />
+                ) : (
+                  <SkillLucideIcon iconName={skill.iconName} size="lg" />
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-bold text-text-primary">

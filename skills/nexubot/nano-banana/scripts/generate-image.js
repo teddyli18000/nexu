@@ -35,11 +35,6 @@ const MAX_INPUT_IMAGES = 14;
 const MAX_IMAGE_BYTES = 512_000; // 500 KB per image after compression
 
 const GENERATE_BASE_URL = "https://aiplatform.googleapis.com";
-const API_KEY_PATH = path.join(
-  process.env.HOME || process.env.USERPROFILE || "~",
-  ".nexu-secrets",
-  "gemini-enterprise.key",
-);
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -118,22 +113,62 @@ function parseCliArgs() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function readApiKey() {
-  try {
-    const key = fs.readFileSync(API_KEY_PATH, "utf-8").trim();
-    if (!key) {
-      console.error(
-        `Error: API key file is empty: ${API_KEY_PATH}\nSetup: mkdir -p ~/.nexu-secrets && echo "YOUR_KEY" > ~/.nexu-secrets/gemini-enterprise.key && chmod 600 ~/.nexu-secrets/gemini-enterprise.key`,
-      );
-      process.exit(1);
-    }
-    return key;
-  } catch {
-    console.error(
-      `Error: Cannot read API key from ${API_KEY_PATH}\nSetup: mkdir -p ~/.nexu-secrets && echo "YOUR_KEY" > ~/.nexu-secrets/gemini-enterprise.key && chmod 600 ~/.nexu-secrets/gemini-enterprise.key`,
-    );
-    process.exit(1);
+function resolveContextFile() {
+  const scriptDir = path.dirname(new URL(import.meta.url).pathname);
+
+  if (process.env.OPENCLAW_STATE_DIR) {
+    const p = path.join(process.env.OPENCLAW_STATE_DIR, "nexu-context.json");
+    if (fs.existsSync(p)) return p;
   }
+
+  // Walk up from script dir: scripts/ → nano-banana/ → skills/ → stateDir/
+  const stateDir = path.dirname(path.dirname(path.dirname(scriptDir)));
+  const p = path.join(stateDir, "nexu-context.json");
+  if (fs.existsSync(p)) return p;
+
+  return null;
+}
+
+async function fetchApiKey() {
+  // Tier 1: environment variable
+  if (process.env.GEMINI_API_KEY) {
+    return process.env.GEMINI_API_KEY;
+  }
+
+  // Tier 2: Nexu secrets API via SKILL_API_TOKEN + nexu-context.json
+  const token = process.env.SKILL_API_TOKEN;
+  const contextFile = resolveContextFile();
+
+  if (token && contextFile) {
+    try {
+      const ctx = JSON.parse(fs.readFileSync(contextFile, "utf-8"));
+      const { apiUrl, poolId } = ctx;
+      if (apiUrl && poolId) {
+        const url = `${apiUrl}/api/internal/secrets/nano-banana?poolId=${poolId}`;
+        const res = await fetch(url, {
+          headers: { "x-internal-token": token },
+        });
+        if (res.ok) {
+          const secrets = await res.json();
+          if (secrets.GEMINI_API_KEY) {
+            return secrets.GEMINI_API_KEY;
+          }
+        }
+      }
+    } catch (err) {
+      console.error(
+        `Warning: Failed to fetch secret from Nexu API: ${err.message}`,
+      );
+    }
+  }
+
+  console.error(
+    "Error: GEMINI_API_KEY not found.\n" +
+      "Set it via:\n" +
+      "  1. GEMINI_API_KEY environment variable, or\n" +
+      "  2. Nexu pool secrets API (requires SKILL_API_TOKEN + nexu-context.json)",
+  );
+  process.exit(1);
 }
 
 function mimeType(filePath) {
@@ -148,11 +183,16 @@ function mimeType(filePath) {
 // Image compression via sharp
 // ---------------------------------------------------------------------------
 
+// Use createRequire so NODE_PATH resolves globally-installed sharp
+// (works in sandbox without a /node_modules symlink).
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+
 let sharp;
 try {
-  sharp = (await import("sharp")).default;
+  sharp = _require("sharp");
 } catch {
-  // Auto-install sharp at runtime (same pattern as static-deploy uses for wrangler)
+  // Not pre-installed — try auto-install (works outside sandbox where fs is writable).
   const { execSync } = await import("node:child_process");
   const scriptDir = path.dirname(new URL(import.meta.url).pathname);
   console.log("Installing sharp (first run only)...");
@@ -162,11 +202,9 @@ try {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60_000,
     });
-    sharp = (await import("sharp")).default;
-  } catch (_installErr) {
-    console.error(
-      `Error: Failed to auto-install sharp.\nManual fix: cd ${scriptDir} && npm install sharp`,
-    );
+    sharp = _require("sharp");
+  } catch {
+    console.error("ERROR: sharp is required but could not be installed.");
     process.exit(1);
   }
 }
@@ -352,5 +390,5 @@ async function generateImage(args, apiKey) {
 // ---------------------------------------------------------------------------
 
 const args = parseCliArgs();
-const apiKey = readApiKey();
+const apiKey = await fetchApiKey();
 await generateImage(args, apiKey);

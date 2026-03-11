@@ -1,38 +1,27 @@
 import { Composio } from "@composio/core";
 import { HTTPException } from "hono/http-exception";
 
-let composioClient: Composio | null = null;
+const composioClients = new Map<string, Composio>();
 
-function getClient(): Composio {
-  if (!composioClient) {
-    const apiKey = process.env.COMPOSIO_API_KEY;
-    if (!apiKey) {
-      throw new HTTPException(500, {
-        message: "Integration service not configured",
-      });
-    }
-    composioClient = new Composio({ apiKey });
-  }
-  return composioClient;
+function getClient(apiKey: string): Composio {
+  const existing = composioClients.get(apiKey);
+  if (existing) return existing;
+  const client = new Composio({ apiKey });
+  composioClients.set(apiKey, client);
+  return client;
 }
 
 export async function initializeOAuthConnection(
+  apiKey: string,
   toolkitSlug: string,
   nexuUserId: string,
-  oauthState: string,
-  options?: { source?: string; returnTo?: string },
+  _oauthState: string,
+  integrationId: string,
 ): Promise<{ redirectUrl: string; connectedAccountId?: string }> {
   try {
-    const client = getClient();
+    const client = getClient(apiKey);
     const webUrl = process.env.WEB_URL ?? "http://localhost:5173";
-    const callbackParams = new URLSearchParams({
-      toolkit: toolkitSlug,
-      state: oauthState,
-    });
-    if (options?.source) callbackParams.set("source", options.source);
-    if (options?.returnTo) callbackParams.set("returnTo", options.returnTo);
-
-    const callbackUrl = `${webUrl}/workspace/integrations?${callbackParams.toString()}`;
+    const callbackUrl = `${webUrl}/workspace/oauth-callback/${integrationId}`;
 
     const session = await client.create(`nexu_${nexuUserId}`, {
       manageConnections: false,
@@ -54,11 +43,12 @@ export async function initializeOAuthConnection(
 }
 
 export async function checkOAuthStatus(
+  apiKey: string,
   nexuUserId: string,
   toolkitSlug: string,
 ): Promise<{ status: string; connectedAccountId?: string }> {
   try {
-    const client = getClient();
+    const client = getClient(apiKey);
     const session = await client.create(`nexu_${nexuUserId}`, {
       manageConnections: false,
     });
@@ -82,6 +72,44 @@ export async function checkOAuthStatus(
       message: "Failed to check provider connection status",
     });
   }
+}
+
+export async function executeAction(
+  apiKey: string,
+  connectedAccountId: string,
+  nexuUserId: string,
+  action: string,
+  params: Record<string, unknown>,
+): Promise<{ data: unknown; error: string | null; successful: boolean }> {
+  const client = getClient(apiKey);
+
+  // Resolve the tool's version (required by Composio for manual execution)
+  let version: string | undefined;
+  try {
+    const toolMeta = await client.tools.getRawComposioToolBySlug(action);
+    version = (toolMeta as Record<string, unknown>).version as
+      | string
+      | undefined;
+  } catch {
+    // Tool not found in Composio — return descriptive error
+    return {
+      data: null,
+      error: `Action "${action}" not found in Composio. Check the action slug is correct.`,
+      successful: false,
+    };
+  }
+
+  const result = await client.tools.execute(action, {
+    connectedAccountId,
+    userId: `nexu_${nexuUserId}`,
+    arguments: params,
+    version,
+  });
+  return {
+    data: result.data ?? null,
+    error: result.error ?? null,
+    successful: result.successful ?? false,
+  };
 }
 
 export async function revokeConnection(

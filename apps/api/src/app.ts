@@ -20,6 +20,7 @@ import {
   registerChannelRoutes,
   registerSlackOAuthCallback,
 } from "./routes/channel-routes.js";
+import { registerComposioRoutes } from "./routes/composio-routes.js";
 import { registerFeedbackRoutes } from "./routes/feedback-routes.js";
 import { registerIntegrationRoutes } from "./routes/integration-routes.js";
 import { registerInviteRoutes } from "./routes/invite-routes.js";
@@ -86,6 +87,7 @@ export function createApp() {
   registerArtifactInternalRoutes(app);
   registerSessionInternalRoutes(app);
   registerSecretRoutes(app);
+  registerComposioRoutes(app);
   registerSkillRoutes(app);
   registerWorkspaceTemplateRoutes(app);
   registerFeedbackRoutes(app);

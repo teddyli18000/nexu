@@ -462,6 +462,8 @@ export const userIntegrations = pgTable(
     composioAccountId: text("composio_account_id"),
     status: text("status").default("pending"),
     oauthState: text("oauth_state"),
+    returnTo: text("return_to"),
+    source: text("source"),
     connectedAt: text("connected_at"),
     disconnectedAt: text("disconnected_at"),
     createdAt: text("created_at")

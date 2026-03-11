@@ -23,6 +23,19 @@ import type { AppBindings } from "../types.js";
 
 const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+// Pre-downloaded icons stored in apps/web/public/toolkit-icons/
+// 34 SVGs from Composio CDN, 1 PNG from Google S2 (jina)
+const PNG_ICON_SLUGS = new Set(["jina", "excel"]);
+
+function getToolkitIconUrl(slug: string): string {
+  const ext = PNG_ICON_SLUGS.has(slug) ? "png" : "svg";
+  return `/toolkit-icons/${slug}.${ext}`;
+}
+
+function getToolkitFallbackIconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+}
+
 const errorResponseSchema = z.object({
   message: z.string(),
 });
@@ -240,15 +253,34 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
         .map((slug) => {
           const tk = toolkitMap.get(slug);
           return tk
-            ? { slug, name: tk.displayName, provider: tk.domain }
+            ? {
+                slug,
+                name: tk.displayName,
+                provider: tk.domain,
+                iconUrl: getToolkitIconUrl(slug),
+                fallbackIconUrl: getToolkitFallbackIconUrl(tk.domain),
+              }
             : null;
         })
         .filter(
-          (t): t is { slug: string; name: string; provider: string } =>
-            t !== null,
+          (
+            t,
+          ): t is {
+            slug: string;
+            name: string;
+            provider: string;
+            iconUrl: string;
+            fallbackIconUrl: string;
+          } => t !== null,
         );
 
       const examples = parseJsonArray(row.examples);
+
+      // Derive skill icon from the first linked toolkit
+      const firstToolkitSlug = toolkitSlugs[0];
+      const firstToolkit = firstToolkitSlug
+        ? toolkitMap.get(firstToolkitSlug)
+        : undefined;
 
       return {
         slug: row.slug,
@@ -256,6 +288,12 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
         description: row.description,
         longDescription: row.longDescription ?? undefined,
         iconName: row.iconName,
+        iconUrl: firstToolkitSlug
+          ? getToolkitIconUrl(firstToolkitSlug)
+          : undefined,
+        fallbackIconUrl: firstToolkit
+          ? getToolkitFallbackIconUrl(firstToolkit.domain)
+          : undefined,
         prompt: row.prompt,
         examples: examples.length > 0 ? examples : undefined,
         tag: row.tag as
@@ -304,7 +342,9 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
     const [skillRow] = await db
       .select()
       .from(supportedSkills)
-      .where(eq(supportedSkills.slug, slug))
+      .where(
+        and(eq(supportedSkills.slug, slug), eq(supportedSkills.enabled, true)),
+      )
       .limit(1);
 
     if (!skillRow) {
@@ -318,6 +358,8 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
           slug: string;
           name: string;
           provider: string;
+          iconUrl: string;
+          fallbackIconUrl: string;
           authScheme: string;
           status: "connected" | "not_connected" | "initiated" | "expired";
           integrationId?: string;
@@ -361,6 +403,8 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
           slug: tk.slug,
           name: tk.displayName,
           provider: tk.domain,
+          iconUrl: getToolkitIconUrl(tk.slug),
+          fallbackIconUrl: getToolkitFallbackIconUrl(tk.domain),
           authScheme: tk.authScheme,
           status: mapStatus(integration?.status),
           integrationId: integration?.id,
@@ -411,6 +455,8 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
             slug: string;
             name: string;
             provider: string;
+            iconUrl: string;
+            fallbackIconUrl: string;
           }>;
           githubUrl?: string;
         }>
@@ -454,15 +500,34 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
           .map((ts) => {
             const tk = relatedToolkitMap.get(ts);
             return tk
-              ? { slug: ts, name: tk.displayName, provider: tk.domain }
+              ? {
+                  slug: ts,
+                  name: tk.displayName,
+                  provider: tk.domain,
+                  iconUrl: getToolkitIconUrl(ts),
+                  fallbackIconUrl: getToolkitFallbackIconUrl(tk.domain),
+                }
               : null;
           })
           .filter(
-            (t): t is { slug: string; name: string; provider: string } =>
-              t !== null,
+            (
+              t,
+            ): t is {
+              slug: string;
+              name: string;
+              provider: string;
+              iconUrl: string;
+              fallbackIconUrl: string;
+            } => t !== null,
           );
 
         const rExamples = parseJsonArray(r.examples);
+
+        // Derive related skill icon from its first toolkit
+        const rFirstSlug = rToolkitSlugs[0];
+        const rFirstTk = rFirstSlug
+          ? relatedToolkitMap.get(rFirstSlug)
+          : undefined;
 
         return {
           slug: r.slug,
@@ -470,6 +535,10 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
           description: r.description,
           longDescription: r.longDescription ?? undefined,
           iconName: r.iconName,
+          iconUrl: rFirstSlug ? getToolkitIconUrl(rFirstSlug) : undefined,
+          fallbackIconUrl: rFirstTk
+            ? getToolkitFallbackIconUrl(rFirstTk.domain)
+            : undefined,
           prompt: r.prompt,
           examples: rExamples.length > 0 ? rExamples : undefined,
           tag: r.tag as
@@ -489,6 +558,18 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
 
     const examples = parseJsonArray(skillRow.examples);
 
+    // Derive skill icon from the first linked toolkit
+    const firstToolkitSlug = toolkitSlugs[0];
+    let skillIconUrl: string | undefined;
+    let skillFallbackIconUrl: string | undefined;
+    if (firstToolkitSlug) {
+      skillIconUrl = getToolkitIconUrl(firstToolkitSlug);
+      const firstTk = tools?.find((t) => t.slug === firstToolkitSlug);
+      if (firstTk) {
+        skillFallbackIconUrl = getToolkitFallbackIconUrl(firstTk.provider);
+      }
+    }
+
     return c.json(
       {
         slug: skillRow.slug,
@@ -496,6 +577,8 @@ export function registerSkillCatalogRoutes(app: OpenAPIHono<AppBindings>) {
         description: skillRow.description,
         longDescription: skillRow.longDescription ?? undefined,
         iconName: skillRow.iconName,
+        iconUrl: skillIconUrl,
+        fallbackIconUrl: skillFallbackIconUrl,
         prompt: skillRow.prompt,
         examples: examples.length > 0 ? examples : undefined,
         tag: skillRow.tag as

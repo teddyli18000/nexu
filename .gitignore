@@ -17,3 +17,4 @@ openapi-ts-error-*.log
 .vscode.composio/
 test-results/
 playwright-report/
+.worktrees/

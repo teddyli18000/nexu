@@ -11,7 +11,9 @@ import { createId } from "@paralleldrive/cuid2";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
+  bots,
   integrationCredentials,
+  poolSecrets,
   supportedToolkits,
   userIntegrations,
 } from "../db/schema/index.js";
@@ -33,8 +35,15 @@ const integrationIdParam = z.object({
   integrationId: z.string(),
 });
 
-function getToolkitIconUrl(domain: string): string {
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+const PNG_ICON_SLUGS = new Set(["jina", "excel"]);
+
+function getToolkitIconUrl(slug: string): string {
+  const ext = PNG_ICON_SLUGS.has(slug) ? "png" : "svg";
+  return `/toolkit-icons/${slug}.${ext}`;
+}
+
+function getToolkitFallbackIconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 }
 
 // --- Routes ---
@@ -77,6 +86,10 @@ const connectIntegrationRoute = createRoute({
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Toolkit not found",
     },
+    502: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "Integration service not configured",
+    },
   },
 });
 
@@ -108,6 +121,10 @@ const refreshIntegrationRoute = createRoute({
     404: {
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Integration not found",
+    },
+    502: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "Integration service not configured",
     },
   },
 });
@@ -163,7 +180,8 @@ function buildToolkitInfo(toolkit: ToolkitRow) {
     slug: toolkit.slug,
     displayName: toolkit.displayName,
     description: toolkit.description,
-    iconUrl: getToolkitIconUrl(toolkit.domain),
+    iconUrl: getToolkitIconUrl(toolkit.slug),
+    fallbackIconUrl: getToolkitFallbackIconUrl(toolkit.domain),
     category: toolkit.category ?? "office",
     authScheme: toolkit.authScheme as
       | "oauth2"
@@ -178,10 +196,46 @@ function buildFallbackToolkitInfo(slug: string) {
     slug,
     displayName: slug,
     description: "",
-    iconUrl: getToolkitIconUrl(""),
+    iconUrl: getToolkitIconUrl(slug),
+    fallbackIconUrl: getToolkitFallbackIconUrl(""),
     category: "office",
     authScheme: "oauth2" as const,
   };
+}
+
+async function resolveComposioApiKeyForUser(
+  userId: string,
+): Promise<string | undefined> {
+  // Find user's first bot to resolve poolId
+  const [bot] = await db
+    .select({ poolId: bots.poolId })
+    .from(bots)
+    .where(eq(bots.userId, userId))
+    .limit(1);
+
+  if (bot?.poolId) {
+    const [row] = await db
+      .select({ encryptedValue: poolSecrets.encryptedValue })
+      .from(poolSecrets)
+      .where(
+        and(
+          eq(poolSecrets.poolId, bot.poolId),
+          eq(poolSecrets.secretName, "COMPOSIO_API_KEY"),
+          eq(poolSecrets.scope, "pool"),
+        ),
+      )
+      .limit(1);
+
+    if (row) {
+      try {
+        return decrypt(row.encryptedValue);
+      } catch {
+        // Fall through to env var
+      }
+    }
+  }
+
+  return process.env.COMPOSIO_API_KEY;
 }
 
 async function getCredentialHints(
@@ -311,7 +365,6 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
 
     const authFields = parseAuthFields(toolkit.authFields);
     const now = new Date().toISOString();
-    const oauthState = crypto.randomUUID();
 
     const [existing] = await db
       .select()
@@ -324,34 +377,7 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
       )
       .limit(1);
 
-    let integrationId: string;
-
-    if (existing) {
-      integrationId = existing.id;
-      await db
-        .update(userIntegrations)
-        .set({
-          status:
-            toolkit.authScheme === "api_key_user" ? "active" : "initiated",
-          oauthState: toolkit.authScheme === "oauth2" ? oauthState : null,
-          composioAccountId: null,
-          updatedAt: now,
-        })
-        .where(eq(userIntegrations.id, existing.id));
-    } else {
-      integrationId = createId();
-      await db.insert(userIntegrations).values({
-        id: integrationId,
-        userId,
-        toolkitSlug,
-        status: toolkit.authScheme === "api_key_user" ? "active" : "initiated",
-        oauthState: toolkit.authScheme === "oauth2" ? oauthState : null,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    // Handle api_key_user
+    // Handle api_key_user — validate BEFORE upserting
     if (toolkit.authScheme === "api_key_user") {
       if (!credentials) {
         return c.json(
@@ -360,6 +386,36 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
         );
       }
       validateCredentialFields(authFields, credentials);
+
+      let integrationId: string;
+      if (existing) {
+        integrationId = existing.id;
+        await db
+          .update(userIntegrations)
+          .set({
+            status: "active",
+            oauthState: null,
+            composioAccountId: null,
+            returnTo: returnTo ?? null,
+            source: source ?? null,
+            connectedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(userIntegrations.id, existing.id));
+      } else {
+        integrationId = createId();
+        await db.insert(userIntegrations).values({
+          id: integrationId,
+          userId,
+          toolkitSlug,
+          status: "active",
+          connectedAt: now,
+          returnTo: returnTo ?? null,
+          source: source ?? null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
 
       await db
         .delete(integrationCredentials)
@@ -377,11 +433,6 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
         });
       }
 
-      await db
-        .update(userIntegrations)
-        .set({ connectedAt: now, updatedAt: now })
-        .where(eq(userIntegrations.id, integrationId));
-
       const hints = await getCredentialHints(integrationId);
 
       return c.json(
@@ -398,12 +449,55 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
       );
     }
 
-    // Handle oauth2
+    // Handle oauth2 — validate API key BEFORE upserting
+    const composioApiKey = await resolveComposioApiKeyForUser(userId);
+    if (!composioApiKey) {
+      return c.json(
+        {
+          message:
+            "Integration service not configured (missing COMPOSIO_API_KEY)",
+        },
+        502,
+      );
+    }
+
+    const oauthState = crypto.randomUUID();
+    let integrationId: string;
+
+    if (existing) {
+      integrationId = existing.id;
+      await db
+        .update(userIntegrations)
+        .set({
+          status: "initiated",
+          oauthState,
+          composioAccountId: null,
+          returnTo: returnTo ?? null,
+          source: source ?? null,
+          updatedAt: now,
+        })
+        .where(eq(userIntegrations.id, existing.id));
+    } else {
+      integrationId = createId();
+      await db.insert(userIntegrations).values({
+        id: integrationId,
+        userId,
+        toolkitSlug,
+        status: "initiated",
+        oauthState,
+        returnTo: returnTo ?? null,
+        source: source ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
     const result = await initializeOAuthConnection(
+      composioApiKey,
       toolkitSlug,
       userId,
       oauthState,
-      { source, returnTo },
+      integrationId,
     );
 
     return c.json(
@@ -424,7 +518,8 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
   app.openapi(refreshIntegrationRoute, async (c) => {
     const userId = c.get("userId");
     const { integrationId } = c.req.valid("param");
-    const { state } = c.req.valid("json");
+    const body = c.req.valid("json");
+    const state = body.state;
 
     const [integration] = await db
       .select()
@@ -447,6 +542,25 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
       .where(eq(supportedToolkits.slug, integration.toolkitSlug))
       .limit(1);
 
+    const toolkitInfo = toolkit
+      ? buildToolkitInfo(toolkit)
+      : buildFallbackToolkitInfo(integration.toolkitSlug);
+
+    // If already active, return success idempotently (handles race between tabs)
+    if (integration.status === "active") {
+      return c.json(
+        {
+          id: integrationId,
+          toolkit: toolkitInfo,
+          status: "active" as const,
+          connectedAt: integration.connectedAt ?? undefined,
+          returnTo: integration.returnTo ?? undefined,
+          source: (integration.source as "page" | "chat") ?? undefined,
+        },
+        200,
+      );
+    }
+
     if (toolkit && toolkit.authScheme !== "oauth2") {
       return c.json(
         { message: "Refresh is only available for OAuth2 integrations" },
@@ -454,19 +568,30 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
       );
     }
 
-    // CSRF state verification
-    if (!integration.oauthState || integration.oauthState !== state) {
-      return c.json({ message: "Invalid or expired state token" }, 403);
+    // CSRF state verification (skip if no state provided — callback page without localStorage)
+    if (state) {
+      if (!integration.oauthState || integration.oauthState !== state) {
+        return c.json({ message: "Invalid or expired state token" }, 403);
+      }
+    }
+
+    const composioApiKey = await resolveComposioApiKeyForUser(userId);
+    if (!composioApiKey) {
+      return c.json(
+        {
+          message:
+            "Integration service not configured (missing COMPOSIO_API_KEY)",
+        },
+        502,
+      );
     }
 
     const composioStatus = await checkOAuthStatus(
+      composioApiKey,
       userId,
       integration.toolkitSlug,
     );
     const now = new Date().toISOString();
-    const toolkitInfo = toolkit
-      ? buildToolkitInfo(toolkit)
-      : buildFallbackToolkitInfo(integration.toolkitSlug);
 
     if (composioStatus.status === "ACTIVE") {
       await db
@@ -486,6 +611,8 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
           toolkit: toolkitInfo,
           status: "active" as const,
           connectedAt: now,
+          returnTo: integration.returnTo ?? undefined,
+          source: (integration.source as "page" | "chat") ?? undefined,
         },
         200,
       );

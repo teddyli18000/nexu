@@ -80,6 +80,8 @@ async function createTables(pool: pg.Pool) {
       composio_account_id TEXT,
       status TEXT DEFAULT 'pending',
       oauth_state TEXT,
+      return_to TEXT,
+      source TEXT,
       connected_at TEXT,
       disconnected_at TEXT,
       created_at TEXT NOT NULL,
@@ -471,7 +473,7 @@ describe("E2E: Security enforcement", () => {
     expect(rows[0].status).toBe("initiated");
   });
 
-  it("refresh with already-used state returns 403", async () => {
+  it("refresh with already-used state returns 200 idempotently", async () => {
     await seedToolkit(setupPool, "notion");
     const connectRes = await app.request("/api/v1/integrations/connect", {
       method: "POST",
@@ -490,8 +492,10 @@ describe("E2E: Security enforcement", () => {
       },
     );
     expect(refresh1.status).toBe(200);
+    const body1 = await refresh1.json();
+    expect(body1.status).toBe("active");
 
-    // Second refresh with same state fails
+    // Second refresh with same state returns 200 idempotently (integration is now active)
     const refresh2 = await app.request(
       `/api/v1/integrations/${integration.id}/refresh`,
       {
@@ -500,7 +504,9 @@ describe("E2E: Security enforcement", () => {
         body: JSON.stringify({ state }),
       },
     );
-    expect(refresh2.status).toBe(403);
+    expect(refresh2.status).toBe(200);
+    const body2 = await refresh2.json();
+    expect(body2.status).toBe("active");
   });
 
   it("cannot disconnect api_key_global toolkit", async () => {

@@ -892,6 +892,298 @@
         }
       }
     },
+    "/api/internal/composio/execute": {
+      "post": {
+        "tags": [
+          "Composio (Internal)"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "botId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "action": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Z][A-Z0-9_]+$"
+                  },
+                  "params": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    },
+                    "default": {}
+                  }
+                },
+                "required": [
+                  "botId",
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action execution result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "successful": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "successful"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Integration not connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "connectUrl": {
+                      "type": "string"
+                    },
+                    "authCard": {
+                      "type": "object",
+                      "properties": {
+                        "slack": {
+                          "type": "string"
+                        },
+                        "discord": {
+                          "type": "string"
+                        },
+                        "feishu": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "slack",
+                        "discord",
+                        "feishu"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/composio/disconnect": {
+      "post": {
+        "tags": [
+          "Composio (Internal)"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "botId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "toolkitSlug": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "botId",
+                  "toolkitSlug"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Integration disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "successful": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "successful"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot or integration not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/skills/latest": {
       "get": {
         "tags": [
@@ -2415,6 +2707,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "botUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2533,6 +2829,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "botUserId": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2624,6 +2924,10 @@
                             "nullable": true
                           },
                           "appId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "botUserId": {
                             "type": "string",
                             "nullable": true
                           },
@@ -2766,6 +3070,10 @@
                       "nullable": true
                     },
                     "appId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "botUserId": {
                       "type": "string",
                       "nullable": true
                     },
@@ -3005,6 +3313,23 @@
                             },
                             "dangerouslyAllowHostHeaderOriginFallback": {
                               "type": "boolean"
+                            }
+                          }
+                        },
+                        "tools": {
+                          "type": "object",
+                          "properties": {
+                            "allow": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "deny": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           }
                         }
@@ -3540,6 +3865,17 @@
                                 "webhook"
                               ]
                             },
+                            "streaming": {
+                              "type": "boolean"
+                            },
+                            "renderMode": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "raw",
+                                "card"
+                              ]
+                            },
                             "dmPolicy": {
                               "type": "string",
                               "enum": [
@@ -3652,6 +3988,20 @@
                         }
                       }
                     },
+                    "session": {
+                      "type": "object",
+                      "properties": {
+                        "dmScope": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "per-peer",
+                            "per-channel-peer",
+                            "per-account-channel-peer"
+                          ]
+                        }
+                      }
+                    },
                     "cron": {
                       "type": "object",
                       "properties": {
@@ -3712,6 +4062,28 @@
                             "flushIntervalMs": {
                               "type": "number"
                             }
+                          }
+                        }
+                      }
+                    },
+                    "plugins": {
+                      "type": "object",
+                      "properties": {
+                        "entries": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "enabled": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        },
+                        "allow": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
                           }
                         }
                       }
@@ -4105,6 +4477,23 @@
                                   "type": "boolean"
                                 }
                               }
+                            },
+                            "tools": {
+                              "type": "object",
+                              "properties": {
+                                "allow": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "deny": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           },
                           "required": [
@@ -4638,6 +5027,17 @@
                                     "webhook"
                                   ]
                                 },
+                                "streaming": {
+                                  "type": "boolean"
+                                },
+                                "renderMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "raw",
+                                    "card"
+                                  ]
+                                },
                                 "dmPolicy": {
                                   "type": "string",
                                   "enum": [
@@ -4750,6 +5150,20 @@
                             }
                           }
                         },
+                        "session": {
+                          "type": "object",
+                          "properties": {
+                            "dmScope": {
+                              "type": "string",
+                              "enum": [
+                                "main",
+                                "per-peer",
+                                "per-channel-peer",
+                                "per-account-channel-peer"
+                              ]
+                            }
+                          }
+                        },
                         "cron": {
                           "type": "object",
                           "properties": {
@@ -4810,6 +5224,28 @@
                                 "flushIntervalMs": {
                                   "type": "number"
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "plugins": {
+                          "type": "object",
+                          "properties": {
+                            "entries": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "enabled": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "allow": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
                               }
                             }
                           }
@@ -5000,6 +5436,23 @@
                                   "type": "boolean"
                                 }
                               }
+                            },
+                            "tools": {
+                              "type": "object",
+                              "properties": {
+                                "allow": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "deny": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           },
                           "required": [
@@ -5533,6 +5986,17 @@
                                     "webhook"
                                   ]
                                 },
+                                "streaming": {
+                                  "type": "boolean"
+                                },
+                                "renderMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "raw",
+                                    "card"
+                                  ]
+                                },
                                 "dmPolicy": {
                                   "type": "string",
                                   "enum": [
@@ -5645,6 +6109,20 @@
                             }
                           }
                         },
+                        "session": {
+                          "type": "object",
+                          "properties": {
+                            "dmScope": {
+                              "type": "string",
+                              "enum": [
+                                "main",
+                                "per-peer",
+                                "per-channel-peer",
+                                "per-account-channel-peer"
+                              ]
+                            }
+                          }
+                        },
                         "cron": {
                           "type": "object",
                           "properties": {
@@ -5705,6 +6183,28 @@
                                 "flushIntervalMs": {
                                   "type": "number"
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "plugins": {
+                          "type": "object",
+                          "properties": {
+                            "entries": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "enabled": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "allow": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
                               }
                             }
                           }
@@ -6642,6 +7142,9 @@
                               "iconUrl": {
                                 "type": "string"
                               },
+                              "fallbackIconUrl": {
+                                "type": "string"
+                              },
                               "category": {
                                 "type": "string"
                               },
@@ -6688,6 +7191,7 @@
                               "displayName",
                               "description",
                               "iconUrl",
+                              "fallbackIconUrl",
                               "category",
                               "authScheme"
                             ]
@@ -6714,6 +7218,16 @@
                             "additionalProperties": {
                               "type": "string"
                             }
+                          },
+                          "returnTo": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "page",
+                              "chat"
+                            ]
                           }
                         },
                         "required": [
@@ -6800,6 +7314,9 @@
                             "iconUrl": {
                               "type": "string"
                             },
+                            "fallbackIconUrl": {
+                              "type": "string"
+                            },
                             "category": {
                               "type": "string"
                             },
@@ -6846,6 +7363,7 @@
                             "displayName",
                             "description",
                             "iconUrl",
+                            "fallbackIconUrl",
                             "category",
                             "authScheme"
                           ]
@@ -6872,6 +7390,16 @@
                           "additionalProperties": {
                             "type": "string"
                           }
+                        },
+                        "returnTo": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "page",
+                            "chat"
+                          ]
                         }
                       },
                       "required": [
@@ -6928,6 +7456,24 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Integration service not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -6956,10 +7502,7 @@
                   "state": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "state"
-                ]
+                }
               }
             }
           }
@@ -6988,6 +7531,9 @@
                           "type": "string"
                         },
                         "iconUrl": {
+                          "type": "string"
+                        },
+                        "fallbackIconUrl": {
                           "type": "string"
                         },
                         "category": {
@@ -7036,6 +7582,7 @@
                         "displayName",
                         "description",
                         "iconUrl",
+                        "fallbackIconUrl",
                         "category",
                         "authScheme"
                       ]
@@ -7062,6 +7609,16 @@
                       "additionalProperties": {
                         "type": "string"
                       }
+                    },
+                    "returnTo": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "page",
+                        "chat"
+                      ]
                     }
                   },
                   "required": [
@@ -7125,6 +7682,24 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Integration service not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -7168,6 +7743,9 @@
                           "type": "string"
                         },
                         "iconUrl": {
+                          "type": "string"
+                        },
+                        "fallbackIconUrl": {
                           "type": "string"
                         },
                         "category": {
@@ -7216,6 +7794,7 @@
                         "displayName",
                         "description",
                         "iconUrl",
+                        "fallbackIconUrl",
                         "category",
                         "authScheme"
                       ]
@@ -7242,6 +7821,16 @@
                       "additionalProperties": {
                         "type": "string"
                       }
+                    },
+                    "returnTo": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "page",
+                        "chat"
+                      ]
                     }
                   },
                   "required": [
@@ -7324,6 +7913,12 @@
                           "iconName": {
                             "type": "string"
                           },
+                          "iconUrl": {
+                            "type": "string"
+                          },
+                          "fallbackIconUrl": {
+                            "type": "string"
+                          },
                           "prompt": {
                             "type": "string"
                           },
@@ -7365,12 +7960,20 @@
                                 },
                                 "provider": {
                                   "type": "string"
+                                },
+                                "iconUrl": {
+                                  "type": "string"
+                                },
+                                "fallbackIconUrl": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "slug",
                                 "name",
-                                "provider"
+                                "provider",
+                                "iconUrl",
+                                "fallbackIconUrl"
                               ]
                             }
                           },
@@ -7470,6 +8073,12 @@
                     "iconName": {
                       "type": "string"
                     },
+                    "iconUrl": {
+                      "type": "string"
+                    },
+                    "fallbackIconUrl": {
+                      "type": "string"
+                    },
                     "prompt": {
                       "type": "string"
                     },
@@ -7512,6 +8121,12 @@
                           "provider": {
                             "type": "string"
                           },
+                          "iconUrl": {
+                            "type": "string"
+                          },
+                          "fallbackIconUrl": {
+                            "type": "string"
+                          },
                           "authScheme": {
                             "type": "string"
                           },
@@ -7532,6 +8147,8 @@
                           "slug",
                           "name",
                           "provider",
+                          "iconUrl",
+                          "fallbackIconUrl",
                           "authScheme",
                           "status"
                         ]
@@ -7558,6 +8175,12 @@
                             "type": "string"
                           },
                           "iconName": {
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "type": "string"
+                          },
+                          "fallbackIconUrl": {
                             "type": "string"
                           },
                           "prompt": {
@@ -7601,12 +8224,20 @@
                                 },
                                 "provider": {
                                   "type": "string"
+                                },
+                                "iconUrl": {
+                                  "type": "string"
+                                },
+                                "fallbackIconUrl": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "slug",
                                 "name",
-                                "provider"
+                                "provider",
+                                "iconUrl",
+                                "fallbackIconUrl"
                               ]
                             }
                           },

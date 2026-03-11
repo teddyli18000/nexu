@@ -319,6 +319,123 @@ export type GetApiInternalSecretsBySkillNameResponses = {
 
 export type GetApiInternalSecretsBySkillNameResponse = GetApiInternalSecretsBySkillNameResponses[keyof GetApiInternalSecretsBySkillNameResponses];
 
+export type PostApiInternalComposioExecuteData = {
+    body?: {
+        botId: string;
+        action: string;
+        params?: {
+            [key: string]: unknown;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal/composio/execute';
+};
+
+export type PostApiInternalComposioExecuteErrors = {
+    /**
+     * Invalid request
+     */
+    400: {
+        message: string;
+    };
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+    /**
+     * Integration not connected
+     */
+    403: {
+        message: string;
+        connectUrl?: string;
+        authCard?: {
+            slack: string;
+            discord: string;
+            feishu: string;
+        };
+    };
+    /**
+     * Bot not found
+     */
+    404: {
+        message: string;
+    };
+    /**
+     * Upstream service error
+     */
+    502: {
+        message: string;
+    };
+};
+
+export type PostApiInternalComposioExecuteError = PostApiInternalComposioExecuteErrors[keyof PostApiInternalComposioExecuteErrors];
+
+export type PostApiInternalComposioExecuteResponses = {
+    /**
+     * Action execution result
+     */
+    200: {
+        data?: {
+            [key: string]: unknown;
+        };
+        error?: string;
+        successful: boolean;
+    };
+};
+
+export type PostApiInternalComposioExecuteResponse = PostApiInternalComposioExecuteResponses[keyof PostApiInternalComposioExecuteResponses];
+
+export type PostApiInternalComposioDisconnectData = {
+    body?: {
+        botId: string;
+        toolkitSlug: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal/composio/disconnect';
+};
+
+export type PostApiInternalComposioDisconnectErrors = {
+    /**
+     * Invalid request
+     */
+    400: {
+        message: string;
+    };
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+    /**
+     * Bot or integration not found
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type PostApiInternalComposioDisconnectError = PostApiInternalComposioDisconnectErrors[keyof PostApiInternalComposioDisconnectErrors];
+
+export type PostApiInternalComposioDisconnectResponses = {
+    /**
+     * Integration disconnected
+     */
+    200: {
+        data?: {
+            [key: string]: unknown;
+        };
+        error?: string;
+        successful: boolean;
+    };
+};
+
+export type PostApiInternalComposioDisconnectResponse = PostApiInternalComposioDisconnectResponses[keyof PostApiInternalComposioDisconnectResponses];
+
 export type GetApiInternalSkillsLatestData = {
     body?: never;
     path?: never;
@@ -960,6 +1077,7 @@ export type PostApiV1ChannelsSlackConnectResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -1002,6 +1120,7 @@ export type PostApiV1ChannelsDiscordConnectResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -1029,6 +1148,7 @@ export type GetApiV1ChannelsResponses = {
             status: 'pending' | 'connected' | 'disconnected' | 'error';
             teamName: string;
             appId?: string;
+            botUserId?: string;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -1100,6 +1220,7 @@ export type GetApiV1ChannelsByChannelIdStatusResponses = {
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
         appId?: string;
+        botUserId?: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -1191,6 +1312,10 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
             controlUi?: {
                 allowedOrigins?: Array<string>;
                 dangerouslyAllowHostHeaderOriginFallback?: boolean;
+            };
+            tools?: {
+                allow?: Array<string>;
+                deny?: Array<string>;
             };
         };
         models?: {
@@ -1324,6 +1449,8 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
             feishu?: {
                 enabled?: boolean;
                 connectionMode?: 'websocket' | 'webhook';
+                streaming?: boolean;
+                renderMode?: 'auto' | 'raw' | 'card';
                 dmPolicy?: 'pairing' | 'allowlist' | 'open';
                 groupPolicy?: 'open' | 'allowlist' | 'disabled';
                 requireMention?: boolean;
@@ -1350,6 +1477,9 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
             restart?: boolean;
             ownerDisplay?: 'raw' | 'friendly';
         };
+        session?: {
+            dmScope?: 'main' | 'per-peer' | 'per-channel-peer' | 'per-account-channel-peer';
+        };
         cron?: {
             enabled?: boolean;
         };
@@ -1369,6 +1499,14 @@ export type GetApiInternalPoolsByPoolIdConfigResponses = {
                 logs?: boolean;
                 flushIntervalMs?: number;
             };
+        };
+        plugins?: {
+            entries?: {
+                [key: string]: {
+                    enabled?: boolean;
+                };
+            };
+            allow?: Array<string>;
         };
     };
 };
@@ -1507,6 +1645,10 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                     allowedOrigins?: Array<string>;
                     dangerouslyAllowHostHeaderOriginFallback?: boolean;
                 };
+                tools?: {
+                    allow?: Array<string>;
+                    deny?: Array<string>;
+                };
             };
             models?: {
                 mode?: 'merge' | 'replace';
@@ -1639,6 +1781,8 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                 feishu?: {
                     enabled?: boolean;
                     connectionMode?: 'websocket' | 'webhook';
+                    streaming?: boolean;
+                    renderMode?: 'auto' | 'raw' | 'card';
                     dmPolicy?: 'pairing' | 'allowlist' | 'open';
                     groupPolicy?: 'open' | 'allowlist' | 'disabled';
                     requireMention?: boolean;
@@ -1665,6 +1809,9 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                 restart?: boolean;
                 ownerDisplay?: 'raw' | 'friendly';
             };
+            session?: {
+                dmScope?: 'main' | 'per-peer' | 'per-channel-peer' | 'per-account-channel-peer';
+            };
             cron?: {
                 enabled?: boolean;
             };
@@ -1684,6 +1831,14 @@ export type GetApiInternalPoolsByPoolIdConfigLatestResponses = {
                     logs?: boolean;
                     flushIntervalMs?: number;
                 };
+            };
+            plugins?: {
+                entries?: {
+                    [key: string]: {
+                        enabled?: boolean;
+                    };
+                };
+                allow?: Array<string>;
             };
         };
         agentMeta?: {
@@ -1746,6 +1901,10 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                     allowedOrigins?: Array<string>;
                     dangerouslyAllowHostHeaderOriginFallback?: boolean;
                 };
+                tools?: {
+                    allow?: Array<string>;
+                    deny?: Array<string>;
+                };
             };
             models?: {
                 mode?: 'merge' | 'replace';
@@ -1878,6 +2037,8 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                 feishu?: {
                     enabled?: boolean;
                     connectionMode?: 'websocket' | 'webhook';
+                    streaming?: boolean;
+                    renderMode?: 'auto' | 'raw' | 'card';
                     dmPolicy?: 'pairing' | 'allowlist' | 'open';
                     groupPolicy?: 'open' | 'allowlist' | 'disabled';
                     requireMention?: boolean;
@@ -1904,6 +2065,9 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                 restart?: boolean;
                 ownerDisplay?: 'raw' | 'friendly';
             };
+            session?: {
+                dmScope?: 'main' | 'per-peer' | 'per-channel-peer' | 'per-account-channel-peer';
+            };
             cron?: {
                 enabled?: boolean;
             };
@@ -1923,6 +2087,14 @@ export type GetApiInternalPoolsByPoolIdConfigVersionsByVersionResponses = {
                     logs?: boolean;
                     flushIntervalMs?: number;
                 };
+            };
+            plugins?: {
+                entries?: {
+                    [key: string]: {
+                        enabled?: boolean;
+                    };
+                };
+                allow?: Array<string>;
             };
         };
         agentMeta?: {
@@ -2269,6 +2441,7 @@ export type GetApiV1IntegrationsResponses = {
                 displayName: string;
                 description: string;
                 iconUrl: string;
+                fallbackIconUrl: string;
                 category: string;
                 authScheme: 'oauth2' | 'api_key_global' | 'api_key_user';
                 authFields?: Array<{
@@ -2284,6 +2457,8 @@ export type GetApiV1IntegrationsResponses = {
             credentialHints?: {
                 [key: string]: string;
             };
+            returnTo?: string;
+            source?: 'page' | 'chat';
         }>;
     };
 };
@@ -2317,6 +2492,12 @@ export type PostApiV1IntegrationsConnectErrors = {
     404: {
         message: string;
     };
+    /**
+     * Integration service not configured
+     */
+    502: {
+        message: string;
+    };
 };
 
 export type PostApiV1IntegrationsConnectError = PostApiV1IntegrationsConnectErrors[keyof PostApiV1IntegrationsConnectErrors];
@@ -2333,6 +2514,7 @@ export type PostApiV1IntegrationsConnectResponses = {
                 displayName: string;
                 description: string;
                 iconUrl: string;
+                fallbackIconUrl: string;
                 category: string;
                 authScheme: 'oauth2' | 'api_key_global' | 'api_key_user';
                 authFields?: Array<{
@@ -2348,6 +2530,8 @@ export type PostApiV1IntegrationsConnectResponses = {
             credentialHints?: {
                 [key: string]: string;
             };
+            returnTo?: string;
+            source?: 'page' | 'chat';
         };
         connectUrl?: string;
         state?: string;
@@ -2358,7 +2542,7 @@ export type PostApiV1IntegrationsConnectResponse = PostApiV1IntegrationsConnectR
 
 export type PostApiV1IntegrationsByIntegrationIdRefreshData = {
     body?: {
-        state: string;
+        state?: string;
     };
     path: {
         integrationId: string;
@@ -2386,6 +2570,12 @@ export type PostApiV1IntegrationsByIntegrationIdRefreshErrors = {
     404: {
         message: string;
     };
+    /**
+     * Integration service not configured
+     */
+    502: {
+        message: string;
+    };
 };
 
 export type PostApiV1IntegrationsByIntegrationIdRefreshError = PostApiV1IntegrationsByIntegrationIdRefreshErrors[keyof PostApiV1IntegrationsByIntegrationIdRefreshErrors];
@@ -2401,6 +2591,7 @@ export type PostApiV1IntegrationsByIntegrationIdRefreshResponses = {
             displayName: string;
             description: string;
             iconUrl: string;
+            fallbackIconUrl: string;
             category: string;
             authScheme: 'oauth2' | 'api_key_global' | 'api_key_user';
             authFields?: Array<{
@@ -2416,6 +2607,8 @@ export type PostApiV1IntegrationsByIntegrationIdRefreshResponses = {
         credentialHints?: {
             [key: string]: string;
         };
+        returnTo?: string;
+        source?: 'page' | 'chat';
     };
 };
 
@@ -2458,6 +2651,7 @@ export type DeleteApiV1IntegrationsByIntegrationIdResponses = {
             displayName: string;
             description: string;
             iconUrl: string;
+            fallbackIconUrl: string;
             category: string;
             authScheme: 'oauth2' | 'api_key_global' | 'api_key_user';
             authFields?: Array<{
@@ -2473,6 +2667,8 @@ export type DeleteApiV1IntegrationsByIntegrationIdResponses = {
         credentialHints?: {
             [key: string]: string;
         };
+        returnTo?: string;
+        source?: 'page' | 'chat';
     };
 };
 
@@ -2496,6 +2692,8 @@ export type GetApiV1SkillsResponses = {
             description: string;
             longDescription?: string;
             iconName: string;
+            iconUrl?: string;
+            fallbackIconUrl?: string;
             prompt: string;
             examples?: Array<string>;
             tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
@@ -2504,6 +2702,8 @@ export type GetApiV1SkillsResponses = {
                 slug: string;
                 name: string;
                 provider: string;
+                iconUrl: string;
+                fallbackIconUrl: string;
             }>;
             githubUrl?: string;
         }>;
@@ -2547,6 +2747,8 @@ export type GetApiV1SkillsBySlugResponses = {
         description: string;
         longDescription?: string;
         iconName: string;
+        iconUrl?: string;
+        fallbackIconUrl?: string;
         prompt: string;
         examples?: Array<string>;
         tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
@@ -2555,6 +2757,8 @@ export type GetApiV1SkillsBySlugResponses = {
             slug: string;
             name: string;
             provider: string;
+            iconUrl: string;
+            fallbackIconUrl: string;
             authScheme: string;
             status: 'connected' | 'not_connected' | 'initiated' | 'expired';
             integrationId?: string;
@@ -2566,6 +2770,8 @@ export type GetApiV1SkillsBySlugResponses = {
             description: string;
             longDescription?: string;
             iconName: string;
+            iconUrl?: string;
+            fallbackIconUrl?: string;
             prompt: string;
             examples?: Array<string>;
             tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
@@ -2574,6 +2780,8 @@ export type GetApiV1SkillsBySlugResponses = {
                 slug: string;
                 name: string;
                 provider: string;
+                iconUrl: string;
+                fallbackIconUrl: string;
             }>;
             githubUrl?: string;
         }>;

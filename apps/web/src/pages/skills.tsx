@@ -1,3 +1,4 @@
+import { ToolkitIcon } from "@/components/toolkit-icon";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -74,7 +75,7 @@ const ICON_MAP: Record<string, ElementType> = {
   Code,
 };
 
-function SkillIcon({ iconName }: { iconName: string }) {
+function SkillLucideIcon({ iconName }: { iconName: string }) {
   const Icon = ICON_MAP[iconName] ?? Sparkles;
   return (
     <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
@@ -98,7 +99,16 @@ function SkillCard({ skill }: { skill: Skill }) {
       className="block group rounded-xl border border-border bg-surface-1 p-4 hover:border-accent/35 hover:shadow-md hover:shadow-accent/5 transition-all"
     >
       <div className="flex items-center gap-2.5 mb-2">
-        <SkillIcon iconName={skill.iconName} />
+        {skill.iconUrl ? (
+          <ToolkitIcon
+            iconUrl={skill.iconUrl}
+            fallbackIconUrl={skill.fallbackIconUrl}
+            name={skill.name}
+            size="sm"
+          />
+        ) : (
+          <SkillLucideIcon iconName={skill.iconName} />
+        )}
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-[13px] font-semibold text-text-primary truncate">
             {skill.name}

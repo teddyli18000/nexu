@@ -16,6 +16,8 @@ export const skillToolRefSchema = z.object({
   slug: z.string(),
   name: z.string(),
   provider: z.string(),
+  iconUrl: z.string(),
+  fallbackIconUrl: z.string(),
 });
 
 export const skillInfoSchema = z.object({
@@ -24,6 +26,8 @@ export const skillInfoSchema = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
   iconName: z.string(),
+  iconUrl: z.string().optional(),
+  fallbackIconUrl: z.string().optional(),
   prompt: z.string(),
   examples: z.array(z.string()).optional(),
   tag: skillTagSchema,
@@ -47,6 +51,8 @@ export const skillToolWithStatusSchema = z.object({
   slug: z.string(),
   name: z.string(),
   provider: z.string(),
+  iconUrl: z.string(),
+  fallbackIconUrl: z.string(),
   authScheme: z.string(),
   status: z.enum(["connected", "not_connected", "initiated", "expired"]),
   integrationId: z.string().optional(),
@@ -58,6 +64,8 @@ export const skillDetailResponseSchema = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
   iconName: z.string(),
+  iconUrl: z.string().optional(),
+  fallbackIconUrl: z.string().optional(),
   prompt: z.string(),
   examples: z.array(z.string()).optional(),
   tag: skillTagSchema,

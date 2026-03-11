@@ -76,8 +76,8 @@ See `ARCHITECTURE.md` for the full bird's-eye view. Key points:
 |-------|----------|
 | Architecture overview | `ARCHITECTURE.md` |
 | Agent coding guide | `AGENTS.md` |
-| System design | `docs/design-docs/openclaw-multi-tenant.md` |
-| OpenClaw internals | `docs/design-docs/openclaw-architecture-internals.md` |
+| System design | `docs/designs/openclaw-multi-tenant.md` |
+| OpenClaw internals | `docs/designs/openclaw-architecture-internals.md` |
 | Config schema & pitfalls | `docs/references/openclaw-config-schema.md` |
 | API coding patterns | `docs/references/api-patterns.md` |
 | Infrastructure | `docs/references/infrastructure.md` |

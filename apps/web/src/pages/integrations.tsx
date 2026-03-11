@@ -1,3 +1,4 @@
+import { ToolkitIcon } from "@/components/toolkit-icon";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,7 +15,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import "@/lib/api";
 import {
@@ -94,24 +95,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ToolkitIcon({ iconUrl, name }: { iconUrl: string; name: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-        <Puzzle size={16} className="text-accent" />
-      </div>
-    );
-  }
-  return (
-    <img
-      src={iconUrl}
-      alt={name}
-      className="w-9 h-9 rounded-lg bg-surface-2 object-contain shrink-0"
-      onError={() => setFailed(true)}
-    />
-  );
-}
+// ToolkitIcon imported from @/components/toolkit-icon
 
 // ─── API Key Form ───────────────────────────────────────────
 
@@ -298,7 +282,11 @@ function IntegrationCard({
       )}
     >
       <div className="flex items-start gap-3">
-        <ToolkitIcon iconUrl={toolkit.iconUrl} name={toolkit.displayName} />
+        <ToolkitIcon
+          iconUrl={toolkit.iconUrl}
+          fallbackIconUrl={toolkit.fallbackIconUrl}
+          name={toolkit.displayName}
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[13px] font-semibold text-text-primary truncate">
@@ -407,6 +395,7 @@ function IntegrationCard({
 
 export function IntegrationsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -423,6 +412,7 @@ export function IntegrationsPage() {
   // Handle OAuth callback from search params
   const callbackToolkit = searchParams.get("toolkit");
   const callbackState = searchParams.get("state");
+  const callbackReturnTo = searchParams.get("returnTo");
 
   const { data, isLoading } = useQuery({
     queryKey: ["integrations"],
@@ -453,12 +443,12 @@ export function IntegrationsPage() {
     next.delete("returnTo");
     setSearchParams(next, { replace: true });
 
-    // Start polling
-    startPolling(match.id, callbackState);
+    // Start polling (pass returnTo so we navigate back after success)
+    startPolling(match.id, callbackState, callbackReturnTo);
   }, [callbackToolkit, callbackState, integrations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPolling = useCallback(
-    (integrationId: string, state: string) => {
+    (integrationId: string, state: string, returnTo?: string | null) => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current.timer);
       }
@@ -478,6 +468,9 @@ export function IntegrationsPage() {
               `${refreshed.toolkit.displayName} connected successfully`,
             );
             queryClient.invalidateQueries({ queryKey: ["integrations"] });
+            if (returnTo) {
+              navigate(returnTo, { replace: true });
+            }
           } else if (attempts >= 20) {
             clearInterval(timer);
             pollingRef.current = null;
@@ -493,7 +486,7 @@ export function IntegrationsPage() {
       }, 3000);
       pollingRef.current = { integrationId, state, timer };
     },
-    [queryClient],
+    [queryClient, navigate],
   );
 
   // Cleanup polling on unmount
@@ -521,7 +514,20 @@ export function IntegrationsPage() {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
 
       if (result.connectUrl) {
-        // OAuth2 flow — open in new tab
+        // OAuth2 flow — store state + toolkit display info for callback page
+        if (result.integration.id && result.state) {
+          localStorage.setItem(
+            `nexu-oauth-pending-${result.integration.id}`,
+            JSON.stringify({
+              state: result.state,
+              toolkitSlug: result.integration.toolkit.slug,
+              toolkitDisplayName: result.integration.toolkit.displayName,
+              toolkitIconUrl: result.integration.toolkit.iconUrl,
+              toolkitFallbackIconUrl:
+                result.integration.toolkit.fallbackIconUrl,
+            }),
+          );
+        }
         window.open(result.connectUrl, "_blank", "noopener");
         toast.info("Complete the authorization in the new tab");
         if (result.integration.id && result.state) {
