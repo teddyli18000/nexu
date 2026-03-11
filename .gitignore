@@ -14,6 +14,7 @@ tmp/
 openapi-ts-error-*.log
 .astro/
 .openclaw/
+.vscode
 .vscode.composio/
 test-results/
 playwright-report/

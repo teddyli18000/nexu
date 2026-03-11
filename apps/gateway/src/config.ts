@@ -1,6 +1,9 @@
 import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { runtimePoolConfigResponseSchema } from "@nexu/shared";
+import {
+  openclawConfigSchema,
+  runtimePoolConfigResponseSchema,
+} from "@nexu/shared";
 import { fetchJson } from "./api.js";
 import { env } from "./env.js";
 import { logger } from "./log.js";
@@ -70,26 +73,26 @@ export async function pollLatestConfig(state: RuntimeState): Promise<boolean> {
 
 export async function fetchInitialConfig(): Promise<void> {
   const response = await fetchJson(
-    `/api/internal/pools/${env.RUNTIME_POOL_ID}/config/latest`,
+    `/api/internal/pools/${env.RUNTIME_POOL_ID}/config`,
     {
       method: "GET",
     },
   );
 
-  const payload = runtimePoolConfigResponseSchema.parse(response);
-  const configJson = JSON.stringify(payload.config, null, 2);
+  const payload = openclawConfigSchema.parse(response);
+  const configJson = JSON.stringify(payload, null, 2);
   await atomicWriteConfig(configJson);
 
-  await writeNexuContext(payload.agentMeta);
+  // Write initial context — agentMeta not available from raw config endpoint,
+  // so write with empty agents (will be populated on first poll cycle)
+  await writeNexuContext(undefined);
 
   logger.info(
     {
       event: "startup_config_sync",
       status: "success",
       poolId: env.RUNTIME_POOL_ID,
-      version: payload.version,
-      agentCount: Object.keys(payload.agentMeta ?? {}).length,
     },
-    "initial pool config synced with agent metadata",
+    "initial pool config synced",
   );
 }
