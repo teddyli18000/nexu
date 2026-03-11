@@ -52,9 +52,36 @@ let setupPool: pg.Pool;
 
 async function createTables(pool: pg.Pool) {
   await pool.query(`
+    DROP TABLE IF EXISTS pool_secrets CASCADE;
+    DROP TABLE IF EXISTS bots CASCADE;
     DROP TABLE IF EXISTS integration_credentials CASCADE;
     DROP TABLE IF EXISTS user_integrations CASCADE;
     DROP TABLE IF EXISTS supported_toolkits CASCADE;
+
+    CREATE TABLE bots (
+      pk SERIAL PRIMARY KEY,
+      id TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      pool_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS bots_user_slug_idx ON bots (user_id, slug);
+
+    CREATE TABLE pool_secrets (
+      pk SERIAL PRIMARY KEY,
+      id TEXT NOT NULL UNIQUE,
+      pool_id TEXT NOT NULL,
+      secret_name TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'pool',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS pool_secrets_uniq_idx ON pool_secrets (pool_id, secret_name);
 
     CREATE TABLE supported_toolkits (
       pk SERIAL PRIMARY KEY,
@@ -104,7 +131,7 @@ async function createTables(pool: pg.Pool) {
 
 async function truncateAll(pool: pg.Pool) {
   await pool.query(
-    "TRUNCATE integration_credentials, user_integrations, supported_toolkits CASCADE",
+    "TRUNCATE integration_credentials, user_integrations, supported_toolkits, pool_secrets, bots CASCADE",
   );
 }
 
@@ -150,12 +177,44 @@ async function seedToolkit(
   return id;
 }
 
+async function seedBot(
+  pool: pg.Pool,
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    name: string;
+    slug: string;
+    status: string;
+    poolId: string | null;
+  }> = {},
+) {
+  const bot = {
+    id: overrides.id ?? `bot-${Math.random().toString(36).slice(2, 8)}`,
+    userId: overrides.userId ?? "e2e-user-1",
+    name: overrides.name ?? "My Bot",
+    slug: overrides.slug ?? `bot-${Math.random().toString(36).slice(2, 6)}`,
+    status: overrides.status ?? "active",
+    poolId:
+      overrides.poolId !== undefined
+        ? overrides.poolId
+        : ("pool-1" as string | null),
+  };
+  const n = now();
+  await pool.query(
+    `INSERT INTO bots (id, user_id, name, slug, status, pool_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [bot.id, bot.userId, bot.name, bot.slug, bot.status, bot.poolId, n, n],
+  );
+  return bot;
+}
+
 describe("E2E: OAuth2 integration flow", () => {
   const app = buildApp();
 
   beforeAll(async () => {
     process.env.ENCRYPTION_KEY =
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    process.env.COMPOSIO_API_KEY = "test-composio-api-key";
     setupPool = new pg.Pool({ connectionString: TEST_DB_URL });
     await createTables(setupPool);
   });
@@ -171,6 +230,7 @@ describe("E2E: OAuth2 integration flow", () => {
 
   it("connect → refresh → list → disconnect lifecycle", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool);
 
     // 1. GET — toolkit exists, status pending
     const listRes1 = await app.request("/api/v1/integrations");
@@ -372,6 +432,7 @@ describe("E2E: Security enforcement", () => {
 
   it("user-2 cannot refresh user-1's integration", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool, { userId: "e2e-user-1" });
     // Connect as user-1
     const connectRes = await app.request("/api/v1/integrations/connect", {
       method: "POST",
@@ -407,6 +468,7 @@ describe("E2E: Security enforcement", () => {
 
   it("user-2 cannot delete user-1's integration", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool, { userId: "e2e-user-1" });
     const connectRes = await app.request("/api/v1/integrations/connect", {
       method: "POST",
       headers: {
@@ -447,6 +509,7 @@ describe("E2E: Security enforcement", () => {
 
   it("refresh with wrong state token returns 403", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool);
     const connectRes = await app.request("/api/v1/integrations/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -475,6 +538,7 @@ describe("E2E: Security enforcement", () => {
 
   it("refresh with already-used state returns 200 idempotently", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool);
     const connectRes = await app.request("/api/v1/integrations/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -634,6 +698,7 @@ describe("E2E: Edge cases", () => {
 
   it("re-connect after disconnect creates new integration flow", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool);
 
     // Connect → refresh → active
     const connect1 = await app.request("/api/v1/integrations/connect", {
@@ -675,6 +740,7 @@ describe("E2E: Edge cases", () => {
 
   it("connect same toolkit twice returns same integration", async () => {
     await seedToolkit(setupPool, "notion");
+    await seedBot(setupPool);
 
     const connect1 = await app.request("/api/v1/integrations/connect", {
       method: "POST",

@@ -56,9 +56,36 @@ let setupPool: pg.Pool;
 
 async function createTables(pool: pg.Pool) {
   await pool.query(`
+    DROP TABLE IF EXISTS pool_secrets CASCADE;
+    DROP TABLE IF EXISTS bots CASCADE;
     DROP TABLE IF EXISTS integration_credentials CASCADE;
     DROP TABLE IF EXISTS user_integrations CASCADE;
     DROP TABLE IF EXISTS supported_toolkits CASCADE;
+
+    CREATE TABLE bots (
+      pk SERIAL PRIMARY KEY,
+      id TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      pool_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX bots_user_slug_idx ON bots (user_id, slug);
+
+    CREATE TABLE pool_secrets (
+      pk SERIAL PRIMARY KEY,
+      id TEXT NOT NULL UNIQUE,
+      pool_id TEXT NOT NULL,
+      secret_name TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'pool',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX pool_secrets_uniq_idx ON pool_secrets (pool_id, secret_name);
 
     CREATE TABLE supported_toolkits (
       pk SERIAL PRIMARY KEY,
@@ -108,7 +135,7 @@ async function createTables(pool: pg.Pool) {
 
 async function truncateAll(pool: pg.Pool) {
   await pool.query(
-    "TRUNCATE integration_credentials, user_integrations, supported_toolkits CASCADE",
+    "TRUNCATE integration_credentials, user_integrations, supported_toolkits, pool_secrets, bots CASCADE",
   );
 }
 
@@ -210,12 +237,44 @@ async function seedIntegration(
   return i;
 }
 
+async function seedBot(
+  pool: pg.Pool,
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    name: string;
+    slug: string;
+    status: string;
+    poolId: string | null;
+  }> = {},
+) {
+  const bot = {
+    id: overrides.id ?? `bot-${Math.random().toString(36).slice(2, 8)}`,
+    userId: overrides.userId ?? "user-1",
+    name: overrides.name ?? "My Bot",
+    slug: overrides.slug ?? `bot-${Math.random().toString(36).slice(2, 6)}`,
+    status: overrides.status ?? "active",
+    poolId:
+      overrides.poolId !== undefined
+        ? overrides.poolId
+        : ("pool-1" as string | null),
+  };
+  const n = now();
+  await pool.query(
+    `INSERT INTO bots (id, user_id, name, slug, status, pool_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [bot.id, bot.userId, bot.name, bot.slug, bot.status, bot.poolId, n, n],
+  );
+  return bot;
+}
+
 describe("Integration Routes", () => {
   const app = buildApp();
 
   beforeAll(async () => {
     process.env.ENCRYPTION_KEY =
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    process.env.COMPOSIO_API_KEY = "test-composio-api-key";
     setupPool = new pg.Pool({ connectionString: TEST_DB_URL });
     await createTables(setupPool);
   });
@@ -319,6 +378,7 @@ describe("Integration Routes", () => {
   describe("POST /api/v1/integrations/connect", () => {
     it("oauth2 connect returns connectUrl and state", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
 
       const res = await app.request("/api/v1/integrations/connect", {
         method: "POST",
@@ -343,6 +403,7 @@ describe("Integration Routes", () => {
 
     it("oauth2 connect updates existing pending row", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
       const existing = await seedIntegration(setupPool, {
         toolkitSlug: "notion",
         status: "pending",
@@ -495,6 +556,7 @@ describe("Integration Routes", () => {
 
     it("oauth2 connect with source chat and returnTo", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
 
       const res = await app.request("/api/v1/integrations/connect", {
         method: "POST",
@@ -510,6 +572,7 @@ describe("Integration Routes", () => {
       const body = await res.json();
       expect(body.connectUrl).toBeTruthy();
       expect(initializeOAuthConnection).toHaveBeenCalledWith(
+        "test-composio-api-key",
         "notion",
         "user-1",
         expect.any(String),
@@ -523,6 +586,59 @@ describe("Integration Routes", () => {
       expect(rows[0].return_to).toBe("/workspace/sessions/abc");
       expect(rows[0].source).toBe("chat");
     });
+
+    it("oauth2 connect rejects users without an active or paused bot", async () => {
+      await seedToolkit(setupPool, { slug: "notion" });
+
+      const res = await app.request("/api/v1/integrations/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolkitSlug: "notion" }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.message).toContain("exactly one active or paused bot");
+    });
+
+    it("oauth2 connect rejects users with multiple active or paused bots", async () => {
+      await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool, {
+        id: "bot-1",
+        slug: "first-bot",
+        poolId: "pool-1",
+      });
+      await seedBot(setupPool, {
+        id: "bot-2",
+        slug: "second-bot",
+        poolId: "pool-2",
+      });
+
+      const res = await app.request("/api/v1/integrations/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolkitSlug: "notion" }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.message).toContain("single bot");
+    });
+
+    it("oauth2 connect rejects users whose only bot has no pool assignment", async () => {
+      await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool, { poolId: null });
+
+      const res = await app.request("/api/v1/integrations/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolkitSlug: "notion" }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.message).toContain("assigned to a pool");
+    });
   });
 
   // ----------------------------------------------------------------
@@ -531,6 +647,7 @@ describe("Integration Routes", () => {
   describe("POST /api/v1/integrations/{integrationId}/refresh", () => {
     it("valid state + Composio ACTIVE sets status to active", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
       const integration = await seedIntegration(setupPool, {
         id: "int-refresh-1",
         toolkitSlug: "notion",
@@ -563,6 +680,7 @@ describe("Integration Routes", () => {
 
     it("mismatched state returns 403", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
       const integration = await seedIntegration(setupPool, {
         id: "int-mismatch",
         toolkitSlug: "notion",
@@ -645,6 +763,7 @@ describe("Integration Routes", () => {
 
     it("Composio returns non-ACTIVE keeps status as initiated", async () => {
       await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool);
       const integration = await seedIntegration(setupPool, {
         id: "int-pending",
         toolkitSlug: "notion",
@@ -675,6 +794,39 @@ describe("Integration Routes", () => {
         [integration.id],
       );
       expect(rows[0].oauth_state).toBe("pending-state");
+    });
+
+    it("refresh rejects users with multiple active or paused bots", async () => {
+      await seedToolkit(setupPool, { slug: "notion" });
+      await seedBot(setupPool, {
+        id: "bot-1",
+        slug: "first-bot",
+        poolId: "pool-1",
+      });
+      await seedBot(setupPool, {
+        id: "bot-2",
+        slug: "second-bot",
+        poolId: "pool-2",
+      });
+      const integration = await seedIntegration(setupPool, {
+        id: "int-multi-bot",
+        toolkitSlug: "notion",
+        status: "initiated",
+        oauthState: "multi-bot-state",
+      });
+
+      const res = await app.request(
+        `/api/v1/integrations/${integration.id}/refresh`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: "multi-bot-state" }),
+        },
+      );
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.message).toContain("single bot");
     });
 
     it("refresh on active api_key_user integration returns 200 idempotently", async () => {

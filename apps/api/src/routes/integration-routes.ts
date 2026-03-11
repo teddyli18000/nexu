@@ -8,7 +8,7 @@ import {
   refreshIntegrationSchema,
 } from "@nexu/shared";
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   bots,
@@ -86,6 +86,10 @@ const connectIntegrationRoute = createRoute({
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Toolkit not found",
     },
+    409: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "User bot context is ambiguous",
+    },
     502: {
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Integration service not configured",
@@ -121,6 +125,10 @@ const refreshIntegrationRoute = createRoute({
     404: {
       content: { "application/json": { schema: errorResponseSchema } },
       description: "Integration not found",
+    },
+    409: {
+      content: { "application/json": { schema: errorResponseSchema } },
+      description: "User bot context is ambiguous",
     },
     502: {
       content: { "application/json": { schema: errorResponseSchema } },
@@ -203,39 +211,98 @@ function buildFallbackToolkitInfo(slug: string) {
   };
 }
 
-async function resolveComposioApiKeyForUser(
+type ComposioUserContext =
+  | {
+      ok: true;
+      apiKey: string;
+      botId: string;
+      poolId: string;
+    }
+  | {
+      ok: false;
+      status: 400 | 409 | 502;
+      message: string;
+    };
+
+async function resolveComposioUserContext(
   userId: string,
-): Promise<string | undefined> {
-  // Find user's first bot to resolve poolId
-  const [bot] = await db
-    .select({ poolId: bots.poolId })
+): Promise<ComposioUserContext> {
+  const userBots = await db
+    .select({ id: bots.id, poolId: bots.poolId })
     .from(bots)
-    .where(eq(bots.userId, userId))
+    .where(
+      and(
+        eq(bots.userId, userId),
+        or(eq(bots.status, "active"), eq(bots.status, "paused")),
+      ),
+    );
+
+  if (userBots.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Composio integrations require exactly one active or paused bot for this user",
+    };
+  }
+
+  if (userBots.length > 1) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "Composio integrations are only supported for users with a single bot",
+    };
+  }
+
+  const bot = userBots[0];
+  if (!bot) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Composio integrations require exactly one active or paused bot for this user",
+    };
+  }
+  if (!bot.poolId) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Composio integrations require the user's bot to be assigned to a pool",
+    };
+  }
+
+  const [row] = await db
+    .select({ encryptedValue: poolSecrets.encryptedValue })
+    .from(poolSecrets)
+    .where(
+      and(
+        eq(poolSecrets.poolId, bot.poolId),
+        eq(poolSecrets.secretName, "COMPOSIO_API_KEY"),
+        eq(poolSecrets.scope, "pool"),
+      ),
+    )
     .limit(1);
 
-  if (bot?.poolId) {
-    const [row] = await db
-      .select({ encryptedValue: poolSecrets.encryptedValue })
-      .from(poolSecrets)
-      .where(
-        and(
-          eq(poolSecrets.poolId, bot.poolId),
-          eq(poolSecrets.secretName, "COMPOSIO_API_KEY"),
-          eq(poolSecrets.scope, "pool"),
-        ),
-      )
-      .limit(1);
-
-    if (row) {
-      try {
-        return decrypt(row.encryptedValue);
-      } catch {
-        // Fall through to env var
-      }
+  let apiKey = process.env.COMPOSIO_API_KEY;
+  if (row) {
+    try {
+      apiKey = decrypt(row.encryptedValue);
+    } catch {
+      apiKey = process.env.COMPOSIO_API_KEY;
     }
   }
 
-  return process.env.COMPOSIO_API_KEY;
+  if (!apiKey) {
+    return {
+      ok: false,
+      status: 502,
+      message: "Integration service not configured (missing COMPOSIO_API_KEY)",
+    };
+  }
+
+  return { ok: true, apiKey, botId: bot.id, poolId: bot.poolId };
 }
 
 async function getCredentialHints(
@@ -450,14 +517,11 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
     }
 
     // Handle oauth2 — validate API key BEFORE upserting
-    const composioApiKey = await resolveComposioApiKeyForUser(userId);
-    if (!composioApiKey) {
+    const composioContext = await resolveComposioUserContext(userId);
+    if (!composioContext.ok) {
       return c.json(
-        {
-          message:
-            "Integration service not configured (missing COMPOSIO_API_KEY)",
-        },
-        502,
+        { message: composioContext.message },
+        composioContext.status,
       );
     }
 
@@ -493,7 +557,7 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
     }
 
     const result = await initializeOAuthConnection(
-      composioApiKey,
+      composioContext.apiKey,
       toolkitSlug,
       userId,
       oauthState,
@@ -575,19 +639,16 @@ export function registerIntegrationRoutes(app: OpenAPIHono<AppBindings>) {
       }
     }
 
-    const composioApiKey = await resolveComposioApiKeyForUser(userId);
-    if (!composioApiKey) {
+    const composioContext = await resolveComposioUserContext(userId);
+    if (!composioContext.ok) {
       return c.json(
-        {
-          message:
-            "Integration service not configured (missing COMPOSIO_API_KEY)",
-        },
-        502,
+        { message: composioContext.message },
+        composioContext.status,
       );
     }
 
     const composioStatus = await checkOAuthStatus(
-      composioApiKey,
+      composioContext.apiKey,
       userId,
       integration.toolkitSlug,
     );
