@@ -149,34 +149,72 @@ MAJOR.MINOR.PATCH[-channel.N]
 - **MINOR**: 新功能（新 sidecar、新 IPC 通道）
 - **PATCH**: Bug 修复、小优化
 
-### 3.2 组件版本
+### 3.2 组件版本 — 统一版本号
 
-每个可独立更新的组件维护自己的版本号:
+所有 sidecar 组件**共享同一个版本号**（与应用版本一致），不独立维护版本。统一发布、按需下载：
+
+- 发布时所有组件同时构建、打包、上传
+- 客户端检查更新时对比每个组件的 sha256，只下载**实际有变更**的组件
+- 避免组件间版本不匹配导致的兼容性问题
 
 ```json
 // components/manifest.json (R2 上)
 {
   "schemaVersion": 1,
+  "version": "1.2.0",
+  "minShellVersion": "1.0.0",
   "components": {
-    "openclaw": {
-      "version": "2026.3.15",
-      "minShellVersion": "1.0.0",
-      "maxShellVersion": "1.x.x",
+    "web": {
       "platforms": {
         "darwin-arm64": {
-          "url": "/components/openclaw/2026.3.15-darwin-arm64.tar.gz",
-          "sha256": "abc123...",
-          "size": 52428800
-        },
-        "darwin-x64": {
-          "url": "/components/openclaw/2026.3.15-darwin-x64.tar.gz",
-          "sha256": "def456...",
-          "size": 55000000
-        },
-        "win32-x64": {
-          "url": "/components/openclaw/2026.3.15-win32-x64.tar.gz",
-          "sha256": "ghi789...",
-          "size": 48000000
+          "url": "/components/1.2.0/web-darwin-arm64.tar.gz",
+          "sha256": "aaa111...",
+          "size": 8000000
+        }
+      }
+    },
+    "api": {
+      "platforms": {
+        "darwin-arm64": {
+          "url": "/components/1.2.0/api-darwin-arm64.tar.gz",
+          "sha256": "bbb222...",
+          "size": 15000000
+        }
+      }
+    },
+    "gateway": {
+      "platforms": {
+        "darwin-arm64": {
+          "url": "/components/1.2.0/gateway-darwin-arm64.tar.gz",
+          "sha256": "ccc333...",
+          "size": 12000000
+        }
+      }
+    },
+    "openclaw": {
+      "platforms": {
+        "darwin-arm64": {
+          "url": "/components/1.2.0/openclaw-darwin-arm64.tar.gz",
+          "sha256": "ddd444...",
+          "size": 52000000
+        }
+      }
+    },
+    "session-chat": {
+      "platforms": {
+        "darwin-arm64": {
+          "url": "/components/1.2.0/session-chat-darwin-arm64.tar.gz",
+          "sha256": "eee555...",
+          "size": 10000000
+        }
+      }
+    },
+    "pglite": {
+      "platforms": {
+        "darwin-arm64": {
+          "url": "/components/1.2.0/pglite-darwin-arm64.tar.gz",
+          "sha256": "fff666...",
+          "size": 5000000
         }
       }
     }
@@ -184,16 +222,18 @@ MAJOR.MINOR.PATCH[-channel.N]
 }
 ```
 
-### 3.3 版本兼容性矩阵
+**更新判断逻辑**: 客户端本地存储每个组件当前的 sha256，对比远程 manifest，sha256 不同的才下载。即使版本号从 1.1.0 → 1.2.0，如果某个组件的产物没变（sha256 相同），则跳过。
 
-Shell 和组件之间有兼容性约束:
+### 3.3 组件清单
 
-```
-Shell v1.0.x ←→ OpenClaw 2026.3.10 ~ 2026.3.x
-Shell v1.1.x ←→ OpenClaw 2026.3.15 ~ 2026.4.x
-```
-
-通过 manifest 中的 `minShellVersion` / `maxShellVersion` 字段控制。客户端检查更新时会自动过滤不兼容的组件版本。
+| 组件 | 内容 | 更新后动作 |
+|------|------|-----------|
+| `web` | 前端静态文件 | 刷新 webview |
+| `api` | Hono API server + migrations | 重启 api sidecar，自动 migrate |
+| `gateway` | Gateway 服务 | 重启 gateway sidecar |
+| `openclaw` | OpenClaw npm 包 | 重启 gateway（由 gateway 启动 openclaw） |
+| `session-chat` | Next.js 聊天应用 | 重启 session-chat sidecar |
+| `pglite` | PGlite socket server | 重启 pglite sidecar（需先停 api） |
 
 ### 3.4 更新通道 (Channels)
 
@@ -859,16 +899,19 @@ ws.on("desktop:update-available", () => {
 
 | 场景 | 全量更新 | 组件更新 |
 |------|---------|---------|
-| Electron Shell 代码变更 | ✅ | ❌ |
-| 前端 UI 变更 | ✅ | ❌ |
-| API / Gateway 逻辑变更 | ✅ | ❌ |
-| OpenClaw 版本升级 | 可以但浪费 | ✅ 推荐 |
-| OpenClaw 紧急修复 | 太慢 | ✅ 必须 |
+| Electron Shell / IPC / preload 变更 | ✅ 必须 | ❌ |
+| 前端 UI 变更 | 可以但浪费 | ✅ 推荐 (只更新 web 组件) |
+| API 逻辑变更 | 可以但浪费 | ✅ 推荐 (只更新 api 组件) |
+| Gateway 逻辑变更 | 可以但浪费 | ✅ 推荐 (只更新 gateway 组件) |
+| OpenClaw 版本升级 | 可以但浪费 | ✅ 推荐 (只更新 openclaw 组件) |
+| Session Chat 变更 | 可以但浪费 | ✅ 推荐 |
+| PGlite 升级 | ✅ 推荐 (涉及数据迁移) | 可以但需谨慎 |
 
-OpenClaw 是变更频率最高的组件，且体积较大。独立更新可以:
-- 减少用户下载量（只下载 OpenClaw 包，而非整个应用）
-- 加快发布速度（无需重新构建整个 Electron 应用）
-- 支持紧急热修复
+**只有 Electron Shell 本身的变更才需要全量更新**。其他所有 sidecar 组件都走组件级更新：
+- 所有组件同一版本号，统一发布
+- 客户端按 sha256 差异只下载实际变更的组件
+- 减少用户下载量（只下载变更的包，而非整个应用）
+- 加快发布速度（无需重新构建+签名整个 Electron 应用）
 
 ### 7.2 组件存储位置
 
@@ -880,10 +923,19 @@ Windows: %APPDATA%/Nexu/
 
 目录结构:
 ├── components/
-│   ├── manifest.local.json      # 本地已安装组件版本清单 (含当前版本路径)
-│   └── openclaw/
-│       ├── 0.5.2/               # 初始版本 (从应用包拷贝)
-│       └── 0.5.3/               # 更新版本 (下载安装)
+│   ├── manifest.local.json      # 本地已安装组件版本清单 (含每个组件的路径和 sha256)
+│   ├── web/
+│   │   └── 1.2.0/               # 版本目录
+│   ├── api/
+│   │   └── 1.2.0/
+│   ├── gateway/
+│   │   └── 1.2.0/
+│   ├── openclaw/
+│   │   └── 1.2.0/
+│   ├── session-chat/
+│   │   └── 1.2.0/
+│   └── pglite/
+│       └── 1.2.0/
 ├── data/
 │   ├── pglite/                  # PGlite 数据目录
 │   └── openclaw/                # OpenClaw 状态/技能
@@ -896,33 +948,34 @@ Windows: %APPDATA%/Nexu/
 ```json
 // manifest.local.json 示例
 {
+  "version": "1.2.0",
   "components": {
-    "openclaw": {
-      "version": "0.5.3",
-      "path": "/Users/xxx/Library/Application Support/Nexu/components/openclaw/0.5.3",
-      "installedAt": "2026-03-15T10:00:00Z"
-    }
-  }
+    "web":          { "sha256": "aaa111...", "path": ".../components/web/1.2.0" },
+    "api":          { "sha256": "bbb222...", "path": ".../components/api/1.2.0" },
+    "gateway":      { "sha256": "ccc333...", "path": ".../components/gateway/1.2.0" },
+    "openclaw":     { "sha256": "ddd444...", "path": ".../components/openclaw/1.2.0" },
+    "session-chat": { "sha256": "eee555...", "path": ".../components/session-chat/1.2.0" },
+    "pglite":       { "sha256": "fff666...", "path": ".../components/pglite/1.2.0" }
+  },
+  "updatedAt": "2026-03-15T10:00:00Z"
 }
 ```
 
-> **OpenClaw 版本号**: 直接沿用其 npm 包的 semver 版本号（如 `0.5.3`），不另起日历版本体系。
-
-**manifests.ts 需要动态解析 OpenClaw 路径**:
+**manifests.ts 需要动态解析 sidecar 路径**:
 
 ```typescript
-function getOpenClawDir(): string {
+function getSidecarDir(name: string): string {
   if (app.isPackaged) {
     // 优先从 userData/components 加载（组件更新后的版本）
     const localManifest = loadLocalManifestSync();
-    if (localManifest?.components?.openclaw?.path) {
-      return localManifest.components.openclaw.path;
+    if (localManifest?.components?.[name]?.path) {
+      return localManifest.components[name].path;
     }
     // 回退到应用包内的 bundled 版本
-    return path.join(process.resourcesPath, "sidecar", "openclaw");
+    return path.join(process.resourcesPath, "sidecar", name);
   }
   // 开发模式
-  return path.resolve(__dirname, "../../.tmp/sidecars/openclaw");
+  return path.resolve(__dirname, `../../.tmp/sidecars/${name}`);
 }
 ```
 
@@ -960,7 +1013,9 @@ interface PlatformArtifact {
 }
 
 interface LocalManifest {
-  components: Record<string, { version: string; path: string; installedAt: string }>;
+  version: string;
+  components: Record<string, { sha256: string; path: string }>;
+  updatedAt: string;
 }
 
 export class ComponentUpdater {
@@ -974,7 +1029,7 @@ export class ComponentUpdater {
     this.localManifestPath = path.join(this.componentsDir, "manifest.local.json");
   }
 
-  /** 检查所有组件是否有更新 */
+  /** 检查哪些组件需要更新 (按 sha256 差异判断) */
   async checkForUpdates(): Promise<ComponentUpdate[]> {
     const platform = `${process.platform}-${process.arch}`;
     const shellVersion = app.getVersion();
@@ -984,33 +1039,29 @@ export class ComponentUpdater {
     if (!res.ok) return [];
     const remote: ComponentManifest = await res.json();
 
+    // 检查 shell 版本兼容性
+    if (remote.minShellVersion && semver.lt(shellVersion, remote.minShellVersion)) {
+      console.log("[component-updater] shell version too old, need full update");
+      return [];
+    }
+
     // 读取本地 manifest
     const local = await this.loadLocalManifest();
 
     const updates: ComponentUpdate[] = [];
 
     for (const [name, info] of Object.entries(remote.components)) {
-      // 检查平台支持
       const artifact = info.platforms[platform];
       if (!artifact) continue;
 
-      // 检查 shell 版本兼容性
-      if (!semver.satisfies(shellVersion, `>=${info.minShellVersion} <=${info.maxShellVersion}`)) {
-        continue;
-      }
-
-      // 检查是否需要更新
-      const localVersion = local.components[name]?.version;
-      if (localVersion && semver.gte(localVersion, info.version)) {
-        continue;
-      }
+      // 按 sha256 判断是否有变更 (同一版本号下某些组件可能没变)
+      const localSha = local.components[name]?.sha256;
+      if (localSha === artifact.sha256) continue; // 没变，跳过
 
       updates.push({
         name,
-        currentVersion: localVersion || "none",
-        newVersion: info.version,
+        newVersion: remote.version,
         artifact,
-        releaseNotes: info.releaseNotes,
       });
     }
 
@@ -1048,41 +1099,44 @@ export class ComponentUpdater {
     await extract({ file: tempFile, cwd: versionDir });
     await fs.rm(tempFile, { force: true });
 
-    // 4. 更新本地 manifest (记录版本路径，不使用 symlink)
+    // 4. 更新本地 manifest (记录路径和 sha256)
     const local = await this.loadLocalManifest();
+    local.version = newVersion;
     local.components[name] = {
-      version: newVersion,
+      sha256: artifact.sha256,
       path: versionDir,
-      installedAt: new Date().toISOString(),
     };
+    local.updatedAt = new Date().toISOString();
     await fs.writeFile(this.localManifestPath, JSON.stringify(local, null, 2));
 
     console.log(`[component-updater] ${name} updated to ${newVersion}`);
   }
 
-  /** 首次启动: 从应用包拷贝内置组件到 userData */
+  /** 首次启动: 从应用包拷贝所有内置组件到 userData */
   async bootstrapFromBundle(bundledSidecarDir: string) {
     const local = await this.loadLocalManifest();
+    if (local.version) return; // 已经 bootstrap 过
 
-    // OpenClaw: 从应用包内的 sidecar/openclaw 拷贝
-    const bundledOpenClaw = path.join(bundledSidecarDir, "openclaw");
-    if (await this.exists(bundledOpenClaw) && !local.components.openclaw) {
-      // 读取 openclaw 的 metadata 获取版本
-      const meta = JSON.parse(
-        await fs.readFile(path.join(bundledOpenClaw, "metadata.json"), "utf-8"),
-      );
-      const version = meta.version || "bundled";
-      const targetDir = path.join(this.componentsDir, "openclaw", version);
+    const version = app.getVersion();
+    const componentNames = ["web", "api", "gateway", "openclaw", "session-chat", "pglite"];
 
-      await fs.cp(bundledOpenClaw, targetDir, { recursive: true });
+    for (const name of componentNames) {
+      const bundledDir = path.join(bundledSidecarDir, name);
+      if (!(await this.exists(bundledDir))) continue;
 
-      local.components.openclaw = {
-        version,
+      const targetDir = path.join(this.componentsDir, name, version);
+      await fs.cp(bundledDir, targetDir, { recursive: true });
+
+      // 计算 sha256 (对 tar 或目录内容)
+      local.components[name] = {
+        sha256: "bundled", // 首次 bootstrap 标记
         path: targetDir,
-        installedAt: new Date().toISOString(),
       };
-      await fs.writeFile(this.localManifestPath, JSON.stringify(local, null, 2));
     }
+
+    local.version = version;
+    local.updatedAt = new Date().toISOString();
+    await fs.writeFile(this.localManifestPath, JSON.stringify(local, null, 2));
   }
 
   // ---- 内部方法 ----
@@ -1142,21 +1196,43 @@ interface ComponentUpdate {
 }
 ```
 
-### 7.4 OpenClaw 更新后重启
+### 7.4 组件更新后重启策略
 
-组件更新后，只需重启对应的 sidecar，不需要重启整个应用:
+组件更新后，只需重启变更的 sidecar，不需要重启整个应用:
 
 ```typescript
-// 更新 OpenClaw 后
-await componentUpdater.installUpdate(openclawUpdate, (p) => {
-  win.webContents.send("component:progress", { name: "openclaw", percent: p });
-});
+// 按依赖顺序重启变更的组件
+const RESTART_ORDER: Record<string, string[]> = {
+  "pglite":       ["api", "pglite"],           // PGlite 变更需先停 api 再重启
+  "api":          ["api"],                      // API 重启会自动 migrate
+  "gateway":      ["gateway"],                  // Gateway 重启会自动重启 OpenClaw
+  "openclaw":     ["gateway"],                  // OpenClaw 由 Gateway 启动
+  "web":          [],                           // Web 是静态文件，刷新 webview 即可
+  "session-chat": ["session-chat"],
+};
 
-// 重启 Gateway (它会自动启动新版 OpenClaw)
-await orchestrator.stopOne("gateway");
-await orchestrator.startOne("gateway");
+async function restartUpdatedComponents(
+  updatedComponents: string[],
+  orchestrator: RuntimeOrchestrator,
+  win: BrowserWindow,
+) {
+  // 收集需要重启的 sidecar (去重)
+  const toRestart = new Set<string>();
+  for (const comp of updatedComponents) {
+    for (const sidecar of RESTART_ORDER[comp] || []) {
+      toRestart.add(sidecar);
+    }
+  }
 
-// 用户无感知，无需重启应用
+  // 按安全顺序: 先停，再启
+  for (const unit of toRestart) await orchestrator.stopOne(unit);
+  for (const unit of toRestart) await orchestrator.startOne(unit);
+
+  // Web 组件只需刷新 webview
+  if (updatedComponents.includes("web")) {
+    win.webContents.send("component:web-updated"); // renderer 刷新 webview
+  }
+}
 ```
 
 ### 7.5 组件更新的 CI 流程
@@ -1433,32 +1509,30 @@ export class StartupHealthCheck {
 组件更新天然支持回滚，因为旧版本保留在 userData 中:
 
 ```typescript
-// ComponentUpdater 增加回滚方法
-async rollback(componentName: string): Promise<void> {
-  const compDir = path.join(this.componentsDir, componentName);
+// ComponentUpdater 增加回滚方法 — 整体回退到上一个版本
+async rollbackAll(): Promise<void> {
   const local = await this.loadLocalManifest();
-  const currentVersion = local.components[componentName]?.version;
+  const currentVersion = local.version;
 
-  if (!currentVersion) throw new Error(`No version info for ${componentName}`);
+  // 遍历所有组件，查找上一个版本目录
+  for (const [name, info] of Object.entries(local.components)) {
+    const compDir = path.join(this.componentsDir, name);
+    const versions = (await fs.readdir(compDir, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort(semver.rcompare);
 
-  // 查找上一个版本
-  const versions = (await fs.readdir(compDir, { withFileTypes: true }))
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort(semver.rcompare);
+    const prevVersion = versions.find((v) => v !== currentVersion);
+    if (prevVersion) {
+      local.components[name].path = path.join(compDir, prevVersion);
+      local.components[name].sha256 = "rollback";
+    }
+  }
 
-  const prevVersion = versions.find((v) => v !== currentVersion);
-  if (!prevVersion) throw new Error(`No previous version to rollback for ${componentName}`);
-
-  // 更新 local manifest 指向旧版本路径
-  local.components[componentName] = {
-    version: prevVersion,
-    path: path.join(compDir, prevVersion),
-    installedAt: new Date().toISOString(),
-  };
+  local.version = "rollback";
+  local.updatedAt = new Date().toISOString();
   await fs.writeFile(this.localManifestPath, JSON.stringify(local, null, 2));
-
-  console.log(`[component-updater] ${componentName} rolled back: ${currentVersion} → ${prevVersion}`);
+  console.log(`[component-updater] rolled back all components from ${currentVersion}`);
 }
 ```
 
@@ -1636,13 +1710,14 @@ desktop/changelogs/
 - [ ] 配置 CI 签名 + Notarization
 - [ ] (可选) Windows EV 证书
 
-### 阶段三: OpenClaw 组件独立更新
+### 阶段三: 全组件独立更新
 
-- [ ] 实现 `ComponentUpdater`（用 manifest.local.json 记录路径，不用 symlink）
-- [ ] 修改 Gateway 启动逻辑: 从 userData/components 加载 OpenClaw
-- [ ] 首次安装时从应用包 bootstrap 到 userData
-- [ ] 创建 `component-release.yml` CI workflow
-- [ ] OpenClaw 更新后只重启 Gateway，不重启整个应用
+- [ ] 实现 `ComponentUpdater`（用 manifest.local.json 记录路径+sha256，不用 symlink）
+- [ ] 修改 `manifests.ts`: 所有 sidecar 路径从 userData/components 加载
+- [ ] 首次安装时从应用包 bootstrap 所有组件到 userData
+- [ ] 创建 `component-release.yml` CI workflow（统一版本号，所有组件同时构建上传）
+- [ ] 实现按 sha256 差异只下载变更的组件
+- [ ] 实现组件更新后按依赖顺序重启对应 sidecar
 
 ### 阶段四: 增强
 
@@ -1661,11 +1736,11 @@ desktop/changelogs/
 |--------|---------|------|
 | 分发基础设施 | R2 Public Access (阶段零) → Worker (阶段四) | 最小起步成本 |
 | 全量更新 | electron-updater + generic provider | 标准方案，支持差分 |
-| 组件版本切换 | manifest.local.json 记录路径 | 跨平台兼容，不依赖 symlink |
-| OpenClaw 版本号 | 沿用 npm 包 semver | 不另起版本体系 |
+| 组件版本切换 | manifest.local.json 记录路径+sha256 | 跨平台兼容，不依赖 symlink |
+| 组件版本策略 | 所有组件统一版本号，按 sha256 差异下载 | 避免版本不匹配，减少下载量 |
 | 签名 | macOS 必签 (否则 Gatekeeper 拒绝) | Windows 可延后 |
 | CI 触发 | git tag `v*` | 简单可靠 |
-| 组件更新粒度 | 先只做 OpenClaw | 其他组件变更跟 Shell 一起发 |
+| 组件更新粒度 | 所有 sidecar 都支持组件更新 | 只有 Shell 变更才需全量更新 |
 | 回滚 | 组件: 保留旧版本目录; 全量: 健康检查 + 提示重装 | 组件回滚简单，全量回滚困难 |
 
 ---
