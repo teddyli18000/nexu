@@ -8,7 +8,7 @@
 1. [概述](#1-概述)
 2. [架构总览](#2-架构总览)
 3. [版本策略](#3-版本策略)
-4. [基础设施: Cloudflare R2 + Worker](#4-基础设施-cloudflare-r2--worker)
+4. [基础设施: 阿里云 OSS + GitHub Release](#4-基础设施-阿里云-oss--github-release)
 5. [CI/CD 自动化发布流水线](#5-cicd-自动化发布流水线)
 6. [客户端更新机制](#6-客户端更新机制)
 7. [组件级独立更新](#7-组件级独立更新)
@@ -43,7 +43,7 @@ Nexu Desktop 是一个 Electron 37 桌面客户端，采用 sidecar 架构，内
 
 1. **全量更新**: 应用整包更新，保证版本一致性（阶段一）
 2. **组件独立更新**: OpenClaw 等高频变更组件可独立热更新（阶段二）
-3. **国内可用**: 基于 Cloudflare R2，无需翻墙即可下载更新
+3. **全球可用**: 国内走阿里云 OSS，海外走 GitHub Release
 4. **自动化发布**: git tag → CI 构建 → 签名 → 上传 → 用户收到通知，全自动
 5. **安全可靠**: 代码签名、hash 校验、失败回滚
 
@@ -69,40 +69,37 @@ Nexu Desktop 是一个 Electron 37 桌面客户端，采用 sidecar 架构，内
 │  │ 1. Build (macOS arm64/x64, Windows) │               │
 │  │ 2. Code Sign + Notarize            │               │
 │  │ 3. Generate latest.yml / manifest   │               │
-│  │ 4. Upload → Cloudflare R2           │               │
-│  │ 5. Purge CDN cache                  │               │
+│  │ 4. Upload → 阿里云 OSS (国内)       │               │
+│  │ 5. Upload → GitHub Release (海外)   │               │
 │  │ 6. (可选) API 广播 update event      │               │
 │  └──────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│                 分发基础设施 (Serve)                      │
+│              分发基础设施 (Serve) — 双源                  │
 │                                                         │
-│  Cloudflare R2 Bucket: nexu-releases                    │
-│  ┌────────────────────────────────────────┐             │
-│  │ /desktop/                              │             │
-│  │   ├── latest.yml          (Win meta)   │             │
-│  │   ├── latest-mac.yml      (Mac meta)   │             │
-│  │   ├── Nexu-1.2.0-arm64.dmg            │             │
-│  │   ├── Nexu-1.2.0-arm64-mac.zip        │             │
-│  │   ├── Nexu-1.2.0-arm64-mac.zip.blockmap│            │
-│  │   ├── Nexu-1.2.0.exe                  │             │
-│  │   ├── Nexu-1.2.0.exe.blockmap         │             │
-│  │   └── ...                              │             │
-│  │ /components/                           │             │
-│  │   ├── manifest.json       (组件清单)    │             │
-│  │   ├── openclaw/                        │             │
-│  │   │   ├── 2026.3.15-darwin-arm64.tar.gz│             │
-│  │   │   └── 2026.3.15-win32-x64.tar.gz  │             │
-│  │   └── ...                              │             │
-│  └────────────────────────────────────────┘             │
-│       │                                                 │
-│       ▼                                                 │
-│  Cloudflare Worker: nexu-releases-worker                │
-│  (可选, 提供版本查询 API / 下载统计 / 访问控制)           │
-│       │                                                 │
-│       ▼                                                 │
-│  自定义域名: releases.nexu.space                         │
+│  ┌── 国内: 阿里云 OSS ──────────────────────┐           │
+│  │  Bucket: nexu-releases                   │           │
+│  │  域名: releases.nexu.space (CDN 加速)    │           │
+│  │  ├── desktop/{beta,stable}/              │           │
+│  │  │   ├── latest-mac.yml                  │           │
+│  │  │   ├── Nexu-1.2.0-arm64.dmg           │           │
+│  │  │   ├── Nexu-1.2.0-arm64-mac.zip       │           │
+│  │  │   └── ...                             │           │
+│  │  └── components/                         │           │
+│  │      ├── manifest.json                   │           │
+│  │      └── 1.2.0/                          │           │
+│  └──────────────────────────────────────────┘           │
+│                                                         │
+│  ┌── 海外: GitHub Release ──────────────────┐           │
+│  │  Repo: refly-ai/nexu                     │           │
+│  │  Release assets:                         │           │
+│  │  ├── latest-mac.yml                      │           │
+│  │  ├── Nexu-1.2.0-arm64.dmg               │           │
+│  │  ├── Nexu-1.2.0-arm64-mac.zip           │           │
+│  │  └── ...                                 │           │
+│  │  (组件包也作为 release assets 上传)       │           │
+│  └──────────────────────────────────────────┘           │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
@@ -111,19 +108,17 @@ Nexu Desktop 是一个 Electron 37 桌面客户端，采用 sidecar 架构，内
 │  Nexu Desktop (Electron)                                │
 │  ┌──────────────────────────────────────┐               │
 │  │ UpdateManager                        │               │
+│  │  ├── 启动时探测网络环境 → 选源         │               │
+│  │  │   国内 → releases.nexu.space (OSS) │               │
+│  │  │   海外 → GitHub Release API        │               │
 │  │  ├── 启动后 60s 首次检查              │               │
 │  │  ├── 之后每 4h 轮询                   │               │
-│  │  ├── WS 推送触发立即检查 (可选)        │               │
 │  │  │                                   │               │
 │  │  ├── 全量更新 (electron-updater)      │               │
-│  │  │   GET releases.nexu.space/        │               │
-│  │  │       desktop/latest-mac.yml      │               │
 │  │  │   → 对比版本 → 下载 → 安装重启     │               │
 │  │  │                                   │               │
 │  │  └── 组件更新 (ComponentUpdater)      │               │
-│  │      GET releases.nexu.space/        │               │
-│  │          components/manifest.json    │               │
-│  │      → 对比版本 → 下载 → 替换 → 重启组件│              │
+│  │      → 对比 sha256 → 下载 → 重启组件  │               │
 │  └──────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -246,105 +241,91 @@ MAJOR.MINOR.PATCH[-channel.N]
 
 ---
 
-## 4. 基础设施: Cloudflare R2 + Worker
+## 4. 基础设施: 阿里云 OSS + GitHub Release
 
-### 4.1 为什么选 R2
+### 4.1 双源策略
 
-- 你们已有 Cloudflare 账号（tunnel、3 个 Worker）
-- **出站流量永久免费**（vs S3 按 GB 收费）
-- 中国大陆基本可访问（比 GitHub/S3 好很多）
-- 10GB 免费存储 + 1000 万次/月免费读取
+| | 国内 (阿里云 OSS) | 海外 (GitHub Release) |
+|---|---|---|
+| **用途** | 国内用户下载更新 | 海外用户下载更新 |
+| **优势** | CDN 加速，国内低延迟 | 零运维，天然可用 |
+| **成本** | 存储 ¥0.12/GB/月，流量 ¥0.50/GB (CDN) | 免费 (public repo) |
+| **全量包** | ✅ | ✅ |
+| **组件包** | ✅ | ✅ (作为 release assets) |
+| **元信息** | `latest-mac.yml` 等 | `latest-mac.yml` 作为 asset |
 
-### 4.2 R2 Bucket 设置
+### 4.2 阿里云 OSS 设置
 
 ```bash
-# 创建 bucket
-wrangler r2 bucket create nexu-releases
+# 创建 Bucket (杭州区域，公共读)
+# 控制台: oss.console.aliyun.com → 创建 Bucket
+# Bucket: nexu-releases
+# 区域: oss-cn-hangzhou
+# 读写权限: 公共读
 
-# 绑定自定义域名 (Cloudflare Dashboard)
-# nexu-releases bucket → Settings → Custom Domains → releases.nexu.space
+# 绑定自定义域名 + CDN 加速
+# Bucket → 传输管理 → 域名管理 → 绑定 releases.nexu.space
+# 开启 CDN 加速 (阿里云 CDN 自动配置)
 ```
 
-Bucket 目录结构:
+OSS 目录结构:
 
 ```
 nexu-releases/
-├── desktop/                          # 应用全量包
-│   ├── latest.yml                    # Windows stable 元信息
-│   ├── latest-mac.yml                # macOS stable 元信息
-│   ├── beta.yml                      # Windows beta 元信息
-│   ├── beta-mac.yml                  # macOS beta 元信息
-│   ├── Nexu-1.0.0-arm64.dmg         # macOS ARM 安装包 (首次安装用)
-│   ├── Nexu-1.0.0-arm64-mac.zip     # macOS ARM 更新包 (自动更新用)
-│   ├── Nexu-1.0.0-arm64-mac.zip.blockmap  # 差分更新 blockmap
-│   ├── Nexu-1.0.0-x64.dmg
-│   ├── Nexu-1.0.0-x64-mac.zip
-│   ├── Nexu-1.0.0.exe               # Windows 安装包
-│   ├── Nexu-1.0.0.exe.blockmap
-│   └── archive/                      # 历史版本归档
-│       └── 0.9.0/
-├── components/                       # 组件独立更新
-│   ├── manifest.json                 # 组件版本清单
-│   └── openclaw/
-│       ├── 2026.3.15-darwin-arm64.tar.gz
-│       ├── 2026.3.15-darwin-x64.tar.gz
-│       └── 2026.3.15-win32-x64.tar.gz
-└── _meta/                            # 元数据
-    └── releases.json                 # 所有发布版本记录
+├── desktop/
+│   ├── stable/                        # 正式版
+│   │   ├── latest.yml                 # Windows stable 元信息
+│   │   ├── latest-mac.yml             # macOS stable 元信息
+│   │   ├── Nexu-1.0.0-arm64.dmg
+│   │   ├── Nexu-1.0.0-arm64-mac.zip
+│   │   ├── Nexu-1.0.0-arm64-mac.zip.blockmap
+│   │   ├── Nexu-1.0.0.exe
+│   │   └── Nexu-1.0.0.exe.blockmap
+│   ├── beta/                          # 测试版
+│   │   ├── latest-mac.yml
+│   │   └── ...
+│   └── archive/                       # 历史版本归档
+│       └── 1.0.0/
+├── components/                        # 组件独立更新
+│   ├── manifest.json                  # 组件版本清单
+│   └── 1.2.0/                         # 按版本存放
+│       ├── web-darwin-arm64.tar.gz
+│       ├── api-darwin-arm64.tar.gz
+│       └── ...
+├── desktop/policy.json                # 强制更新策略
+└── desktop/changelogs/                # Changelog
 ```
 
-### 4.3 可选: Worker API
+### 4.3 GitHub Release
 
-在 `apps/router` 同级创建 `apps/releases-worker`，或直接用 R2 Public Access。
+GitHub Release 天然支持大文件（每个 asset 最大 2GB），无需额外配置:
 
-**方案 A: R2 Public Access（推荐起步）**
+- **Stable**: Published Release，assets 包含安装包 + yml 元信息
+- **Beta**: Pre-release，assets 同上
+- **组件包**: 作为 release assets 一并上传
 
-直接开启 R2 bucket 的公开访问并绑定自定义域名，无需额外 Worker。electron-updater 直接请求静态文件。
+electron-updater 原生支持 `provider: github`，海外用户直接使用。
 
-```
-releases.nexu.space/desktop/latest-mac.yml → R2 静态文件
-```
-
-**方案 B: Worker API（后续增强）**
-
-当需要下载统计、访问控制、动态路由时，加一层 Worker:
-
-```toml
-# apps/releases-worker/wrangler.toml
-name = "nexu-releases-worker"
-main = "src/index.ts"
-compatibility_date = "2025-01-01"
-
-[[r2_buckets]]
-binding = "RELEASES"
-bucket_name = "nexu-releases"
-
-[routes]
-pattern = "releases.nexu.space/*"
-```
+### 4.4 客户端选源逻辑
 
 ```typescript
-// apps/releases-worker/src/index.ts
-export default {
-  async fetch(request: Request, env: { RELEASES: R2Bucket }) {
-    const url = new URL(request.url);
-    const key = url.pathname.slice(1); // 去掉前导 /
+// 启动时探测，缓存结果
+async function detectUpdateSource(): Promise<"oss" | "github"> {
+  // 1. 用户手动设置优先
+  const userPref = store.get("updateSource");
+  if (userPref) return userPref;
 
-    // 直接代理 R2
-    const object = await env.RELEASES.get(key);
-    if (!object) return new Response("Not Found", { status: 404 });
-
-    return new Response(object.body, {
-      headers: {
-        "content-type": object.httpMetadata?.contentType || "application/octet-stream",
-        "cache-control": key.includes("latest")
-          ? "public, max-age=300"   // 元信息缓存 5 分钟
-          : "public, max-age=86400", // 安装包缓存 1 天
-        "etag": object.httpEtag,
-      },
+  // 2. 尝试访问阿里云 OSS (国内快)
+  try {
+    const res = await fetch("https://releases.nexu.space/ping", {
+      signal: AbortSignal.timeout(3000),
     });
-  },
-};
+    if (res.ok) return "oss";
+  } catch {}
+
+  // 3. 回退到 GitHub
+  return "github";
+}
 ```
 
 ---
@@ -502,7 +483,7 @@ jobs:
           path: apps/desktop/release/*
           retention-days: 30
 
-  # ---- 上传到 R2 ----
+  # ---- 上传到阿里云 OSS + GitHub Release ----
   publish:
     needs: [prepare, build]
     runs-on: ubuntu-latest
@@ -515,61 +496,57 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Upload to R2
+      - name: Upload to Alibaba Cloud OSS (国内源)
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: oss-cn-hangzhou.aliyuncs.com
+          OSS_BUCKET: nexu-releases
           CHANNEL: ${{ needs.prepare.outputs.channel }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          curl -O https://downloads.rclone.org/rclone-current-linux-amd64.deb
-          sudo dpkg -i rclone-current-linux-amd64.deb
-
-          rclone config create r2 s3 \
-            provider=Cloudflare \
-            access_key_id=$AWS_ACCESS_KEY_ID \
-            secret_access_key=$AWS_SECRET_ACCESS_KEY \
-            endpoint=$R2_ENDPOINT \
-            no_check_bucket=true
+          # 安装 ossutil
+          curl -o ossutil https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-linux-amd64/ossutil64
+          chmod +x ossutil
+          ./ossutil config -e $OSS_ENDPOINT -i $OSS_ACCESS_KEY_ID -k $OSS_ACCESS_KEY_SECRET
 
           # 根据通道决定上传路径
           if [ "$CHANNEL" = "stable" ]; then
-            R2_DIR="desktop/stable"
+            OSS_DIR="desktop/stable"
           else
-            R2_DIR="desktop/beta"
+            OSS_DIR="desktop/beta"
           fi
 
           # 上传安装包、blockmap、元信息文件
-          rclone copy release-artifacts/ r2:nexu-releases/$R2_DIR/ \
-            --include "*.{exe,dmg,zip,blockmap,yml}" \
-            --transfers 4
+          ./ossutil cp -r release-artifacts/ oss://$OSS_BUCKET/$OSS_DIR/ \
+            --include "*.exe" --include "*.dmg" --include "*.zip" \
+            --include "*.blockmap" --include "*.yml" \
+            --jobs 4
 
-          # 归档到版本目录 (用于历史回溯和手动下载)
-          rclone copy release-artifacts/ \
-            r2:nexu-releases/desktop/archive/$VERSION/ \
-            --include "*.{exe,dmg,zip}" \
-            --transfers 4
+          # 归档到版本目录
+          ./ossutil cp -r release-artifacts/ oss://$OSS_BUCKET/desktop/archive/$VERSION/ \
+            --include "*.exe" --include "*.dmg" --include "*.zip" \
+            --jobs 4
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (海外源)
         env:
           GH_TOKEN: ${{ github.token }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           if [ "$CHANNEL" = "stable" ]; then
-            # 正式版：Published Release
+            # 正式版：Published Release (含安装包 + yml 元信息)
             gh release create "v$VERSION" \
               --title "Nexu Desktop v$VERSION" \
               --generate-notes \
-              release-artifacts/*.{dmg,exe}
+              release-artifacts/*.{dmg,exe,zip,blockmap,yml}
           else
-            # 测试版：Draft Release (不公开)
+            # 测试版：Pre-release
             gh release create "v$VERSION" \
               --title "Nexu Desktop v$VERSION (Beta)" \
               --prerelease \
               --generate-notes \
-              release-artifacts/*.{dmg,exe}
+              release-artifacts/*.{dmg,exe,zip,blockmap,yml}
           fi
 
       - name: Notify (stable only)
@@ -630,11 +607,16 @@ appId: com.nexu.desktop
 productName: Nexu
 copyright: Copyright © 2026 Nexu
 
-# 配置 generic provider 以便 electron-builder 生成 latest.yml 元信息文件
-# CI 构建时用 --publish never 阻止自动上传，手动用 rclone 上传到 R2
+# 双源发布配置:
+# - generic: 国内阿里云 OSS (生成 latest.yml 元信息)
+# - github: 海外 GitHub Release
+# CI 构建时用 --publish never 阻止自动上传，由 publish job 分别上传到 OSS 和 GitHub
 publish:
-  provider: generic
-  url: https://releases.nexu.space/desktop
+  - provider: generic
+    url: https://releases.nexu.space/desktop/stable
+  - provider: github
+    owner: refly-ai
+    repo: nexu
 
 directories:
   output: release
@@ -761,8 +743,8 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import type { RuntimeOrchestrator } from "../runtime/daemon-supervisor";
 
 interface UpdateManagerOptions {
-  /** 更新文件基础 URL */
-  feedUrl: string;
+  /** 更新源: oss (国内) 或 github (海外) */
+  source?: "oss" | "github";
   /** 检查间隔 (ms), 默认 4 小时 */
   checkInterval?: number;
   /** 首次检查延迟 (ms), 默认 60 秒 */
@@ -771,8 +753,13 @@ interface UpdateManagerOptions {
   autoDownload?: boolean;
 }
 
+const FEED_URLS = {
+  oss: "https://releases.nexu.space/desktop/stable",
+  github: "", // 使用 electron-updater 的 github provider
+} as const;
+
 const DEFAULT_OPTIONS: Required<UpdateManagerOptions> = {
-  feedUrl: "https://releases.nexu.space/desktop",
+  source: "oss",
   checkInterval: 4 * 60 * 60 * 1000,
   initialDelay: 60_000,
   autoDownload: false,
@@ -801,10 +788,18 @@ export class UpdateManager {
   // ---- 配置 ----
 
   private configure() {
-    autoUpdater.setFeedURL({
-      provider: "generic",
-      url: this.opts.feedUrl,
-    });
+    if (this.opts.source === "github") {
+      autoUpdater.setFeedURL({
+        provider: "github",
+        owner: "refly-ai",
+        repo: "nexu",
+      });
+    } else {
+      autoUpdater.setFeedURL({
+        provider: "generic",
+        url: FEED_URLS.oss,
+      });
+    }
     autoUpdater.autoDownload = this.opts.autoDownload;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowDowngrade = false;
@@ -858,6 +853,9 @@ export class UpdateManager {
     ipcMain.handle("update:set-channel", (_e, channel: string) => {
       this.setChannel(channel);
     });
+    ipcMain.handle("update:set-source", (_e, source: "oss" | "github") => {
+      this.setSource(source);
+    });
   }
 
   // ---- 公开方法 ----
@@ -890,6 +888,13 @@ export class UpdateManager {
   setChannel(channel: "stable" | "beta") {
     autoUpdater.channel = channel;
     // 切换后立即检查
+    this.checkNow();
+  }
+
+  /** 切换更新源 (国内/海外) */
+  setSource(source: "oss" | "github") {
+    this.opts.source = source;
+    this.configure(); // 重新配置 feedURL
     this.checkNow();
   }
 
@@ -936,6 +941,7 @@ const updateChannels = [
   "update:install",              // → 退出并安装
   "update:get-current-version",  // → 获取当前版本
   "update:set-channel",          // → 切换通道 stable/beta
+  "update:set-source",           // → 切换更新源 oss/github
 ] as const;
 
 // 新增 main→renderer 推送事件 (通过 webContents.send)
@@ -958,6 +964,7 @@ contextBridge.exposeInMainWorld("nexuUpdater", {
   install: () => ipcRenderer.invoke("update:install"),
   getVersion: () => ipcRenderer.invoke("update:get-current-version"),
   setChannel: (ch: string) => ipcRenderer.invoke("update:set-channel", ch),
+  setSource: (src: string) => ipcRenderer.invoke("update:set-source", src),
 
   // 事件监听
   onAvailable: (cb: (data: any) => void) =>
@@ -1122,8 +1129,11 @@ export class ComponentUpdater {
   private componentsDir: string;
   private localManifestPath: string;
 
-  constructor(baseUrl = "https://releases.nexu.space") {
-    this.baseUrl = baseUrl;
+  constructor(source: "oss" | "github" = "oss") {
+    // OSS: 直接从 CDN 拉; GitHub: 从 release assets 拉
+    this.baseUrl = source === "oss"
+      ? "https://releases.nexu.space"
+      : "https://github.com/refly-ai/nexu/releases/latest/download";
     this.componentsDir = path.join(app.getPath("userData"), "components");
     this.localManifestPath = path.join(this.componentsDir, "manifest.local.json");
   }
@@ -1405,27 +1415,43 @@ jobs:
           done
           cat hashes.txt
 
-      # 上传到 R2
-      - name: Upload to R2
+      # 上传到阿里云 OSS
+      - name: Upload to Alibaba Cloud OSS
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
         run: |
-          rclone copy artifacts/ \
-            r2:nexu-releases/components/${{ inputs.component }}/ \
-            --include "*.tar.gz"
+          curl -o ossutil https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-linux-amd64/ossutil64
+          chmod +x ossutil
+          ./ossutil config -e oss-cn-hangzhou.aliyuncs.com -i $OSS_ACCESS_KEY_ID -k $OSS_ACCESS_KEY_SECRET
+
+          ./ossutil cp -r artifacts/ oss://nexu-releases/components/${{ inputs.version }}/ \
+            --include "*.tar.gz" --jobs 4
 
       # 更新 manifest.json
       - name: Update manifest
         run: |
           # 下载现有 manifest
-          rclone copy r2:nexu-releases/components/manifest.json ./
+          ./ossutil cp oss://nexu-releases/components/manifest.json ./
 
-          # 用脚本更新 manifest (添加新版本、新平台 artifact)
+          # 用脚本更新 manifest
           node scripts/update-component-manifest.js \
             --component=${{ inputs.component }} \
             --version=${{ inputs.version }} \
             --hashes=hashes.txt
 
-          # 上传更新后的 manifest
-          rclone copy manifest.json r2:nexu-releases/components/
+          # 上传到 OSS
+          ./ossutil cp manifest.json oss://nexu-releases/components/manifest.json
+
+      # 同步到 GitHub Release (海外源)
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 上传组件包和 manifest 到对应版本的 release
+          gh release upload "v${{ inputs.version }}" \
+            artifacts/*.tar.gz manifest.json \
+            --clobber
 ```
 
 ---
@@ -1699,7 +1725,7 @@ const SHUTDOWN_ORDER = [
 
 当 API 协议发生破坏性变更时，旧客户端无法正常工作，需要强制更新。
 
-在 R2 上维护 `desktop/policy.json`:
+在 OSS 上维护 `desktop/policy.json` (同步到 GitHub Release):
 
 ```json
 {
@@ -1713,7 +1739,8 @@ const SHUTDOWN_ORDER = [
 
 ```typescript
 async checkPolicy(): Promise<UpdatePolicy | null> {
-  const res = await fetch(`${this.opts.feedUrl}/policy.json`);
+  // policy.json 统一从 OSS 拉取 (海外也能访问)
+  const res = await fetch("https://releases.nexu.space/desktop/policy.json");
   if (!res.ok) return null;
   const policy = await res.json();
   if (semver.lt(app.getVersion(), policy.minVersion)) {
@@ -1762,7 +1789,7 @@ app.on("ready", () => {
 
 ### 12.2 Changelog 展示
 
-发布时在 R2 上传 changelog，客户端在更新提示中展示：
+发布时在 OSS 上传 changelog (同步到 GitHub Release notes)，客户端在更新提示中展示：
 
 ```
 desktop/changelogs/
@@ -1777,10 +1804,10 @@ desktop/changelogs/
 
 ### 阶段零: 基础设施搭建
 
-- [ ] 创建 R2 bucket `nexu-releases`
-- [ ] 开启 R2 Public Access，绑定 `releases.nexu.space` 域名
-- [ ] 配置 GitHub Secrets (R2 凭证)
-- [ ] 手动上传一个测试文件验证访问
+- [ ] 创建阿里云 OSS bucket `nexu-releases` (杭州，公共读)
+- [ ] 绑定 `releases.nexu.space` 域名 + CDN 加速
+- [ ] 配置 GitHub Secrets (OSS 凭证)
+- [ ] 手动上传测试文件，验证 OSS 和 GitHub Release 均可访问
 
 ### 阶段一: 打包 + 全量更新 MVP
 
@@ -1820,7 +1847,7 @@ desktop/changelogs/
 
 ### 阶段四: 增强
 
-- [ ] Worker API 替换纯静态访问 (灰度/统计/强制更新)
+- [ ] 灰度发布 / 下载统计 (阿里云 CDN 日志分析)
 - [ ] 数据迁移保护 (PGlite 备份 + 自动 migrate)
 - [ ] 断点续传
 - [ ] Beta/Canary 通道
@@ -1833,7 +1860,7 @@ desktop/changelogs/
 
 | 决策点 | 推荐方案 | 理由 |
 |--------|---------|------|
-| 分发基础设施 | R2 Public Access (阶段零) → Worker (阶段四) | 最小起步成本 |
+| 分发基础设施 | 阿里云 OSS (国内) + GitHub Release (海外) | 国内低延迟，海外零运维 |
 | 全量更新 | electron-updater + generic provider | 标准方案，支持差分 |
 | 组件版本切换 | manifest.local.json 记录路径+sha256 | 跨平台兼容，不依赖 symlink |
 | 组件版本策略 | 所有组件统一版本号，按 sha256 差异下载 | 避免版本不匹配，减少下载量 |
@@ -1858,9 +1885,8 @@ pnpm add -D electron-builder @electron/notarize
 
 | Secret | 用途 |
 |--------|------|
-| `R2_ACCESS_KEY_ID` | Cloudflare R2 API Token |
-| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 Secret |
-| `R2_ENDPOINT` | R2 S3 API endpoint |
+| `ALIYUN_OSS_ACCESS_KEY_ID` | 阿里云 OSS AccessKey ID |
+| `ALIYUN_OSS_ACCESS_KEY_SECRET` | 阿里云 OSS AccessKey Secret |
 | `MAC_CERTIFICATE_P12_BASE64` | macOS 开发者证书 (base64) |
 | `MAC_CERTIFICATE_PASSWORD` | 证书密码 |
 | `APPLE_ID` | Apple ID 邮箱 |
@@ -1870,14 +1896,13 @@ pnpm add -D electron-builder @electron/notarize
 | `WIN_CERTIFICATE_PASSWORD` | 证书密码 (可选) |
 | `INTERNAL_API_TOKEN` | API 内部通信 token (推送通知用) |
 
-### C. 现有 Cloudflare 资源
+### C. 基础设施资源
 
 | 资源 | 名称 | 状态 |
 |------|------|------|
-| Tunnel | nexu-dev | ✅ 已有 |
-| Worker | nexu-router | ✅ 已有 |
-| Worker | nexu-landing-worker | ✅ 已有 |
-| Worker | nexu-app-worker | ✅ 已有 |
-| R2 Bucket | nexu-releases | ❌ 需创建 |
-| Worker | nexu-releases-worker | ❌ 可选，后续按需创建 |
-| Domain | releases.nexu.space | ❌ 需添加 DNS |
+| 阿里云 OSS Bucket | nexu-releases (oss-cn-hangzhou) | ❌ 需创建 |
+| 阿里云 CDN | releases.nexu.space | ❌ 需配置 |
+| GitHub Release | refly-ai/nexu | ✅ 已有 (public repo) |
+| Cloudflare Tunnel | nexu-dev | ✅ 已有 |
+| Cloudflare Worker | nexu-router | ✅ 已有 |
+| Domain DNS | releases.nexu.space → 阿里云 CDN | ❌ 需添加 |
