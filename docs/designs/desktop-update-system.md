@@ -1758,36 +1758,192 @@ async checkPolicy(): Promise<UpdatePolicy | null> {
 
 ---
 
-## 12. 监控与 Changelog
+## 12. 监控、统计与 Changelog
 
-### 12.1 更新成功率监控
+### 12.1 下载量统计
 
-利用已有的 Amplitude SDK 埋点：
+两个分发源各有统计方式，加上客户端埋点做交叉验证：
+
+**GitHub Release（海外）**— 自带下载计数：
+
+```bash
+# 查询每个 asset 的下载次数
+gh api repos/refly-ai/nexu/releases --jq '
+  .[] | {tag: .tag_name, assets: [.assets[] | {name: .name, downloads: .download_count}]}'
+```
+
+**阿里云 OSS（国内）**— 开启日志 + 定期聚合：
+
+```bash
+# 1. 开启 OSS 访问日志 (控制台 → Bucket → 日志管理 → 开启)
+#    日志存到同 bucket 的 log/ 前缀下
+
+# 2. 定期聚合脚本 (GitHub Actions scheduled job)
+#    解析 OSS access log，统计每个文件的 GET 请求数
+```
+
+```yaml
+# .github/workflows/download-stats.yml
+name: Download Stats
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨 2 点
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect GitHub Release stats
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/refly-ai/nexu/releases --paginate --jq '
+            .[] | select(.tag_name | startswith("v")) |
+            {version: .tag_name, published: .published_at,
+             total_downloads: ([.assets[].download_count] | add),
+             assets: [.assets[] | {name: .name, count: .download_count}]}
+          ' > github-stats.json
+
+      - name: Collect OSS stats
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+        run: |
+          # 下载昨天的 access log
+          curl -o ossutil https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-linux-amd64/ossutil64
+          chmod +x ossutil
+          ./ossutil config -e oss-cn-hangzhou.aliyuncs.com -i $OSS_ACCESS_KEY_ID -k $OSS_ACCESS_KEY_SECRET
+
+          YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
+          ./ossutil cp -r oss://nexu-releases/log/$YESTERDAY/ ./logs/ || true
+
+          # 聚合: 统计 GET 200 的 .dmg/.exe/.zip 下载次数
+          node scripts/aggregate-oss-downloads.js ./logs/ > oss-stats.json
+
+      - name: Merge and upload stats
+        run: |
+          node scripts/merge-download-stats.js \
+            --github=github-stats.json \
+            --oss=oss-stats.json \
+            --output=download-stats.json
+
+          # 上传到 OSS (供 dashboard 读取)
+          ./ossutil cp download-stats.json oss://nexu-releases/_meta/download-stats.json
+```
+
+**汇总数据格式** (`_meta/download-stats.json`)：
+
+```json
+{
+  "updatedAt": "2026-03-14T02:00:00Z",
+  "versions": {
+    "v1.2.0": {
+      "publishedAt": "2026-03-13T10:00:00Z",
+      "downloads": {
+        "github": { "total": 156, "dmg_arm64": 89, "dmg_x64": 12, "exe": 55 },
+        "oss":    { "total": 423, "dmg_arm64": 310, "dmg_x64": 28, "exe": 85 },
+        "combined": 579
+      }
+    },
+    "v1.1.0": { "..." : "..." }
+  },
+  "totals": {
+    "github": 1200,
+    "oss": 3400,
+    "combined": 4600
+  }
+}
+```
+
+### 12.2 更新版本分布与成功率
+
+客户端 Amplitude 埋点，追踪每次更新的完整生命周期：
 
 ```typescript
-// 下载完成
+// ---- 事件 1: 启动时上报当前版本 (统计版本分布) ----
+app.on("ready", () => {
+  const currentVersion = app.getVersion();
+
+  amplitude.track("desktop_session_start", {
+    version: currentVersion,
+    platform: process.platform,
+    arch: process.arch,
+    source: store.get("updateSource", "oss"), // oss | github
+    channel: store.get("updateChannel", "stable"),
+  });
+
+  // 检测是否刚完成更新
+  const lastVersion = store.get("lastVersion");
+  if (lastVersion && lastVersion !== currentVersion) {
+    amplitude.track("desktop_update_success", {
+      fromVersion: lastVersion,
+      toVersion: currentVersion,
+      updateType: store.get("lastUpdateType", "full"), // full | component
+    });
+  }
+  store.set("lastVersion", currentVersion);
+});
+
+// ---- 事件 2: 发现新版本 ----
+autoUpdater.on("update-available", (info) => {
+  amplitude.track("desktop_update_available", {
+    currentVersion: app.getVersion(),
+    newVersion: info.version,
+  });
+});
+
+// ---- 事件 3: 用户点击下载 ----
+ipcMain.handle("update:download", () => {
+  amplitude.track("desktop_update_download_started", {
+    currentVersion: app.getVersion(),
+  });
+  return autoUpdater.downloadUpdate();
+});
+
+// ---- 事件 4: 下载完成 ----
 autoUpdater.on("update-downloaded", (info) => {
   amplitude.track("desktop_update_downloaded", {
     fromVersion: app.getVersion(),
     toVersion: info.version,
   });
+  store.set("lastUpdateType", "full");
 });
 
-// 更新安装重启后，检测版本变化
-app.on("ready", () => {
-  const lastVersion = store.get("lastVersion");
-  const currentVersion = app.getVersion();
-  if (lastVersion && lastVersion !== currentVersion) {
-    amplitude.track("desktop_update_success", {
-      fromVersion: lastVersion,
-      toVersion: currentVersion,
-    });
-  }
-  store.set("lastVersion", currentVersion);
+// ---- 事件 5: 下载失败 ----
+autoUpdater.on("error", (err) => {
+  amplitude.track("desktop_update_error", {
+    version: app.getVersion(),
+    error: err.message,
+  });
 });
+
+// ---- 事件 6: 组件更新完成 ----
+// 在 ComponentUpdater.installUpdate() 末尾
+amplitude.track("desktop_component_updated", {
+  component: update.name,
+  fromSha: localSha,
+  toVersion: update.newVersion,
+});
+store.set("lastUpdateType", "component");
 ```
 
-### 12.2 Changelog 展示
+**Amplitude 看板可得到的指标**:
+
+| 指标 | 事件/计算方式 |
+|------|-------------|
+| 各版本活跃用户数 | `desktop_session_start` 按 `version` 分组 |
+| 版本分布饼图 | 同上 |
+| 更新转化漏斗 | available → download_started → downloaded → success |
+| 更新成功率 | success / downloaded |
+| 各版本更新次数 | `desktop_update_success` 按 `toVersion` 计数 |
+| 组件更新频次 | `desktop_component_updated` 按 `component` 分组 |
+| 更新失败率 & 原因 | `desktop_update_error` 按 `error` 分组 |
+| 国内/海外比例 | `desktop_session_start` 按 `source` 分组 |
+
+### 12.3 Changelog 展示
 
 发布时在 OSS 上传 changelog (同步到 GitHub Release notes)，客户端在更新提示中展示：
 
