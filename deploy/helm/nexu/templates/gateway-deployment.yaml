@@ -23,6 +23,9 @@ spec:
         {{- include "nexu.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gateway
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name | default (include "nexu.fullname" .) }}
+      {{- end }}
       containers:
         - name: gateway
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}"
@@ -149,12 +152,97 @@ spec:
               mountPath: /var/lib/docker
             - name: openclaw-data
               mountPath: /data/openclaw
+            {{- if .Values.gateway.sandbox.ecr.enabled }}
+            - name: docker-config
+              mountPath: /root/.docker
+            {{- end }}
           resources:
             {{- toYaml .Values.gateway.sandbox.dindResources | nindent 12 }}
+        {{- if .Values.gateway.sandbox.ecr.enabled }}
+        # ECR credential refresher sidecar
+        # Generates docker config.json with ECR credentials and refreshes every 6 hours
+        # Requires IRSA: serviceAccount must have eks.amazonaws.com/role-arn annotation
+        # with a role that has ecr:GetAuthorizationToken permission
+        - name: ecr-refresher
+          image: {{ .Values.gateway.sandbox.ecr.image | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              ECR_REGISTRY="{{ .Values.gateway.sandbox.ecr.registry }}"
+              REGION="{{ .Values.gateway.sandbox.ecr.region }}"
+              SANDBOX_IMAGE="{{ .Values.gateway.sandbox.sandboxImage }}"
+              REFRESH_INTERVAL={{ .Values.gateway.sandbox.ecr.refreshIntervalSeconds | default 21600 }}
+
+              refresh_ecr_token() {
+                echo "$(date -Iseconds) Refreshing ECR token for $ECR_REGISTRY..."
+                TOKEN=$(aws ecr get-login-password --region "$REGION")
+                if [ -z "$TOKEN" ]; then
+                  echo "$(date -Iseconds) ERROR: Failed to get ECR token"
+                  return 1
+                fi
+                AUTH=$(echo -n "AWS:$TOKEN" | base64 | tr -d '\n')
+                mkdir -p /docker-config
+                cat > /docker-config/config.json <<EOF
+              {
+                "auths": {
+                  "$ECR_REGISTRY": {
+                    "auth": "$AUTH"
+                  }
+                }
+              }
+              EOF
+                echo "$(date -Iseconds) ECR token refreshed successfully"
+              }
+
+              prepull_sandbox_image() {
+                echo "$(date -Iseconds) Waiting for Docker daemon..."
+                until docker info >/dev/null 2>&1; do
+                  sleep 2
+                done
+                echo "$(date -Iseconds) Pre-pulling sandbox image: $SANDBOX_IMAGE"
+                if docker pull "$SANDBOX_IMAGE"; then
+                  echo "$(date -Iseconds) Sandbox image pulled successfully"
+                else
+                  echo "$(date -Iseconds) WARNING: Failed to pull sandbox image"
+                fi
+              }
+
+              # Initial token refresh
+              refresh_ecr_token
+
+              # Pre-pull sandbox image in background
+              prepull_sandbox_image &
+
+              # Refresh loop
+              while true; do
+                sleep "$REFRESH_INTERVAL"
+                refresh_ecr_token || true
+              done
+          env:
+            - name: DOCKER_HOST
+              value: "tcp://localhost:2375"
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.gateway.sandbox.ecr.region | quote }}
+          volumeMounts:
+            - name: docker-config
+              mountPath: /docker-config
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+        {{- end }}
         {{- end }}
       volumes:
         - name: openclaw-config
           emptyDir: {}
+        {{- if and .Values.gateway.sandbox.enabled .Values.gateway.sandbox.ecr.enabled }}
+        - name: docker-config
+          emptyDir: {}
+        {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: openclaw-data

@@ -1,6 +1,16 @@
 nameOverride: ""
 fullnameOverride: ""
 
+serviceAccount:
+  # Set to true to create a ServiceAccount for gateway pods
+  # Required for ECR authentication via IRSA
+  create: false
+  # Name of the ServiceAccount (defaults to release fullname)
+  name: ""
+  # Annotations for the ServiceAccount
+  # For IRSA, add: eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/ROLE_NAME
+  annotations: {}
+
 namespace:
   create: false
   name: nexu
@@ -116,6 +126,18 @@ gateway:
         cpu: "1"
         memory: 1Gi
     dindStorageSize: 10Gi
+    # ECR authentication for private sandbox images
+    # Requires IRSA: serviceAccount.create=true with proper IAM role annotation
+    ecr:
+      enabled: false
+      # AWS CLI image for ECR credential refresh
+      image: "amazon/aws-cli:2.15.0"
+      # ECR registry URL (e.g., 123456789.dkr.ecr.us-east-1.amazonaws.com)
+      registry: ""
+      # AWS region for ECR
+      region: "us-east-1"
+      # Token refresh interval in seconds (default: 6 hours, ECR tokens expire in 12h)
+      refreshIntervalSeconds: 21600
   hpa:
     enabled: true
     minReplicas: 1
