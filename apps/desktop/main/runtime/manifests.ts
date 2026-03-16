@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -13,18 +12,6 @@ function ensureDir(path: string): string {
   return path;
 }
 
-/**
- * In Electron, process.execPath is the Electron binary, not Node.js.
- * For spawn-based sidecars we need the real Node.js binary.
- */
-function resolveNodeBinary(): string {
-  try {
-    return execSync("which node", { encoding: "utf-8" }).trim();
-  } catch {
-    return "node";
-  }
-}
-
 function getBooleanEnv(name: string, fallback: boolean): boolean {
   const value = process.env[name];
 
@@ -36,7 +23,7 @@ function getBooleanEnv(name: string, fallback: boolean): boolean {
 }
 
 export function createRuntimeUnitManifests(
-  electronRoot: string,
+  _electronRoot: string,
   userDataPath: string,
 ): RuntimeUnitManifest[] {
   const repoRoot = getWorkspaceRoot();
@@ -45,6 +32,7 @@ export function createRuntimeUnitManifests(
     process.env,
   );
   const runtimeRoot = ensureDir(resolve(userDataPath, "runtime"));
+  const logsDir = ensureDir(resolve(userDataPath, "../logs/runtime-units"));
   const pgliteDataPath = ensureDir(resolve(runtimeRoot, "pglite"));
   const openclawRuntimeRoot = ensureDir(resolve(runtimeRoot, "openclaw"));
   const openclawConfigDir = ensureDir(resolve(openclawRuntimeRoot, "config"));
@@ -53,9 +41,11 @@ export function createRuntimeUnitManifests(
   ensureDir(resolve(openclawStateDir, "skills"));
   ensureDir(resolve(openclawStateDir, "plugin-docs"));
   ensureDir(resolve(openclawStateDir, "agents"));
-  const openclawPackageRoot = resolve(electronRoot, "node_modules/openclaw");
-  const openclawSidecarRoot = resolve(repoRoot, ".tmp/sidecars/openclaw");
-  const openclawBinPath = resolve(openclawSidecarRoot, "bin/openclaw");
+  const openclawPackageRoot = resolve(
+    repoRoot,
+    "openclaw-runtime/node_modules/openclaw",
+  );
+  const openclawBinPath = resolve(repoRoot, "openclaw-wrapper");
   const apiSidecarRoot = resolve(repoRoot, ".tmp/sidecars/api");
   const apiModulePath = resolve(apiSidecarRoot, "dist/index.js");
   const gatewaySidecarRoot = resolve(repoRoot, ".tmp/sidecars/gateway");
@@ -93,6 +83,7 @@ export function createRuntimeUnitManifests(
       port: webPort,
       startupTimeoutMs: 10_000,
       autoStart: true,
+      logFilePath: resolve(logsDir, "web.log"),
       env: {
         WEB_HOST: "127.0.0.1",
         WEB_PORT: String(webPort),
@@ -106,6 +97,7 @@ export function createRuntimeUnitManifests(
       launchStrategy: "embedded",
       port: null,
       autoStart: true,
+      logFilePath: resolve(logsDir, "control-plane.log"),
     },
     {
       id: "pglite",
@@ -113,12 +105,13 @@ export function createRuntimeUnitManifests(
       kind: "service",
       launchStrategy: "managed",
       runner: "spawn",
-      command: resolveNodeBinary(),
+      command: process.execPath,
       args: [pgliteModulePath],
       cwd: pgliteSidecarRoot,
       port: pglitePort,
       startupTimeoutMs: 10_000,
       autoStart: getBooleanEnv("NEXU_DESKTOP_AUTOSTART_PGLITE", true),
+      logFilePath: resolve(logsDir, "pglite.log"),
       env: {
         PGLITE_DATA_DIR: pgliteDataPath,
         PGLITE_HOST: "127.0.0.1",
@@ -137,6 +130,7 @@ export function createRuntimeUnitManifests(
       port: apiPort,
       startupTimeoutMs: 20_000,
       autoStart: getBooleanEnv("NEXU_DESKTOP_AUTOSTART_API", true),
+      logFilePath: resolve(logsDir, "api.log"),
       env: {
         FORCE_COLOR: "1",
         PORT: String(apiPort),
@@ -147,7 +141,6 @@ export function createRuntimeUnitManifests(
         WEB_URL: webUrl,
         INTERNAL_API_TOKEN: internalApiToken,
         SKILL_API_TOKEN: skillApiToken,
-        OPENCLAW_STATE_DIR: openclawStateDir,
       },
     },
     {
@@ -160,6 +153,7 @@ export function createRuntimeUnitManifests(
       cwd: gatewaySidecarRoot,
       port: null,
       autoStart: getBooleanEnv("NEXU_DESKTOP_AUTOSTART_GATEWAY", true),
+      logFilePath: resolve(logsDir, "gateway.log"),
       env: {
         FORCE_COLOR: "1",
         NODE_ENV: "development",
@@ -175,7 +169,6 @@ export function createRuntimeUnitManifests(
         TMPDIR: openclawTempDir,
         RUNTIME_MANAGE_OPENCLAW_PROCESS: "true",
         RUNTIME_GATEWAY_PROBE_ENABLED: "false",
-        RUNTIME_DEFER_FEISHU_INIT: "false",
       },
     },
     {
@@ -184,8 +177,10 @@ export function createRuntimeUnitManifests(
       kind: "runtime",
       launchStrategy: "delegated",
       delegatedProcessMatch: "openclaw-gateway",
+      binaryPath: process.env.NEXU_OPENCLAW_BIN ?? openclawBinPath,
       port: null,
       autoStart: true,
+      logFilePath: resolve(logsDir, "openclaw.log"),
     },
   ];
 }

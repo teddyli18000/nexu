@@ -1,11 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, app, shell } from "electron";
-import { waitForDesktopRendererReady } from "../shared/renderer-ready";
-import { resolveDesktopRendererUrl } from "../shared/renderer-url";
+import {
+  BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
+  app,
+  session,
+  shell,
+} from "electron";
+import type { DesktopChromeMode, DesktopSurface } from "../shared/host";
+import { getDesktopRuntimeConfig } from "../shared/runtime-config";
 import { getDesktopAppRoot } from "../shared/workspace-paths";
-import { bootstrapDesktopAuthSession } from "./desktop-bootstrap";
+import { ensureDesktopAuthSession } from "./desktop-bootstrap";
 import { registerIpcHandlers } from "./ipc";
 import { RuntimeOrchestrator } from "./runtime/daemon-supervisor";
 import { createRuntimeUnitManifests } from "./runtime/manifests";
@@ -13,23 +20,7 @@ import { createRuntimeUnitManifests } from "./runtime/manifests";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const electronRoot = getDesktopAppRoot();
-const rendererUrl = resolveDesktopRendererUrl(process.env);
-
-// Load .env from the desktop app root into process.env (no-override).
-const dotenvPath = resolve(electronRoot, ".env");
-if (existsSync(dotenvPath)) {
-  for (const line of readFileSync(dotenvPath, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    const value = trimmed.slice(eqIdx + 1).trim();
-    if (!(key in process.env)) {
-      process.env[key] = value;
-    }
-  }
-}
+const runtimeConfig = getDesktopRuntimeConfig(process.env);
 const orchestrator = new RuntimeOrchestrator(
   createRuntimeUnitManifests(electronRoot, app.getPath("userData")),
 );
@@ -37,6 +28,72 @@ const orchestrator = new RuntimeOrchestrator(
 app.setName("Nexu Desktop");
 
 let mainWindow: BrowserWindow | null = null;
+
+function sendDesktopCommand(
+  surface: DesktopSurface,
+  chromeMode: DesktopChromeMode,
+): void {
+  mainWindow?.webContents.send("host:desktop-command", {
+    type:
+      chromeMode === "immersive" && surface !== "control"
+        ? "develop:focus-surface"
+        : "develop:show-shell",
+    surface,
+    chromeMode,
+  });
+}
+
+function notifyDesktopAuthSessionRestored(): void {
+  mainWindow?.webContents.send("host:desktop-command", {
+    type: "desktop:auth-session-restored",
+    surface: "web",
+  });
+}
+
+function installApplicationMenu(): void {
+  const developMenu: MenuItemConstructorOptions = {
+    label: "Develop",
+    submenu: [
+      {
+        label: "Focus Web Surface",
+        accelerator: "CmdOrCtrl+Shift+1",
+        click: () => sendDesktopCommand("web", "immersive"),
+      },
+      {
+        label: "Focus OpenClaw Surface",
+        accelerator: "CmdOrCtrl+Shift+2",
+        click: () => sendDesktopCommand("openclaw", "immersive"),
+      },
+      { type: "separator" },
+      {
+        label: "Show Desktop Shell",
+        accelerator: "CmdOrCtrl+Shift+0",
+        click: () => sendDesktopCommand("control", "full"),
+      },
+      {
+        label: "Show Web In Shell",
+        click: () => sendDesktopCommand("web", "full"),
+      },
+      {
+        label: "Show OpenClaw In Shell",
+        click: () => sendDesktopCommand("openclaw", "full"),
+      },
+    ],
+  };
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? ([{ role: "appMenu" }] satisfies MenuItemConstructorOptions[])
+      : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    developMenu,
+    { role: "windowMenu" },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function safeWrite(stream: NodeJS.WriteStream, message: string): void {
   if (stream.destroyed || !stream.writable) {
@@ -53,6 +110,111 @@ function safeWrite(stream: NodeJS.WriteStream, message: string): void {
     }
     throw error;
   }
+}
+
+function logColdStart(message: string): void {
+  const line = `[desktop:cold-start] ${message}\n`;
+  safeWrite(process.stdout, line);
+
+  try {
+    const logsPath = app.getPath("logs");
+    mkdirSync(logsPath, { recursive: true });
+    appendFileSync(resolve(logsPath, "cold-start.log"), line, "utf8");
+  } catch {
+    // Best-effort file logging only.
+  }
+}
+
+async function waitForApiReadiness(): Promise<void> {
+  const startedAt = Date.now();
+  const timeoutMs = 15_000;
+  const probeUrl = new URL("/api/auth/get-session", runtimeConfig.apiBaseUrl);
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(probeUrl, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (response.status < 500) {
+        logColdStart(
+          `api ready via ${probeUrl.pathname} status=${response.status}`,
+        );
+        return;
+      }
+    } catch {
+      // Ignore transient startup failures while the socket and DB warm up.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`API readiness probe timed out for ${probeUrl.toString()}`);
+}
+
+async function runDesktopColdStart(): Promise<void> {
+  logColdStart("starting pglite");
+  await orchestrator.startOne("pglite");
+
+  logColdStart("starting api");
+  await orchestrator.startOne("api");
+
+  logColdStart("waiting for api readiness");
+  await waitForApiReadiness();
+
+  logColdStart("bootstrapping desktop auth session");
+  await ensureDesktopAuthSession();
+
+  logColdStart("starting web");
+  await orchestrator.startOne("web");
+
+  logColdStart("starting gateway");
+  await orchestrator.startOne("gateway");
+
+  logColdStart("cold start complete");
+}
+
+let authRecoveryPromise: Promise<void> | null = null;
+
+function triggerDesktopAuthRecovery(reason: string): void {
+  if (authRecoveryPromise) {
+    return;
+  }
+
+  authRecoveryPromise = (async () => {
+    safeWrite(process.stdout, `[desktop:auth-recovery] ${reason}\n`);
+
+    try {
+      await ensureDesktopAuthSession({ force: true });
+      notifyDesktopAuthSessionRestored();
+    } catch (error) {
+      safeWrite(
+        process.stderr,
+        `[desktop:auth-recovery] ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    } finally {
+      authRecoveryPromise = null;
+    }
+  })();
+}
+
+function installDesktopAuthRecoveryHooks(): void {
+  session.defaultSession.webRequest.onCompleted(
+    {
+      urls: [`${runtimeConfig.apiBaseUrl}/api/auth/*`],
+    },
+    (details) => {
+      if (
+        details.method === "POST" &&
+        details.statusCode < 400 &&
+        details.url.includes("/api/auth/sign-out")
+      ) {
+        triggerDesktopAuthRecovery("detected desktop sign-out");
+      }
+    },
+  );
 }
 
 function focusMainWindow(): void {
@@ -147,38 +309,27 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
+  void window.loadFile(resolve(__dirname, "../../dist/index.html"));
   mainWindow = window;
   return window;
 }
 
 app.whenReady().then(async () => {
+  installApplicationMenu();
+  installDesktopAuthRecoveryHooks();
   registerIpcHandlers(orchestrator);
-  const window = createMainWindow();
 
   void (async () => {
     try {
-      await orchestrator.startAutoStartManagedUnits();
-      await waitForDesktopRendererReady(rendererUrl);
-      await window.loadURL(rendererUrl);
+      await runDesktopColdStart();
     } catch (error) {
       safeWrite(
         process.stderr,
-        `[runtime:start-all] ${error instanceof Error ? error.message : String(error)}\n`,
+        `[desktop:cold-start] ${error instanceof Error ? error.message : String(error)}\n`,
       );
-      return;
     }
 
-    try {
-      await bootstrapDesktopAuthSession();
-      // Reload the window so it picks up the session cookies set by bootstrap.
-      // Without this, the page loads before auth completes and shows the login form.
-      mainWindow?.webContents.reload();
-    } catch (error) {
-      safeWrite(
-        process.stderr,
-        `[desktop:auth-bootstrap] ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-    }
+    createMainWindow();
   })();
 
   app.on("activate", () => {
