@@ -192,7 +192,7 @@ function FeishuIconChat({ size = 14 }: { size?: number }) {
 }
 
 const actionCardBaseClass =
-  "group rounded-[18px] border border-border/70 bg-surface-1/95 px-3.5 py-2.5 text-left transition-all duration-200 hover:border-border-hover hover:bg-surface-1 hover:shadow-[0_4px_12px_rgba(0,0,0,0.035)]";
+  "block group rounded-[18px] border border-border/70 bg-surface-1/95 px-3.5 py-2.5 text-left transition-all duration-200 hover:border-border-hover hover:bg-surface-1 hover:shadow-[0_4px_12px_rgba(0,0,0,0.035)]";
 
 export function HomePage() {
   const [modalChannel, setModalChannel] = useState<
@@ -204,8 +204,8 @@ export function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoHover, setVideoHover] = useState(false);
 
-  const handleConnected = () => {
-    queryClient.invalidateQueries({ queryKey: ["channels"] });
+  const handleConnected = async () => {
+    await queryClient.refetchQueries({ queryKey: ["channels"] });
     setModalChannel(null);
   };
 

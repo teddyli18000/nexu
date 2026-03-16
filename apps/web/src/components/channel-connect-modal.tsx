@@ -132,7 +132,6 @@ export function ChannelConnectModal({
   onConnected,
 }: ChannelConnectModalProps) {
   const config = CHANNEL_CONFIGS[channelType];
-  const [botName, setBotName] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(config.fields.map((f) => [f.id, ""])),
   );
@@ -193,6 +192,11 @@ export function ChannelConnectModal({
     setLoading(false);
 
     if (error) {
+      if (error.message?.toLowerCase().includes("already connected")) {
+        toast.info("渠道已连接，正在刷新...");
+        onConnected();
+        return;
+      }
       toast.error(error.message ?? "连接失败");
       return;
     }
@@ -238,32 +242,6 @@ export function ChannelConnectModal({
 
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
-          {/* Bot name field */}
-          <div className="space-y-1.5">
-            <label
-              htmlFor="bot-name"
-              className="block text-[12px] font-medium text-text-secondary"
-            >
-              Bot 名称
-            </label>
-            <div className="flex">
-              <input
-                id="bot-name"
-                type="text"
-                value={botName}
-                onChange={(e) => setBotName(e.target.value)}
-                placeholder="my-assistant"
-                className="flex-1 px-3 py-2 rounded-l-lg border border-r-0 border-border bg-surface-1 text-[13px] text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors"
-              />
-              <span className="px-3 py-2 rounded-r-lg border border-border bg-surface-2 text-[13px] text-text-muted select-none">
-                @nexu
-              </span>
-            </div>
-            <p className="text-[11px] text-text-muted">
-              Bot 在渠道中的显示名称，如：{botName || "my-assistant"}@nexu
-            </p>
-          </div>
-
           {/* Credential fields */}
           {config.fields.map((field) => (
             <div key={field.id} className="space-y-1.5">
