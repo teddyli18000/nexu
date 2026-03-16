@@ -1,15 +1,53 @@
 import { ProviderLogo } from "@/components/provider-logo";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
+  ArrowUpRight,
+  Check,
   ExternalLink,
   Eye,
   EyeOff,
-  Search,
+  Loader2,
+  Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getApiV1Models } from "../../lib/api/sdk.gen";
+import { markSetupComplete } from "./welcome";
+
+// ── Toggle Switch 组件 ─────────────────────────────────────────
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+        checked ? "bg-emerald-500" : "bg-surface-3",
+        disabled && "opacity-50 cursor-not-allowed",
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
+          checked ? "translate-x-[18px]" : "translate-x-[3px]",
+        )}
+      />
+    </button>
+  );
+}
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -29,7 +67,70 @@ interface ProviderConfig {
   models: ProviderModel[];
 }
 
-// ── Static provider data ───────────────────────────────────────
+interface DbProvider {
+  id: string;
+  providerId: string;
+  displayName: string;
+  enabled: boolean;
+  baseUrl: string | null;
+  hasApiKey: boolean;
+  modelsJson: string;
+}
+
+// ── Provider metadata ─────────────────────────────────────────
+
+const PROVIDER_META: Record<
+  string,
+  {
+    name: string;
+    description: string;
+    apiDocsUrl?: string;
+    apiKeyPlaceholder?: string;
+    defaultProxyUrl?: string;
+  }
+> = {
+  nexu: {
+    name: "Nexu Official",
+    description: "登录后使用 Nexu 官方高级模型，无需单独配置 API Key",
+  },
+  anthropic: {
+    name: "Anthropic",
+    description: "Claude 系列 AI 模型",
+    apiDocsUrl: "https://console.anthropic.com/settings/keys",
+    apiKeyPlaceholder: "sk-ant-api03-...",
+    defaultProxyUrl: "https://api.anthropic.com",
+  },
+  openai: {
+    name: "OpenAI",
+    description: "GPT 系列 AI 模型",
+    apiDocsUrl: "https://platform.openai.com/api-keys",
+    apiKeyPlaceholder: "sk-...",
+    defaultProxyUrl: "https://api.openai.com/v1",
+  },
+  google: {
+    name: "Google AI",
+    description: "Gemini 系列 AI 模型",
+    apiDocsUrl: "https://aistudio.google.com/app/apikey",
+    apiKeyPlaceholder: "AIza...",
+    defaultProxyUrl: "https://generativelanguage.googleapis.com/v1beta",
+  },
+  custom: {
+    name: "自定义服务商",
+    description: "任何兼容 OpenAI 的 API 端点",
+    apiKeyPlaceholder: "your-api-key",
+  },
+};
+
+// Well-known models per provider (shown as toggles when no verify result yet)
+const DEFAULT_MODELS: Record<string, string[]> = {
+  anthropic: [
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-haiku-4-5-20251001",
+  ],
+  openai: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
+  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+};
 
 function buildProviders(
   apiModels: Array<{
@@ -40,32 +141,6 @@ function buildProviders(
     description?: string;
   }>,
 ): ProviderConfig[] {
-  const providerMeta: Record<
-    string,
-    { name: string; description: string; apiDocsUrl?: string }
-  > = {
-    nexu: {
-      name: "Nexu Official",
-      description:
-        "Platform-managed models. No API key needed — included with your account.",
-    },
-    anthropic: {
-      name: "Anthropic",
-      description: "Claude family of AI models by Anthropic.",
-      apiDocsUrl: "https://docs.anthropic.com",
-    },
-    openai: {
-      name: "OpenAI",
-      description: "GPT family of AI models by OpenAI.",
-      apiDocsUrl: "https://platform.openai.com/docs",
-    },
-    google: {
-      name: "Google",
-      description: "Gemini family of AI models by Google.",
-      apiDocsUrl: "https://ai.google.dev/docs",
-    },
-  };
-
   // Group models by provider
   const grouped = new Map<string, ProviderModel[]>();
   for (const m of apiModels) {
@@ -80,7 +155,7 @@ function buildProviders(
   }
 
   return Array.from(grouped.entries()).map(([providerId, models]) => {
-    const meta = providerMeta[providerId] ?? {
+    const meta = PROVIDER_META[providerId] ?? {
       name: providerId,
       description: "",
     };
@@ -95,18 +170,78 @@ function buildProviders(
   });
 }
 
+// ── API helpers ───────────────────────────────────────────────
+
+async function fetchProviders(): Promise<DbProvider[]> {
+  const res = await fetch("/api/v1/providers");
+  if (!res.ok) return [];
+  const data = (await res.json()) as { providers: DbProvider[] };
+  return data.providers ?? [];
+}
+
+async function saveProvider(
+  providerId: string,
+  body: {
+    apiKey?: string;
+    baseUrl?: string | null;
+    enabled?: boolean;
+    displayName?: string;
+    modelsJson?: string;
+  },
+): Promise<DbProvider> {
+  const res = await fetch(`/api/v1/providers/${providerId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Failed to save provider: ${res.status}`);
+  const data = (await res.json()) as { provider: DbProvider };
+  return data.provider;
+}
+
+async function deleteProvider(providerId: string): Promise<void> {
+  const res = await fetch(`/api/v1/providers/${providerId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Failed to delete provider: ${res.status}`);
+}
+
+async function verifyApiKey(
+  providerId: string,
+  apiKey: string,
+  baseUrl?: string,
+): Promise<{ valid: boolean; models?: string[]; error?: string }> {
+  const res = await fetch(`/api/v1/providers/${providerId}/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey, baseUrl }),
+  });
+  if (!res.ok) throw new Error(`Verify request failed: ${res.status}`);
+  return res.json();
+}
+
+// ── BYOK provider sidebar entries ─────────────────────────────
+// Always show these four as configurable, even if no key set yet
+
+const BYOK_PROVIDER_IDS = ["anthropic", "openai", "google", "custom"] as const;
+
 // ── Component ──────────────────────────────────────────────────
 
 export function ModelsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isSetupMode = searchParams.get("setup") === "1";
   const [search, setSearch] = useState("");
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
-    null,
-  );
-  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(
-    new Set(),
+    isSetupMode ? "anthropic" : null,
   );
 
-  const { data: modelsData, isLoading } = useQuery({
+  const queryClient = useQueryClient();
+
+  const {
+    data: modelsData,
+    isLoading: modelsLoading,
+    isError: modelsError,
+  } = useQuery({
     queryKey: ["models"],
     queryFn: async () => {
       const { data } = await getApiV1Models();
@@ -114,41 +249,78 @@ export function ModelsPage() {
     },
   });
 
+  const { data: dbProviders = [] } = useQuery({
+    queryKey: ["providers"],
+    queryFn: fetchProviders,
+  });
+
   const providers = useMemo(
     () => buildProviders(modelsData?.models ?? []),
     [modelsData],
   );
 
-  // Auto-select first provider
+  // Build sidebar items: Nexu first, then BYOK providers
+  const sidebarItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      name: string;
+      modelCount: number;
+      configured: boolean;
+      managed: boolean;
+    }> = [];
+
+    // Nexu official first (if present from API)
+    const nexuProvider = providers.find((p) => p.id === "nexu");
+    if (nexuProvider) {
+      items.push({
+        id: "nexu",
+        name: "Nexu Official",
+        modelCount: nexuProvider.models.length,
+        configured: true,
+        managed: true,
+      });
+    }
+
+    // BYOK providers — always listed
+    for (const pid of BYOK_PROVIDER_IDS) {
+      const meta = PROVIDER_META[pid] ?? { name: pid, description: "" };
+      const db = dbProviders.find((p) => p.providerId === pid);
+      const modProv = providers.find((p) => p.id === pid);
+      items.push({
+        id: pid,
+        name: meta.name,
+        modelCount: modProv?.models.length ?? 0,
+        configured: db?.hasApiKey ?? false,
+        managed: false,
+      });
+    }
+
+    return items;
+  }, [providers, dbProviders]);
+
+  // Split sidebar items into enabled/disabled groups
+  const enabledProviders = useMemo(
+    () => sidebarItems.filter((p) => p.configured),
+    [sidebarItems],
+  );
+  const disabledProviders = useMemo(
+    () => sidebarItems.filter((p) => !p.configured),
+    [sidebarItems],
+  );
+
   const activeProvider =
-    providers.find((p) => p.id === selectedProviderId) ?? providers[0] ?? null;
+    sidebarItems.find((p) => p.id === selectedProviderId) ??
+    sidebarItems[0] ??
+    null;
 
-  const query = search.toLowerCase().trim();
-  const filteredProviders = useMemo(() => {
-    if (!query) return providers;
-    return providers
-      .map((p) => ({
-        ...p,
-        models: p.models.filter(
-          (m) =>
-            m.name.toLowerCase().includes(query) ||
-            m.id.toLowerCase().includes(query) ||
-            p.name.toLowerCase().includes(query),
-        ),
-      }))
-      .filter((p) => p.models.length > 0);
-  }, [providers, query]);
+  // Clear setup param once user interacts
+  const clearSetupParam = useCallback(() => {
+    if (isSetupMode) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [isSetupMode, setSearchParams]);
 
-  const toggleProvider = (id: string) => {
-    setExpandedProviders((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  if (isLoading) {
+  if (modelsLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-[13px] text-text-muted">Loading models...</div>
@@ -156,268 +328,601 @@ export function ModelsPage() {
     );
   }
 
-  return (
-    <div className="flex h-full">
-      {/* Left sidebar — provider list */}
-      <div className="w-[240px] shrink-0 border-r border-border bg-surface-1 flex flex-col">
-        <div className="px-4 py-4 border-b border-border">
-          <h2 className="text-[14px] font-semibold text-text-primary mb-3">
-            AI Model Providers
-          </h2>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-0 border border-border px-2.5 py-2">
-            <Search size={13} className="text-text-muted shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="flex-1 bg-transparent text-[12px] text-text-primary placeholder:text-text-muted/50 outline-none"
-            />
+  if (modelsError) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-[13px] text-red-500 mb-2">
+            Failed to load models
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-2">
-          {filteredProviders.map((provider) => {
-            const isActive = activeProvider?.id === provider.id;
-            const enabledCount = provider.models.filter(
-              (m) => m.enabled,
-            ).length;
-            return (
-              <button
-                key={provider.id}
-                type="button"
-                onClick={() => setSelectedProviderId(provider.id)}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors",
-                  isActive
-                    ? "bg-accent/8 border-r-2 border-accent"
-                    : "hover:bg-surface-2",
-                )}
-              >
-                <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-                  <ProviderLogo provider={provider.id} size={16} />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-medium text-text-primary truncate">
-                    {provider.name}
-                  </div>
-                  <div className="text-[10px] text-text-muted">
-                    {enabledCount} model{enabledCount !== 1 ? "s" : ""}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    enabledCount > 0 ? "bg-emerald-500" : "bg-text-muted/30",
-                  )}
-                />
-              </button>
-            );
-          })}
-
-          {filteredProviders.length === 0 && (
-            <div className="px-4 py-6 text-center text-[12px] text-text-muted">
-              No matching providers
-            </div>
-          )}
+          <p className="text-[12px] text-text-muted">
+            Check that you are logged in and the API server is running.
+          </p>
         </div>
       </div>
+    );
+  }
 
-      {/* Right panel — provider detail */}
-      <div className="flex-1 overflow-y-auto">
-        {activeProvider ? (
-          <ProviderDetail provider={activeProvider} />
-        ) : (
-          <div className="flex items-center justify-center h-full text-[13px] text-text-muted">
-            Select a provider
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <h2 className="text-[18px] font-semibold text-text-primary mb-1">
+          设置
+        </h2>
+        <p className="text-[12px] text-text-muted mb-5">管理 AI 模型服务商</p>
+
+        {/* Main container */}
+        <div
+          className="flex gap-0 rounded-xl border border-border bg-surface-1 overflow-hidden"
+          style={{ minHeight: 520 }}
+        >
+          {/* Left sidebar — provider list grouped */}
+          <div className="w-56 shrink-0 border-r border-border bg-surface-0 overflow-y-auto">
+            <div className="p-2">
+              {/* 已启用 group */}
+              {enabledProviders.length > 0 && (
+                <>
+                  <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+                    已启用
+                  </div>
+                  <div className="space-y-0.5 mb-3">
+                    {enabledProviders.map((item) => {
+                      const isActive = activeProvider?.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProviderId(item.id);
+                            clearSetupParam();
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
+                            isActive ? "bg-accent/10" : "hover:bg-surface-2",
+                          )}
+                        >
+                          <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+                            <ProviderLogo provider={item.id} size={16} />
+                          </span>
+                          <span
+                            className={cn(
+                              "flex-1 text-[12px] font-medium truncate",
+                              isActive ? "text-accent" : "text-text-primary",
+                            )}
+                          >
+                            {item.name}
+                          </span>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* 未启用 group */}
+              {disabledProviders.length > 0 && (
+                <>
+                  <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+                    未启用
+                  </div>
+                  <div className="space-y-0.5">
+                    {disabledProviders.map((item) => {
+                      const isActive = activeProvider?.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProviderId(item.id);
+                            clearSetupParam();
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
+                            isActive ? "bg-accent/10" : "hover:bg-surface-2",
+                          )}
+                        >
+                          <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+                            <ProviderLogo provider={item.id} size={16} />
+                          </span>
+                          <span
+                            className={cn(
+                              "flex-1 text-[12px] font-medium truncate",
+                              isActive ? "text-accent" : "text-text-primary",
+                            )}
+                          >
+                            {item.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Right panel — provider detail */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {activeProvider ? (
+              activeProvider.managed ? (
+                <ManagedProviderDetail
+                  provider={
+                    providers.find((p) => p.id === activeProvider.id) ?? {
+                      id: activeProvider.id,
+                      name: activeProvider.name,
+                      description:
+                        PROVIDER_META[activeProvider.id]?.description ?? "",
+                      managed: true,
+                      models: [],
+                    }
+                  }
+                />
+              ) : (
+                <ByokProviderDetail
+                  providerId={activeProvider.id}
+                  dbProvider={dbProviders.find(
+                    (p) => p.providerId === activeProvider.id,
+                  )}
+                  models={
+                    providers.find((p) => p.id === activeProvider.id)?.models ??
+                    []
+                  }
+                  queryClient={queryClient}
+                />
+              )
+            ) : (
+              <div className="flex items-center justify-center h-full text-[13px] text-text-muted">
+                选择一个服务商
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Provider detail panel ──────────────────────────────────────
+// ── Managed provider detail (Nexu Official) ───────────────────
 
-function ProviderDetail({ provider }: { provider: ProviderConfig }) {
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [expandedModels, setExpandedModels] = useState(true);
-
-  const enabledModels = provider.models.filter((m) => m.enabled);
-  const disabledModels = provider.models.filter((m) => !m.enabled);
+function ManagedProviderDetail({ provider }: { provider: ProviderConfig }) {
+  const handleLogin = () => {
+    // TODO: Integrate with cloud-connect API
+    window.open("/auth", "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <div className="max-w-[640px] mx-auto px-6 py-6">
-      {/* Provider header */}
-      <div className="flex items-start gap-4 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center shrink-0">
-          <ProviderLogo provider={provider.id} size={22} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5 mb-1">
-            <h3 className="text-[16px] font-semibold text-text-primary">
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-2 shrink-0">
+            <ProviderLogo provider={provider.id} size={20} />
+          </span>
+          <div>
+            <div className="text-[15px] font-semibold text-text-primary">
               {provider.name}
-            </h3>
-            {provider.managed && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-medium">
-                Platform managed
-              </span>
-            )}
+            </div>
+            <div className="text-[11px] text-text-muted">
+              {provider.description}
+            </div>
           </div>
-          <p className="text-[13px] text-text-muted leading-relaxed">
-            {provider.description}
-          </p>
-          {provider.apiDocsUrl && (
-            <a
-              href={provider.apiDocsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 mt-1.5 text-[12px] text-accent hover:underline"
-            >
-              API Docs <ExternalLink size={10} />
-            </a>
-          )}
+        </div>
+        <div className="inline-flex items-center rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-[11px] font-medium text-accent">
+          登录后可用
         </div>
       </div>
 
-      {/* API Key section (hidden for managed providers) */}
-      {!provider.managed && (
-        <div className="mb-6 rounded-xl border border-border bg-surface-1 p-4">
-          <div className="text-[12px] font-medium text-text-secondary mb-2">
-            API Key
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-surface-0 px-3 py-2">
-              <input
-                type={showApiKey ? "text" : "password"}
-                placeholder={`Enter ${provider.name} API key...`}
-                className="flex-1 bg-transparent text-[13px] text-text-primary placeholder:text-text-muted/50 outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-          </div>
-          <p className="mt-2 text-[11px] text-text-muted">
-            Your API key is encrypted and stored securely. It is never shared.
-          </p>
+      {/* Login prompt card */}
+      <div className="rounded-xl border border-accent/15 bg-accent/5 px-4 py-4 mb-6">
+        <div className="text-[13px] font-semibold text-accent">
+          登录后使用 Nexu 官方模型
         </div>
-      )}
-
-      {/* Model list */}
-      <div className="rounded-xl border border-border bg-surface-1">
+        <div className="text-[12px] leading-[1.7] text-text-secondary mt-1.5">
+          登录 Nexu
+          账号后，即可直接使用官方无限量高级模型，例如 Claude Opus 4.6、GPT-5.4
+          等，无需单独配置 API Key。
+        </div>
         <button
           type="button"
-          onClick={() => setExpandedModels(!expandedModels)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left"
+          onClick={handleLogin}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-[12px] font-medium text-white transition-colors hover:bg-accent/90 cursor-pointer"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-text-primary">
-              Models
-            </span>
-            <span className="text-[11px] text-text-muted px-1.5 py-0.5 rounded-md bg-surface-3">
-              {enabledModels.length} enabled
+          登录 Nexu 账号
+          <ArrowUpRight size={13} />
+        </button>
+      </div>
+
+      {/* Model list */}
+      {provider.models.length > 0 && (
+        <div>
+          <div className="text-[13px] font-semibold text-text-primary mb-3">
+            模型列表
+            <span className="ml-2 text-[11px] font-normal text-text-muted">
+              共 {provider.models.length} 个模型
             </span>
           </div>
-          <ChevronDown
-            size={14}
-            className={cn(
-              "text-text-muted transition-transform",
-              expandedModels ? "" : "-rotate-90",
+          <div className="space-y-1.5">
+            {provider.models.map((model) => (
+              <div
+                key={model.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-0 px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-6 h-6 rounded-md flex items-center justify-center shrink-0">
+                    <ProviderLogo provider={provider.id} size={16} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-medium text-text-primary truncate">
+                      {model.name}
+                    </div>
+                    <div className="text-[10px] text-text-muted">{model.id}</div>
+                  </div>
+                </div>
+                <ToggleSwitch checked={model.enabled} onChange={() => {}} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BYOK provider detail panel ────────────────────────────────
+
+function ByokProviderDetail({
+  providerId,
+  dbProvider,
+  models,
+  queryClient,
+}: {
+  providerId: string;
+  dbProvider?: DbProvider;
+  models: ProviderModel[];
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const meta = PROVIDER_META[providerId] ?? {
+    name: providerId,
+    description: "",
+    apiDocsUrl: undefined,
+    apiKeyPlaceholder: "your-api-key",
+    defaultProxyUrl: "",
+  };
+
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState(
+    dbProvider?.baseUrl ?? meta.defaultProxyUrl ?? "",
+  );
+  const [providerEnabled, setProviderEnabled] = useState(
+    dbProvider?.hasApiKey ?? false,
+  );
+
+  // Available models from verification
+  const [verifiedModels, setVerifiedModels] = useState<string[] | null>(null);
+  const [enabledModelIds, setEnabledModelIds] = useState<Set<string>>(
+    () => new Set(JSON.parse(dbProvider?.modelsJson ?? "[]")),
+  );
+
+  // Reset form when provider changes
+  useEffect(() => {
+    setApiKey("");
+    setBaseUrl(dbProvider?.baseUrl ?? meta.defaultProxyUrl ?? "");
+    setProviderEnabled(dbProvider?.hasApiKey ?? false);
+    setVerifiedModels(null);
+    setEnabledModelIds(new Set(JSON.parse(dbProvider?.modelsJson ?? "[]")));
+  }, [providerId, dbProvider, meta.defaultProxyUrl]);
+
+  // ── Verify mutation ──────────────────────────────────
+  const verifyMutation = useMutation({
+    mutationFn: () => verifyApiKey(providerId, apiKey, baseUrl || undefined),
+    onSuccess: (result) => {
+      if (result.valid && result.models) {
+        setVerifiedModels(result.models);
+        // Auto-enable all verified models
+        setEnabledModelIds(new Set(result.models));
+        setProviderEnabled(true);
+      }
+    },
+  });
+
+  // ── Save mutation ────────────────────────────────────
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      saveProvider(providerId, {
+        apiKey: apiKey || undefined,
+        baseUrl: baseUrl || null,
+        displayName: meta.name,
+        enabled: providerEnabled,
+        modelsJson: JSON.stringify(Array.from(enabledModelIds)),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["models"] });
+      setApiKey("");
+      markSetupComplete();
+    },
+  });
+
+  // ── Delete mutation ──────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProvider(providerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["models"] });
+      setApiKey("");
+      setBaseUrl(meta.defaultProxyUrl ?? "");
+      setVerifiedModels(null);
+      setEnabledModelIds(new Set());
+      setProviderEnabled(false);
+    },
+  });
+
+  // Model list to show: verified > DB stored > defaults
+  const displayModels = useMemo(() => {
+    if (verifiedModels && verifiedModels.length > 0) return verifiedModels;
+    const stored: string[] = JSON.parse(dbProvider?.modelsJson ?? "[]");
+    if (stored.length > 0) return stored;
+    return DEFAULT_MODELS[providerId] ?? [];
+  }, [verifiedModels, dbProvider, providerId]);
+
+  // Split into enabled/disabled
+  const enabledModels = displayModels.filter((m) => enabledModelIds.has(m));
+  const disabledModels = displayModels.filter((m) => !enabledModelIds.has(m));
+
+  const toggleModel = (modelId: string) => {
+    setEnabledModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-2 shrink-0">
+            <ProviderLogo provider={providerId} size={20} />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="text-[15px] font-semibold text-text-primary">
+                {meta.name}
+              </div>
+              {meta.apiDocsUrl && (
+                <a
+                  href={meta.apiDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-accent hover:text-accent/80 transition-colors flex items-center gap-0.5"
+                >
+                  获取 API Key
+                  <ExternalLink size={10} />
+                </a>
+              )}
+            </div>
+            <div className="text-[11px] text-text-muted">{meta.description}</div>
+          </div>
+        </div>
+        <ToggleSwitch
+          checked={providerEnabled}
+          onChange={(v) => setProviderEnabled(v)}
+        />
+      </div>
+
+      {/* API Key + API 代理地址 */}
+      <div className="space-y-4 mb-6">
+        <div>
+          <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
+            API Key
+            {dbProvider?.hasApiKey && (
+              <span className="ml-2 text-emerald-600 font-normal text-[10px]">
+                (已保存)
+              </span>
             )}
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={meta.apiKeyPlaceholder}
+              className="flex-1 rounded-lg border border-border bg-surface-0 px-3 py-2 text-[12px] text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/30"
+            />
+            <button
+              type="button"
+              disabled={!apiKey || verifyMutation.isPending}
+              onClick={() => verifyMutation.mutate()}
+              className={cn(
+                "px-3 py-2 rounded-lg border border-border text-[11px] font-medium transition-colors",
+                apiKey
+                  ? "text-text-secondary hover:bg-surface-2"
+                  : "text-text-muted cursor-not-allowed",
+              )}
+            >
+              {verifyMutation.isPending ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : verifyMutation.isSuccess && verifyMutation.data?.valid ? (
+                <Check size={12} className="text-emerald-600" />
+              ) : (
+                "检查"
+              )}
+            </button>
+          </div>
+          {verifyMutation.isSuccess && (
+            <div
+              className={cn(
+                "mt-1.5 text-[10px]",
+                verifyMutation.data?.valid ? "text-emerald-600" : "text-red-500",
+              )}
+            >
+              {verifyMutation.data?.valid
+                ? `密钥有效 — 检测到 ${verifyMutation.data.models?.length ?? 0} 个模型`
+                : `密钥无效: ${verifyMutation.data?.error ?? "未知错误"}`}
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
+            API 代理地址
+          </label>
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={meta.defaultProxyUrl || "https://api.example.com/v1"}
+            className="w-full rounded-lg border border-border bg-surface-0 px-3 py-2 text-[12px] text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/30"
           />
+        </div>
+      </div>
+
+      {/* Model list */}
+      <div>
+        <div className="text-[13px] font-semibold text-text-primary mb-3">
+          模型列表
+          <span className="ml-2 text-[11px] font-normal text-text-muted">
+            共 {displayModels.length} 个模型
+          </span>
+        </div>
+        <div className="space-y-4">
+          {/* 已启用 */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-medium text-text-muted">
+                已启用
+              </span>
+              <span className="text-[10px] text-text-muted/60">
+                启用后将出现在 Nexu 的模型选择列表中
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {enabledModels.length === 0 && (
+                <div className="text-[11px] text-text-muted/60 py-3 text-center">
+                  暂无
+                </div>
+              )}
+              {enabledModels.map((modelId) => (
+                <div
+                  key={modelId}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-0 px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-md flex items-center justify-center shrink-0">
+                      <ProviderLogo provider={providerId} size={16} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-medium text-text-primary truncate">
+                        {modelId}
+                      </div>
+                      <div className="text-[10px] text-text-muted">
+                        {providerId}
+                      </div>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={true}
+                    onChange={() => toggleModel(modelId)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 未启用 */}
+          <div>
+            <div className="text-[11px] font-medium text-text-muted mb-2">
+              未启用
+            </div>
+            <div className="space-y-1.5">
+              {disabledModels.length === 0 && (
+                <div className="text-[11px] text-text-muted/60 py-3 text-center">
+                  暂无
+                </div>
+              )}
+              {disabledModels.map((modelId) => (
+                <div
+                  key={modelId}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-0 px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 opacity-50">
+                      <ProviderLogo provider={providerId} size={16} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-medium text-text-primary truncate">
+                        {modelId}
+                      </div>
+                      <div className="text-[10px] text-text-muted">
+                        {providerId}
+                      </div>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={false}
+                    onChange={() => toggleModel(modelId)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-3 mt-6">
+        <button
+          type="button"
+          disabled={
+            saveMutation.isPending ||
+            (!apiKey && !dbProvider?.hasApiKey) ||
+            enabledModelIds.size === 0
+          }
+          onClick={() => saveMutation.mutate()}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-medium transition-colors",
+            !saveMutation.isPending &&
+              (apiKey || dbProvider?.hasApiKey) &&
+              enabledModelIds.size > 0
+              ? "bg-accent text-white hover:bg-accent/90"
+              : "bg-surface-2 text-text-muted cursor-not-allowed",
+          )}
+        >
+          {saveMutation.isPending && (
+            <Loader2 size={13} className="animate-spin" />
+          )}
+          {dbProvider?.hasApiKey ? "更新配置" : "保存并启用"}
         </button>
 
-        {expandedModels && (
-          <div className="border-t border-border">
-            {enabledModels.length > 0 && (
-              <div>
-                {enabledModels.map((model, i) => (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    providerId={provider.id}
-                    isLast={
-                      i === enabledModels.length - 1 &&
-                      disabledModels.length === 0
-                    }
-                  />
-                ))}
-              </div>
+        {dbProvider?.hasApiKey && (
+          <button
+            type="button"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (confirm("确定要移除此服务商配置吗？")) {
+                deleteMutation.mutate();
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-medium text-red-500 hover:bg-red-500/5 transition-colors"
+          >
+            {deleteMutation.isPending ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Trash2 size={13} />
             )}
-
-            {disabledModels.length > 0 && (
-              <div>
-                <div className="px-4 py-2 text-[10px] font-medium text-text-muted uppercase tracking-wider bg-surface-2/50">
-                  Disabled
-                </div>
-                {disabledModels.map((model, i) => (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    providerId={provider.id}
-                    isLast={i === disabledModels.length - 1}
-                  />
-                ))}
-              </div>
-            )}
-
-            {enabledModels.length === 0 && disabledModels.length === 0 && (
-              <div className="px-4 py-6 text-center text-[12px] text-text-muted">
-                No models available
-              </div>
-            )}
-          </div>
+            移除
+          </button>
         )}
       </div>
-    </div>
-  );
-}
 
-// ── Model row ──────────────────────────────────────────────────
-
-function ModelRow({
-  model,
-  providerId,
-  isLast,
-}: {
-  model: ProviderModel;
-  providerId: string;
-  isLast: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-4 py-3",
-        !isLast && "border-b border-border/50",
+      {saveMutation.isSuccess && (
+        <div className="mt-3 text-[11px] text-emerald-600">保存成功</div>
       )}
-    >
-      <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-        <ProviderLogo provider={providerId} size={14} />
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-text-primary truncate">
-          {model.name}
-        </div>
-        {model.description && (
-          <div className="text-[11px] text-text-muted truncate">
-            {model.description}
-          </div>
-        )}
-      </div>
-      <div className="text-[11px] text-text-muted/60 shrink-0 font-mono">
-        {model.id}
-      </div>
-      <div
-        className={cn(
-          "w-2 h-2 rounded-full shrink-0",
-          model.enabled ? "bg-emerald-500" : "bg-text-muted/30",
-        )}
-      />
+      {saveMutation.isError && (
+        <div className="mt-3 text-[11px] text-red-500">保存失败，请重试</div>
+      )}
     </div>
   );
 }
+

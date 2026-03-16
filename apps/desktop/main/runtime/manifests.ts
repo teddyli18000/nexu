@@ -188,6 +188,11 @@ export function createRuntimeUnitManifests(
         WEB_URL: webUrl,
         INTERNAL_API_TOKEN: internalApiToken,
         SKILL_API_TOKEN: skillApiToken,
+        NEXU_DESKTOP_MODE: "true",
+        OPENCLAW_STATE_DIR: openclawStateDir,
+        ...(process.env.NEXU_LINK_URL
+          ? { NEXU_LINK_URL: process.env.NEXU_LINK_URL }
+          : {}),
       },
     },
     {

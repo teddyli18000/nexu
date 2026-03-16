@@ -92,6 +92,13 @@
       "when": 1773397327243,
       "tag": "0012_add-desktop-device-authorizations",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1773811200000,
+      "tag": "0013_add-model-providers",
+      "breakpoints": true
     }
   ]
 }

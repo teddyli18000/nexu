@@ -578,6 +578,31 @@ export const desktopDeviceAuthorizations = pgTable(
   ],
 );
 
+// BYOK (Bring Your Own Key) provider credentials.
+// Users configure their own LLM API keys here instead of using Nexu cloud.
+export const modelProviders = pgTable(
+  "model_providers",
+  {
+    pk: serial("pk").primaryKey(),
+    id: text("id").notNull().unique(),
+    providerId: text("provider_id").notNull().unique(),
+    displayName: text("display_name").notNull(),
+    encryptedApiKey: text("encrypted_api_key").notNull(),
+    baseUrl: text("base_url"),
+    enabled: boolean("enabled").notNull().default(true),
+    modelsJson: text("models_json").notNull().default("[]"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("model_providers_provider_id_idx").on(table.providerId),
+  ],
+);
+
 // Test-only table used to validate post-merge DB migration workflow.
 export const e2eTestMigration = pgTable("e2e_test_migration", {
   id: text("id").primaryKey(),

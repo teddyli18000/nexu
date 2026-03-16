@@ -479,9 +479,7 @@ function DesktopShell() {
       .catch(() => null);
   }, []);
 
-  const desktopWebUrl = runtimeConfig
-    ? new URL("/workspace", runtimeConfig.webUrl).toString()
-    : null;
+  const desktopWebUrl = runtimeConfig?.webUrl ?? null;
   const desktopSessionChatUrl = runtimeConfig?.sessionChatUrl ?? null;
 
   return (

@@ -109,7 +109,10 @@ export function createApp() {
   registerWorkspaceTemplateRoutes(app);
   registerFeedbackRoutes(app);
 
-  app.use("/api/v1/*", authMiddleware);
+  // Desktop mode: skip auth for v1 routes (localhost-only trust boundary)
+  if (!isDesktopMode()) {
+    app.use("/api/v1/*", authMiddleware);
+  }
 
   registerDesktopAuthorizeRoute(app);
   registerUserRoutes(app);

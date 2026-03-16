@@ -14,6 +14,7 @@ import {
   bots,
   channelCredentials,
   gatewayPools,
+  modelProviders,
 } from "../db/schema/index.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -483,6 +484,52 @@ export async function generatePoolConfig(
       config.models = {
         mode: "merge",
         providers: { link: linkProvider },
+      };
+    }
+  }
+
+  // Add BYOK (user-provided) providers from database
+  const byokProviders = await db
+    .select()
+    .from(modelProviders)
+    .where(eq(modelProviders.enabled, true));
+
+  const byokDefaultBaseUrls: Record<string, string> = {
+    anthropic: "https://api.anthropic.com/v1",
+    openai: "https://api.openai.com/v1",
+    google:
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+  };
+
+  for (const bp of byokProviders) {
+    const providerKey =
+      bp.providerId === "custom" ? `custom_${bp.id}` : bp.providerId;
+    const baseUrl = bp.baseUrl ?? byokDefaultBaseUrls[bp.providerId];
+    if (!baseUrl) continue;
+
+    const modelIds: string[] = JSON.parse(bp.modelsJson || "[]");
+    const byokProvider = {
+      baseUrl,
+      apiKey: decrypt(bp.encryptedApiKey),
+      api: "openai-completions",
+      models: modelIds.map((id) => ({
+        id,
+        name: id,
+        reasoning: false,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+        compat: { supportsStore: false },
+      })),
+    };
+
+    if (config.models) {
+      config.models.providers[providerKey] = byokProvider;
+    } else {
+      config.models = {
+        mode: "merge",
+        providers: { [providerKey]: byokProvider },
       };
     }
   }
