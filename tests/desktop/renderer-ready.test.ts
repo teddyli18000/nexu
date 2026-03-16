@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { waitForDesktopRendererReady } from "./renderer-ready";
+import { waitForDesktopRendererReady } from "#desktop/shared/renderer-ready";
 
 describe("waitForDesktopRendererReady", () => {
   it("returns when the renderer URL responds successfully", async () => {

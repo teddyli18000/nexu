@@ -4,7 +4,7 @@ const selectMock = vi.fn();
 const fromMock = vi.fn();
 const whereMock = vi.fn();
 
-vi.mock("../../db/index.js", () => ({
+vi.mock("#api/db/index.js", () => ({
   db: {
     select: selectMock,
   },
@@ -29,7 +29,7 @@ describe("bot-helpers", () => {
       { id: "active-pool", status: "active", podIp: null },
     ]);
 
-    const { findDefaultPool } = await import("../bot-helpers.js");
+    const { findDefaultPool } = await import("#api/lib/bot-helpers.js");
 
     await expect(findDefaultPool()).resolves.toBe("active-pool");
   });
@@ -39,7 +39,7 @@ describe("bot-helpers", () => {
       { id: "degraded-pool", status: "degraded", podIp: null },
     ]);
 
-    const { findDefaultPool } = await import("../bot-helpers.js");
+    const { findDefaultPool } = await import("#api/lib/bot-helpers.js");
 
     await expect(findDefaultPool()).resolves.toBe("degraded-pool");
   });
@@ -50,7 +50,7 @@ describe("bot-helpers", () => {
       { id: "degraded-with-gateway", status: "degraded", podIp: "127.0.0.1" },
     ]);
 
-    const { findDefaultPool } = await import("../bot-helpers.js");
+    const { findDefaultPool } = await import("#api/lib/bot-helpers.js");
 
     await expect(findDefaultPool()).resolves.toBe("degraded-with-gateway");
   });

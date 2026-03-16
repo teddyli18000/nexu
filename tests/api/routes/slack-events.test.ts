@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSlackSessionKey } from "../slack-events.js";
+import { buildSlackSessionKey } from "#api/routes/slack-events.js";
 
 describe("buildSlackSessionKey", () => {
   it("builds canonical channel session keys", () => {

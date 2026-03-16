@@ -13,10 +13,10 @@ import {
 // Mock the shared db singleton so route handlers use the test database.
 // vi.mock is hoisted above imports, so this runs before artifact-routes.ts
 // resolves its `import { db } from "../db/index.js"`.
-vi.mock("../../db/index.js", async () => {
+vi.mock("#api/db/index.js", async () => {
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const { default: PgPool } = await import("pg");
-  const schemaModule = await import("../../db/schema/index.js");
+  const schemaModule = await import("#api/db/schema/index.js");
   const url =
     process.env.TEST_DATABASE_URL ??
     "postgresql://nexu:nexu@localhost:5433/nexu_test";
@@ -27,7 +27,7 @@ vi.mock("../../db/index.js", async () => {
   };
 });
 
-import { registerArtifactInternalRoutes } from "../artifact-routes.js";
+import { registerArtifactInternalRoutes } from "#api/routes/artifact-routes.js";
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??

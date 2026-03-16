@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import * as schema from "../../db/schema/index.js";
-import { generatePoolConfig } from "../config-generator.js";
-import { encrypt } from "../crypto.js";
+import * as schema from "#api/db/schema/index.js";
+import { generatePoolConfig } from "#api/lib/config-generator.js";
+import { encrypt } from "#api/lib/crypto.js";
 
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

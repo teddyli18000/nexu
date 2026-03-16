@@ -2,13 +2,13 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import * as schema from "../../../db/schema/index.js";
-import { encrypt } from "../../../lib/crypto.js";
+import * as schema from "#api/db/schema/index.js";
+import { encrypt } from "#api/lib/crypto.js";
 import {
   getLatestPoolConfigSnapshot,
   getPoolConfigSnapshotByVersion,
   publishPoolConfigSnapshot,
-} from "../pool-config-service.js";
+} from "#api/services/runtime/pool-config-service.js";
 
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

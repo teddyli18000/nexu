@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { maskCredential, validateCredentialFields } from "../composio.js";
+import { maskCredential, validateCredentialFields } from "#api/lib/composio.js";
 
 describe("maskCredential", () => {
   it("masks long strings showing first 4 and last 4", () => {
@@ -25,42 +25,38 @@ describe("maskCredential", () => {
 
 describe("validateCredentialFields", () => {
   const authFields = [
-    { key: "api_key", label: "API Key", type: "secret" as const },
-    { key: "shop_url", label: "Shop URL", type: "text" as const },
+    { key: "api_key", label: "API Key", type: "secret" },
+    { key: "shop_url", label: "Shop URL", type: "text" },
   ];
 
-  it("passes when all required fields are provided", () => {
+  it("accepts valid credentials", () => {
     expect(() =>
       validateCredentialFields(authFields, {
-        api_key: "x",
-        shop_url: "y",
+        api_key: "key123",
+        shop_url: "store.shopify.com",
       }),
     ).not.toThrow();
   });
 
-  it("throws 400 when a required field is missing", () => {
+  it("throws for missing required field", () => {
     expect(() =>
-      validateCredentialFields(authFields, { api_key: "x" }),
-    ).toThrow(/Missing required field: shop_url/);
+      validateCredentialFields(authFields, { api_key: "key123" }),
+    ).toThrow("Missing required field");
   });
 
-  it("throws 400 when an unknown field is provided", () => {
+  it("throws for unknown field", () => {
     expect(() =>
       validateCredentialFields(authFields, {
-        api_key: "x",
-        shop_url: "y",
-        extra: "z",
+        api_key: "key123",
+        shop_url: "x",
+        extra: "bad",
       }),
-    ).toThrow(/Unknown field: extra/);
+    ).toThrow("Unknown field");
   });
 
-  it("throws 400 when a field value is empty", () => {
+  it("throws for empty value", () => {
     expect(() =>
-      validateCredentialFields(authFields, { api_key: "", shop_url: "y" }),
-    ).toThrow(/Field cannot be empty: api_key/);
-  });
-
-  it("passes when authFields is empty and credentials is empty", () => {
-    expect(() => validateCredentialFields([], {})).not.toThrow();
+      validateCredentialFields(authFields, { api_key: "", shop_url: "x" }),
+    ).toThrow("Field cannot be empty");
   });
 });

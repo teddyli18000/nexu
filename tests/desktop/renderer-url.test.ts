@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeDesktopRendererUrl,
   resolveDesktopRendererUrl,
-} from "./renderer-url";
+} from "#desktop/shared/renderer-url";
 
 describe("normalizeDesktopRendererUrl", () => {
   it("removes trailing slashes so Electron reloads a stable origin", () => {

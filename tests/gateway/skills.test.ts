@@ -4,20 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../api.js");
-vi.mock("../env.js", () => ({
+vi.mock("#gateway/api.js");
+vi.mock("#gateway/env.js", () => ({
   env: {
     OPENCLAW_SKILLS_DIR: "",
   },
 }));
-vi.mock("../log.js", () => ({
+vi.mock("#gateway/log.js", () => ({
   log: vi.fn(),
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import * as api from "../api.js";
-import { env } from "../env.js";
-import { pollLatestSkills } from "../skills.js";
-import { createRuntimeState } from "../state.js";
+import * as api from "#gateway/api.js";
+import { env } from "#gateway/env.js";
+import { pollLatestSkills } from "#gateway/skills.js";
+import { createRuntimeState } from "#gateway/state.js";
 
 const fetchJson = vi.mocked(api.fetchJson);
 

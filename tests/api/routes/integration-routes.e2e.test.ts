@@ -10,10 +10,10 @@ import {
   vi,
 } from "vitest";
 
-vi.mock("../../db/index.js", async () => {
+vi.mock("#api/db/index.js", async () => {
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const { default: PgPool } = await import("pg");
-  const schemaModule = await import("../../db/schema/index.js");
+  const schemaModule = await import("#api/db/schema/index.js");
   const url =
     process.env.TEST_DATABASE_URL ??
     "postgresql://nexu:nexu@localhost:5433/nexu_test";
@@ -24,7 +24,7 @@ vi.mock("../../db/index.js", async () => {
   };
 });
 
-vi.mock("../../lib/composio.js", async (importOriginal) => {
+vi.mock("#api/lib/composio.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -39,10 +39,10 @@ vi.mock("../../lib/composio.js", async (importOriginal) => {
   };
 });
 
-import { revokeConnection } from "../../lib/composio.js";
-import { decrypt } from "../../lib/crypto.js";
-import type { AppBindings } from "../../types.js";
-import { registerIntegrationRoutes } from "../integration-routes.js";
+import { revokeConnection } from "#api/lib/composio.js";
+import { decrypt } from "#api/lib/crypto.js";
+import type { AppBindings } from "#api/types.js";
+import { registerIntegrationRoutes } from "#api/routes/integration-routes.js";
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
