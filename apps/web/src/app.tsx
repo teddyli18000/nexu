@@ -7,6 +7,7 @@ import { AuthPage } from "./pages/auth";
 import { ChannelsPage } from "./pages/channels";
 import { HomePage } from "./pages/home";
 import { IntegrationsPage } from "./pages/integrations";
+import { ModelConfigPage } from "./pages/model-config";
 import { OAuthCallbackPage } from "./pages/oauth-callback";
 import { OnboardingPage } from "./pages/onboarding";
 import { SessionsPage } from "./pages/sessions";
@@ -24,6 +25,7 @@ function DocumentTitleSync() {
       "/workspace": "Home · Nexu",
       "/workspace/home": "Home · Nexu",
       "/workspace/integrations": "Integrations · Nexu",
+      "/workspace/model-config": "Model Config · Nexu",
       "/workspace/skills": "Skills · Nexu",
     };
 
@@ -65,6 +67,10 @@ export function App() {
               <Route
                 path="/workspace/integrations"
                 element={<IntegrationsPage />}
+              />
+              <Route
+                path="/workspace/model-config"
+                element={<ModelConfigPage />}
               />
               <Route path="/workspace/skills" element={<SkillsPage />} />
               <Route

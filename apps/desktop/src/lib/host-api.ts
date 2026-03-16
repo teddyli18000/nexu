@@ -29,13 +29,6 @@ export async function getRuntimeConfig(): Promise<DesktopRuntimeConfig> {
   return getHostBridge().invoke("env:get-runtime-config", undefined);
 }
 
-export async function getRuntimeIdentifiers(): Promise<{
-  apiBaseUrl: string;
-  gatewayPoolId: string;
-}> {
-  return getHostBridge().invoke("env:get-runtime-identifiers", undefined);
-}
-
 export async function openExternal(url: string): Promise<void> {
   await getHostBridge().invoke("shell:open-external", { url });
 }

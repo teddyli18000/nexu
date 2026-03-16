@@ -28,6 +28,7 @@ import { registerModelRoutes } from "./routes/model-routes.js";
 import { registerOnboardingRoutes } from "./routes/onboarding-routes.js";
 import { registerPoolModelProviderRoutes } from "./routes/pool-model-provider-routes.js";
 import { registerPoolRoutes } from "./routes/pool-routes.js";
+import { registerRuntimeContextRoutes } from "./routes/runtime-context-routes.js";
 import { registerSecretRoutes } from "./routes/secret-routes.js";
 import {
   registerSessionInternalRoutes,
@@ -103,6 +104,7 @@ export function createApp() {
   registerModelRoutes(app);
   registerPoolRoutes(app);
   registerPoolModelProviderRoutes(app);
+  registerRuntimeContextRoutes(app);
   registerArtifactRoutes(app);
   registerSessionRoutes(app);
   registerIntegrationRoutes(app);

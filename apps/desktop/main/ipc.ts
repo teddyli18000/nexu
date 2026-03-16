@@ -49,15 +49,6 @@ export function registerIpcHandlers(orchestrator: RuntimeOrchestrator): void {
           return getDesktopRuntimeConfig(process.env);
         }
 
-        case "env:get-runtime-identifiers": {
-          const runtimeConfig = getDesktopRuntimeConfig(process.env);
-          return {
-            apiBaseUrl: runtimeConfig.apiBaseUrl,
-            gatewayPoolId:
-              process.env.NEXU_GATEWAY_POOL_ID ?? "desktop-local-pool",
-          };
-        }
-
         case "runtime:get-state": {
           return orchestrator.getRuntimeState();
         }

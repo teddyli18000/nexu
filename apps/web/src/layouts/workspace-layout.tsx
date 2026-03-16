@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronUp,
+  Cpu,
   Home,
   LogOut,
   Menu,
@@ -18,7 +19,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import "@/lib/api";
-import { getApiV1Sessions } from "../../lib/api/sdk.gen";
+import {
+  getApiV1RuntimeContext,
+  getApiV1Sessions,
+} from "../../lib/api/sdk.gen";
 
 type Platform = "slack" | "discord" | "whatsapp" | "telegram" | "web";
 
@@ -150,6 +154,14 @@ export function WorkspaceLayout() {
     refetchInterval: 5000,
   });
 
+  const { data: runtimeContext } = useQuery({
+    queryKey: ["runtime-context"],
+    queryFn: async () => {
+      const { data } = await getApiV1RuntimeContext();
+      return data;
+    },
+  });
+
   const sessions = sessionsData?.sessions ?? [];
 
   const sessionMatch = location.pathname.match(/\/workspace\/sessions\/(.+)/);
@@ -158,7 +170,9 @@ export function WorkspaceLayout() {
     location.pathname === "/workspace" ||
     location.pathname === "/workspace/home";
   const isChannelsPage = location.pathname.includes("/channels");
+  const isModelConfigPage = location.pathname.includes("/model-config");
   const isSkillsPage = location.pathname.includes("/skills");
+  const showModelConfigEntry = runtimeContext?.isDesktopRuntime === true;
 
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
@@ -183,18 +197,22 @@ export function WorkspaceLayout() {
     ? "Home"
     : isChannelsPage
       ? "Channels"
-      : isSkillsPage
-        ? "Skills"
-        : selectedSession?.title || "Conversations";
+      : isModelConfigPage
+        ? "Model Config"
+        : isSkillsPage
+          ? "Skills"
+          : selectedSession?.title || "Conversations";
   const mobileSubtitle = isHomePage
     ? "Welcome to nexu"
     : isChannelsPage
       ? "Configure your channels"
-      : isSkillsPage
-        ? "Browse AI capabilities"
-        : selectedSession
-          ? `${selectedSession.channelType ?? "web"} · ${formatTime(selectedSession.lastMessageAt || selectedSession.updatedAt)}`
-          : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
+      : isModelConfigPage
+        ? "Desktop model providers"
+        : isSkillsPage
+          ? "Browse AI capabilities"
+          : selectedSession
+            ? `${selectedSession.channelType ?? "web"} · ${formatTime(selectedSession.lastMessageAt || selectedSession.updatedAt)}`
+            : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
 
   return (
     <div className="flex h-screen">
@@ -380,6 +398,22 @@ export function WorkspaceLayout() {
               <Zap size={14} />
               {!collapsed && "Skills"}
             </Link>
+            {showModelConfigEntry ? (
+              <Link
+                to="/workspace/model-config"
+                title={collapsed ? "Model Config" : undefined}
+                className={cn(
+                  "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-1",
+                  collapsed ? "justify-center p-2" : "px-3 py-2",
+                  isModelConfigPage
+                    ? "bg-accent/10 text-accent"
+                    : "text-text-muted hover:text-text-primary hover:bg-surface-3",
+                )}
+              >
+                <Cpu size={14} />
+                {!collapsed && "Model Config"}
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -620,6 +654,23 @@ export function WorkspaceLayout() {
                     <Zap size={14} />
                     Skills
                   </Link>
+                  {showModelConfigEntry ? (
+                    <Link
+                      to="/workspace/model-config"
+                      onClick={() => {
+                        setMobileDrawerOpen(false);
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-1 px-3 py-2",
+                        isModelConfigPage
+                          ? "bg-accent/10 text-accent"
+                          : "text-text-muted hover:text-text-primary hover:bg-surface-3",
+                      )}
+                    >
+                      <Cpu size={14} />
+                      Model Config
+                    </Link>
+                  ) : null}
                 </div>
               </div>
 

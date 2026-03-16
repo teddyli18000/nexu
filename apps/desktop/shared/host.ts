@@ -5,7 +5,6 @@ export const hostInvokeChannels = [
   "app:get-info",
   "env:get-api-base-url",
   "env:get-runtime-config",
-  "env:get-runtime-identifiers",
   "runtime:get-state",
   "runtime:start-unit",
   "runtime:stop-unit",
@@ -20,7 +19,6 @@ export type HostInvokePayloadMap = {
   "app:get-info": undefined;
   "env:get-api-base-url": undefined;
   "env:get-runtime-config": undefined;
-  "env:get-runtime-identifiers": undefined;
   "runtime:get-state": undefined;
   "runtime:start-unit": {
     id: RuntimeUnitId;
@@ -41,10 +39,6 @@ export type HostInvokeResultMap = {
     apiBaseUrl: string;
   };
   "env:get-runtime-config": DesktopRuntimeConfig;
-  "env:get-runtime-identifiers": {
-    apiBaseUrl: string;
-    gatewayPoolId: string;
-  };
   "runtime:get-state": RuntimeState;
   "runtime:start-unit": RuntimeState;
   "runtime:stop-unit": RuntimeState;

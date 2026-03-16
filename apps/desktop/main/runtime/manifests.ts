@@ -127,6 +127,11 @@ export function createRuntimeUnitManifests(
       env: {
         FORCE_COLOR: "1",
         PORT: String(apiPort),
+        NEXU_DESKTOP_RUNTIME: "true",
+        NEXU_GATEWAY_POOL_ID: gatewayPoolId,
+        ENCRYPTION_KEY:
+          process.env.ENCRYPTION_KEY ??
+          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         DATABASE_URL:
           process.env.NEXU_DATABASE_URL ??
           `postgresql://postgres:postgres@127.0.0.1:${pglitePort}/postgres?sslmode=disable`,

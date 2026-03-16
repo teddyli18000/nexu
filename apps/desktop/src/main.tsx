@@ -3,7 +3,7 @@ import { Identify } from "@amplitude/unified";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { Toaster, toast } from "sonner";
+import { Toaster } from "sonner";
 import type {
   DesktopRuntimeConfig,
   RuntimeState,
@@ -11,10 +11,8 @@ import type {
   RuntimeUnitPhase,
   RuntimeUnitState,
 } from "../shared/host";
-import { apiFetch } from "./lib/api-client";
 import {
   getRuntimeConfig,
-  getRuntimeIdentifiers,
   getRuntimeState,
   startAllUnits,
   startUnit,
@@ -22,26 +20,6 @@ import {
   stopUnit,
 } from "./lib/host-api";
 import "./runtime-page.css";
-
-type ModelProviderConfig = {
-  id: string;
-  poolId: string;
-  providerKey: string;
-  baseUrl: string;
-  apiType: string;
-  status: "active" | "disabled";
-  models: Array<{
-    id: string;
-    name?: string;
-    reasoning?: boolean;
-    input?: string[];
-    contextWindow?: number;
-    maxTokens?: number;
-  }>;
-  hasApiKey: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
 
 const amplitudeApiKey = import.meta.env.VITE_AMPLITUDE_API_KEY;
 
@@ -295,8 +273,6 @@ function RuntimePage() {
         logs from the local orchestrator.
       </p>
 
-      <ModelProviderPanel />
-
       {errorMessage ? (
         <p className="runtime-error-banner">{errorMessage}</p>
       ) : null}
@@ -340,229 +316,6 @@ function RuntimePage() {
         </div>
       </section>
     </div>
-  );
-}
-
-function ModelProviderPanel() {
-  const [poolId, setPoolId] = useState<string | null>(null);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiType, setApiType] = useState("openai-completions");
-  const [apiKey, setApiKey] = useState("");
-  const [modelsText, setModelsText] = useState(
-    JSON.stringify(
-      [
-        {
-          id: "anthropic/claude-sonnet-4",
-          name: "Claude Sonnet 4",
-          input: ["text", "image"],
-          contextWindow: 200000,
-          maxTokens: 8192,
-        },
-      ],
-      null,
-      2,
-    ),
-  );
-  const [status, setStatus] = useState<"active" | "disabled">("active");
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const loadProvider = useCallback(async () => {
-    setLoading(true);
-    try {
-      const identifiers = await getRuntimeIdentifiers();
-      setPoolId(identifiers.gatewayPoolId);
-
-      const response = await apiFetch(
-        `/api/v1/pools/${identifiers.gatewayPoolId}/model-providers`,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to load model providers: ${response.status}`);
-      }
-
-      const payload = (await response.json()) as {
-        providers: ModelProviderConfig[];
-      };
-      const provider = payload.providers.find(
-        (entry) => entry.providerKey === "litellm",
-      );
-
-      if (provider) {
-        setBaseUrl(provider.baseUrl);
-        setApiType(provider.apiType);
-        setStatus(provider.status);
-        setModelsText(JSON.stringify(provider.models, null, 2));
-        setMessage(
-          provider.hasApiKey
-            ? "Stored API key detected."
-            : "No API key stored yet.",
-        );
-      } else {
-        setMessage("No runtime model provider configured yet.");
-      }
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to load model provider.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProvider();
-  }, [loadProvider]);
-
-  async function handleSave() {
-    if (!poolId) {
-      toast.error("Runtime pool id is unavailable.");
-      return;
-    }
-
-    let parsedModels: unknown;
-    try {
-      parsedModels = JSON.parse(modelsText);
-    } catch {
-      toast.error("Models must be valid JSON.");
-      return;
-    }
-
-    if (!Array.isArray(parsedModels)) {
-      toast.error("Models JSON must be an array.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const response = await apiFetch(
-        `/api/v1/pools/${poolId}/model-providers/litellm`,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            baseUrl,
-            apiType,
-            apiKey: apiKey.trim().length > 0 ? apiKey : undefined,
-            models: parsedModels,
-            status,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          message?: string;
-        } | null;
-        throw new Error(payload?.message ?? `Save failed: ${response.status}`);
-      }
-
-      setApiKey("");
-      setMessage("Model provider saved and runtime config republished.");
-      toast.success("Model provider updated.");
-      await loadProvider();
-    } catch (error) {
-      const text =
-        error instanceof Error
-          ? error.message
-          : "Failed to save model provider.";
-      setMessage(text);
-      toast.error(text);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="runtime-provider-panel">
-      <div className="runtime-provider-head">
-        <div>
-          <span className="runtime-eyebrow">Model Config</span>
-          <h2>OpenClaw provider settings</h2>
-          <p>
-            Updates publish a fresh pool config snapshot. API and gateway
-            restart are not required.
-          </p>
-        </div>
-        <button
-          disabled={loading || saving}
-          onClick={() => void loadProvider()}
-          type="button"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="runtime-provider-grid">
-        <label>
-          <span>Pool</span>
-          <input disabled value={poolId ?? "loading"} />
-        </label>
-        <label>
-          <span>Provider</span>
-          <input disabled value="litellm" />
-        </label>
-        <label>
-          <span>Base URL</span>
-          <input
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="https://litellm.example.com/v1"
-            value={baseUrl}
-          />
-        </label>
-        <label>
-          <span>API Type</span>
-          <input
-            onChange={(event) => setApiType(event.target.value)}
-            value={apiType}
-          />
-        </label>
-        <label>
-          <span>Status</span>
-          <select
-            onChange={(event) =>
-              setStatus(event.target.value as "active" | "disabled")
-            }
-            value={status}
-          >
-            <option value="active">active</option>
-            <option value="disabled">disabled</option>
-          </select>
-        </label>
-        <label>
-          <span>API Key</span>
-          <input
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Leave blank to keep current key"
-            type="password"
-            value={apiKey}
-          />
-        </label>
-      </div>
-
-      <label className="runtime-provider-models">
-        <span>Models JSON</span>
-        <textarea
-          onChange={(event) => setModelsText(event.target.value)}
-          spellCheck={false}
-          value={modelsText}
-        />
-      </label>
-
-      {message ? <p className="runtime-note">{message}</p> : null}
-
-      <div className="runtime-provider-actions">
-        <button
-          disabled={loading || saving || baseUrl.trim().length === 0}
-          onClick={() => void handleSave()}
-          type="button"
-        >
-          {saving ? "Saving..." : "Publish model config"}
-        </button>
-      </div>
-    </section>
   );
 }
 

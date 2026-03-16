@@ -2339,6 +2339,36 @@ export type PutApiV1PoolsByPoolIdModelProvidersByProviderKeyResponses = {
 
 export type PutApiV1PoolsByPoolIdModelProvidersByProviderKeyResponse = PutApiV1PoolsByPoolIdModelProvidersByProviderKeyResponses[keyof PutApiV1PoolsByPoolIdModelProvidersByProviderKeyResponses];
 
+export type GetApiV1RuntimeContextData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/runtime/context';
+};
+
+export type GetApiV1RuntimeContextErrors = {
+    /**
+     * Unauthorized
+     */
+    401: {
+        message: string;
+    };
+};
+
+export type GetApiV1RuntimeContextError = GetApiV1RuntimeContextErrors[keyof GetApiV1RuntimeContextErrors];
+
+export type GetApiV1RuntimeContextResponses = {
+    /**
+     * Desktop runtime context
+     */
+    200: {
+        isDesktopRuntime: boolean;
+        gatewayPoolId: string;
+    };
+};
+
+export type GetApiV1RuntimeContextResponse = GetApiV1RuntimeContextResponses[keyof GetApiV1RuntimeContextResponses];
+
 export type GetApiV1ArtifactsData = {
     body?: never;
     path?: never;
