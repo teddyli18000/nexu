@@ -518,20 +518,28 @@ function ManagedProviderDetail({ provider }: { provider: ProviderConfig }) {
     0,
   );
 
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
   const handleLogin = async () => {
+    setLoginBusy(true);
+    setLoginError(null);
     try {
       const res = await fetch("/api/internal/desktop/cloud-connect", {
         method: "POST",
       });
-      if (res.ok) {
-        const data = (await res.json()) as { authUrl?: string };
-        if (data.authUrl) {
-          window.open(data.authUrl, "_blank", "noopener,noreferrer");
-        }
+      const data = (await res.json()) as { browserUrl?: string; error?: string };
+      if (!res.ok) {
+        setLoginError(data.error ?? "连接失败，请稍后重试");
+        setLoginBusy(false);
+        return;
+      }
+      if (data.browserUrl) {
+        window.open(data.browserUrl, "_blank", "noopener,noreferrer");
       }
     } catch {
-      window.open("/auth", "_blank", "noopener,noreferrer");
+      setLoginError("无法连接到 Nexu 云端服务");
     }
+    setLoginBusy(false);
   };
 
   return (
@@ -567,12 +575,16 @@ function ManagedProviderDetail({ provider }: { provider: ProviderConfig }) {
         </div>
         <button
           type="button"
-          onClick={handleLogin}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-[12px] font-medium text-white transition-colors hover:bg-accent/90 cursor-pointer"
+          disabled={loginBusy}
+          onClick={() => void handleLogin()}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-[12px] font-medium text-white transition-colors hover:bg-accent/90 cursor-pointer disabled:opacity-60"
         >
-          登录 Nexu 账号
-          <ArrowUpRight size={13} />
+          {loginBusy ? "连接中..." : "登录 Nexu 账号"}
+          {!loginBusy && <ArrowUpRight size={13} />}
         </button>
+        {loginError && (
+          <p className="mt-2 text-[11px] text-red-500">{loginError}</p>
+        )}
       </div>
 
       {/* Connected cloud models (from API) */}

@@ -91,6 +91,7 @@ export function AuthPage() {
   const isLogin = searchParams.get("mode") !== "signup";
   const isDesktopAuth = searchParams.get("desktop") === "1";
   const deviceId = searchParams.get("device_id");
+  const returnTo = searchParams.get("returnTo") ?? "/workspace";
   const [loading, setLoading] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -190,7 +191,7 @@ export function AuthPage() {
         setVerifying(false);
         return;
       }
-      navigate("/workspace");
+      navigate(returnTo);
     } catch {
       toast.error("Verification failed");
       setVerifying(false);
@@ -231,7 +232,7 @@ export function AuthPage() {
   }
 
   if (session?.user && !isDesktopAuth) {
-    return <Navigate to="/workspace" replace />;
+    return <Navigate to={returnTo} replace />;
   }
 
   const handleOAuth = async (provider: "google") => {
@@ -288,7 +289,7 @@ export function AuthPage() {
           setLoading(null);
           return;
         }
-        navigate("/workspace");
+        navigate(returnTo);
       } else {
         const { error } = await authClient.signUp.email({
           email,
