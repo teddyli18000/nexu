@@ -40,11 +40,11 @@ import {
   registerSessionInternalRoutes,
   registerSessionRoutes,
 } from "./routes/session-routes.js";
-import { registerFilesystemSkillRoutes } from "./routes/skill-filesystem-routes.js";
 import {
   registerSharedSlackClaimPublicRoutes,
   registerSharedSlackClaimRoutes,
 } from "./routes/shared-slack-claim-routes.js";
+import { registerFilesystemSkillRoutes } from "./routes/skill-filesystem-routes.js";
 import {
   registerSkillCatalogRoutes,
   registerSkillRoutes,

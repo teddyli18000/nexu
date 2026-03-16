@@ -41,8 +41,8 @@ vi.mock("#api/lib/composio.js", async (importOriginal) => {
 
 import { revokeConnection } from "#api/lib/composio.js";
 import { decrypt } from "#api/lib/crypto.js";
-import type { AppBindings } from "#api/types.js";
 import { registerIntegrationRoutes } from "#api/routes/integration-routes.js";
+import type { AppBindings } from "#api/types.js";
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
