@@ -17,8 +17,8 @@ let updateManager: UpdateManager | null = null;
 let componentUpdater: ComponentUpdater | null = null;
 
 const nativeCrashTestTitles = {
-  main: "desktop.main.crash.test",
-  renderer: "desktop.renderer.crash.test",
+  main: "desktop.main.crash",
+  renderer: "desktop.renderer.crash",
 } as const;
 
 async function prepareNativeCrashScope(
