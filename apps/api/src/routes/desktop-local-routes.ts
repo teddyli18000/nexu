@@ -3,7 +3,7 @@ import type { OpenAPIHono } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { encrypt } from "../lib/crypto.js";
 import { db } from "../db/index.js";
-import { gatewayPools } from "../db/schema/index.js";
+import { bots, gatewayPools } from "../db/schema/index.js";
 import { publishPoolConfigSnapshot } from "../services/runtime/pool-config-service.js";
 import { logger } from "../lib/logger.js";
 import type { AppBindings } from "../types.js";
@@ -193,6 +193,25 @@ async function pollCloudForAuthorization(
  * No auth required — localhost-only trust boundary.
  */
 export function registerDesktopLocalRoutes(app: OpenAPIHono<AppBindings>) {
+  // Readiness probe — frontend gates on this before rendering the webview.
+  // Returns 200 when API + DB are responsive and at least one bot is configured.
+  app.get("/api/internal/desktop/ready", async (c) => {
+    try {
+      const botRows = await db
+        .select({ id: bots.id })
+        .from(bots)
+        .limit(1);
+
+      if (botRows.length === 0) {
+        return c.json({ ready: false, reason: "no bots configured" }, 503);
+      }
+
+      return c.json({ ready: true });
+    } catch {
+      return c.json({ ready: false, reason: "database not ready" }, 503);
+    }
+  });
+
   // Initiate cloud connection: generate device ID, register on cloud, start polling
   app.post("/api/internal/desktop/cloud-connect", async (c) => {
     // Reject if already polling or connected

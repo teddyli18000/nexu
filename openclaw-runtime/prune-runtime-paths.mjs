@@ -46,4 +46,14 @@ export const pruneTargets = [
   "node_modules/simple-git",
   "node_modules/ipull",
   "node_modules/fast-xml-builder",
+
+  // Round 4: openclaw docs (~11M savings, only large dirs).
+  // - Keep: docs/reference/templates/ — runtime-required workspace templates
+  //   (AGENTS.md, IDENTITY.md, etc.). Without these, message dispatch fails
+  //   with "Missing workspace template" errors.
+  // - Only prune the big directories; small files left as-is to reduce impact.
+  "node_modules/openclaw/docs/assets",    // ~5.9M — images/static for doc site
+  "node_modules/openclaw/docs/images",    // ~2.6M — screenshots
+  "node_modules/openclaw/docs/zh-CN",     // ~2.5M — Chinese translation
+  "node_modules/openclaw/docs/ja-JP",     // Japanese translation
 ];

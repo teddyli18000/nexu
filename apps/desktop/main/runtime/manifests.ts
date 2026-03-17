@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   type DesktopRuntimeConfig,
@@ -20,6 +20,31 @@ function getBooleanEnv(name: string, fallback: boolean): boolean {
   }
 
   return value === "1" || value.toLowerCase() === "true";
+}
+
+/**
+ * Build a PATH prefix that puts a Node.js >= 22 binary first.
+ * OpenClaw requires Node 22.12+; in dev mode the system `node` may be
+ * older (e.g. nvm defaulting to v20).  We scan NVM_DIR for a v22 install
+ * and, if found, prepend its bin directory to the inherited PATH.
+ */
+function buildNode22Path(): string | undefined {
+  const nvmDir = process.env.NVM_DIR;
+  if (!nvmDir) return undefined;
+  try {
+    const versionsDir = resolve(nvmDir, "versions/node");
+    const dirs = readdirSync(versionsDir)
+      .filter((d) => d.startsWith("v22."))
+      .sort()
+      .reverse();
+    for (const d of dirs) {
+      const binDir = resolve(versionsDir, d, "bin");
+      if (existsSync(resolve(binDir, "node"))) {
+        return `${binDir}:${process.env.PATH ?? ""}`;
+      }
+    }
+  } catch { /* nvm dir not present or unreadable */ }
+  return undefined;
 }
 
 export function createRuntimeUnitManifests(
@@ -71,6 +96,7 @@ export function createRuntimeUnitManifests(
     process.env.NEXU_GATEWAY_POOL_ID ?? "desktop-local-pool";
   const webUrl = runtimeConfig.webUrl;
   const authUrl = process.env.NEXU_AUTH_URL ?? runtimeConfig.apiBaseUrl;
+  const node22Path = buildNode22Path();
 
   // Keep all default ports and local URLs defined from this one manifest factory. Other desktop
   // entry points still mirror a few of these defaults directly, so changes here should be treated
@@ -110,9 +136,8 @@ export function createRuntimeUnitManifests(
       label: "PGlite Socket",
       kind: "service",
       launchStrategy: "managed",
-      runner: "spawn",
-      command: "node",
-      args: [pgliteModulePath],
+      runner: "utility-process",
+      modulePath: pgliteModulePath,
       cwd: pgliteSidecarRoot,
       port: pglitePort,
       startupTimeoutMs: 10_000,
@@ -178,6 +203,9 @@ export function createRuntimeUnitManifests(
         TMPDIR: openclawTempDir,
         RUNTIME_MANAGE_OPENCLAW_PROCESS: "true",
         RUNTIME_GATEWAY_PROBE_ENABLED: "false",
+        // OpenClaw needs Node 22.12+; ensure it's on PATH when gateway
+        // spawns the openclaw binary (which runs `exec node ...`).
+        ...(node22Path ? { PATH: node22Path } : {}),
       },
     },
     {

@@ -133,7 +133,8 @@ function SurfaceFrame({
         />
       ) : (
         <div className="surface-frame-empty">
-          Waiting for the local runtime to publish this surface.
+          <div className="surface-frame-spinner" />
+          Starting local services…
         </div>
       )}
     </section>
@@ -455,9 +456,45 @@ function DesktopShell() {
     });
   }, []);
 
-  const desktopWebUrl = runtimeConfig
-    ? new URL("/workspace", runtimeConfig.webUrl).toString()
-    : null;
+  // Poll the API ready endpoint through the web sidecar proxy before mounting the webview.
+  const [apiReady, setApiReady] = useState(false);
+
+  useEffect(() => {
+    if (!runtimeConfig) return;
+    if (apiReady) return;
+
+    let cancelled = false;
+    const readyUrl = new URL(
+      "/api/internal/desktop/ready",
+      runtimeConfig.webUrl,
+    ).toString();
+
+    async function poll() {
+      while (!cancelled) {
+        try {
+          const res = await fetch(readyUrl, { signal: AbortSignal.timeout(3000) });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ready) {
+              if (!cancelled) setApiReady(true);
+              return;
+            }
+          }
+        } catch {
+          // API or web sidecar not ready yet — keep polling
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    void poll();
+    return () => { cancelled = true; };
+  }, [runtimeConfig, apiReady]);
+
+  const desktopWebUrl =
+    runtimeConfig && apiReady
+      ? new URL("/workspace", runtimeConfig.webUrl).toString()
+      : null;
   const desktopOpenClawUrl = new URL(
     "/#token=gw-secret-token",
     "http://127.0.0.1:18789",

@@ -1,24 +1,6 @@
-import { readdir } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathExists, removePathIfExists } from "./sidecar-paths.mjs";
-
-export async function pruneOpenclawPackage(nodeModulesRoot) {
-  const packagedOpenclawRoot = resolve(nodeModulesRoot, "openclaw");
-  const extensionsRoot = resolve(packagedOpenclawRoot, "extensions");
-
-  await removePathIfExists(resolve(packagedOpenclawRoot, "docs"));
-
-  if (!(await pathExists(extensionsRoot))) {
-    return;
-  }
-
-  const extensions = await readdir(extensionsRoot, { withFileTypes: true });
-
-  for (const extension of extensions) {
-    if (!extension.isDirectory()) {
-      continue;
-    }
-
-    await removePathIfExists(resolve(extensionsRoot, extension.name, "src"));
-  }
+// All openclaw pruning is now handled by openclaw-runtime/prune-runtime-paths.mjs
+// via explicit path targets. This avoids blanket glob patterns that silently break
+// runtime-required files (extensions/*/src/, docs/reference/templates/, etc.).
+export async function pruneOpenclawPackage(_nodeModulesRoot) {
+  // no-op — see openclaw-runtime/prune-runtime-paths.mjs
 }
