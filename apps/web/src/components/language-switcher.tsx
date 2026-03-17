@@ -4,7 +4,7 @@ import { type Locale, useLocale } from "../hooks/use-locale";
 
 interface Props {
   variant?: "light" | "dark" | "muted";
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
 }
 
 export function LanguageSwitcher({ variant = "light", size = "sm" }: Props) {
@@ -24,11 +24,17 @@ export function LanguageSwitcher({ variant = "light", size = "sm" }: Props) {
   }, []);
 
   const base =
-    size === "sm"
-      ? "h-11 min-w-[162px] px-3.5 text-[13px]"
-      : "h-12 min-w-[176px] px-4 text-[14px]";
+    size === "xs"
+      ? "h-9 min-w-[132px] px-3 text-[12px]"
+      : size === "sm"
+        ? "h-11 min-w-[162px] px-3.5 text-[13px]"
+        : "h-12 min-w-[176px] px-4 text-[14px]";
   const optionBase =
-    size === "sm" ? "h-10 px-4 text-[13px]" : "h-11 px-4 text-[14px]";
+    size === "xs"
+      ? "h-9 px-3.5 text-[12px]"
+      : size === "sm"
+        ? "h-10 px-4 text-[13px]"
+        : "h-11 px-4 text-[14px]";
 
   const options: Array<{ value: Locale; label: string }> = [
     { value: "en", label: "English" },
@@ -77,10 +83,13 @@ export function LanguageSwitcher({ variant = "light", size = "sm" }: Props) {
           open ? colors.triggerOpen : ""
         }`}
       >
-        <Globe size={size === "sm" ? 18 : 19} className="shrink-0" />
+        <Globe
+          size={size === "xs" ? 16 : size === "sm" ? 18 : 19}
+          className="shrink-0"
+        />
         <span className="flex-1 text-left leading-none">{currentLabel}</span>
         <ChevronDown
-          size={size === "sm" ? 16 : 17}
+          size={size === "xs" ? 14 : size === "sm" ? 16 : 17}
           className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>

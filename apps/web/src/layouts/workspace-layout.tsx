@@ -28,7 +28,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import "@/lib/api";
-import { getApiV1Sessions } from "../../lib/api/sdk.gen";
+import { getApiV1Me, getApiV1Sessions } from "../../lib/api/sdk.gen";
 
 type Platform = "slack" | "discord" | "whatsapp" | "telegram" | "web";
 
@@ -198,6 +198,13 @@ function WorkspaceLayoutInner() {
     },
     refetchInterval: 5000,
   });
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const { data } = await getApiV1Me();
+      return data;
+    },
+  });
 
   const sessions = sessionsData?.sessions ?? [];
 
@@ -208,7 +215,9 @@ function WorkspaceLayoutInner() {
     location.pathname === "/workspace/home";
   const isChannelsPage = location.pathname.includes("/channels");
   const isSkillsPage = location.pathname.includes("/skills");
-  const isModelsPage = location.pathname.includes("/models");
+  const isModelsPage =
+    location.pathname.includes("/models") ||
+    location.pathname.includes("/settings");
 
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
@@ -216,8 +225,10 @@ function WorkspaceLayoutInner() {
     window.location.href = "/";
   };
 
-  const userEmail = session?.user?.email ?? "";
-  const userInitial = (userEmail[0] ?? "U").toUpperCase();
+  const userEmail = me?.email ?? session?.user?.email ?? "";
+  const userName = me?.name?.trim() || session?.user?.name || userEmail;
+  const userImage = me?.image ?? session?.user?.image ?? null;
+  const userInitial = (userName[0] ?? userEmail[0] ?? "U").toUpperCase();
 
   const showEmptyState =
     sessions.length === 0 &&
@@ -360,7 +371,7 @@ function WorkspaceLayoutInner() {
               )}
             </Link>
             <Link
-              to="/workspace/models"
+              to="/workspace/settings"
               title={collapsed ? t("layout.nav.settings") : undefined}
               onClick={() => track("workspace_settings_click")}
               className={cn(
@@ -487,11 +498,19 @@ function WorkspaceLayoutInner() {
                   type="button"
                   onClick={() => setShowLogoutConfirm(!showLogoutConfirm)}
                   className="group"
-                  title={userEmail}
+                  title={userName}
                 >
-                  <div className="flex justify-center items-center w-8 h-8 rounded-lg bg-gradient-to-br from-accent/20 to-accent/5 text-[11px] font-bold text-accent ring-1 ring-accent/10 transition-all group-hover:ring-accent/25">
-                    {userInitial}
-                  </div>
+                  {userImage ? (
+                    <img
+                      src={userImage}
+                      alt={userName}
+                      className="w-8 h-8 rounded-lg object-cover ring-1 ring-accent/10 transition-all group-hover:ring-accent/25"
+                    />
+                  ) : (
+                    <div className="flex justify-center items-center w-8 h-8 rounded-lg bg-gradient-to-br from-accent/20 to-accent/5 text-[11px] font-bold text-accent ring-1 ring-accent/10 transition-all group-hover:ring-accent/25">
+                      {userInitial}
+                    </div>
+                  )}
                 </button>
               </div>
             ) : (
@@ -500,11 +519,22 @@ function WorkspaceLayoutInner() {
                 onClick={() => setShowLogoutConfirm(!showLogoutConfirm)}
                 className="flex gap-2.5 items-center w-full px-2 py-2 rounded-lg transition-all hover:bg-surface-3 cursor-pointer"
               >
-                <div className="flex justify-center items-center w-7 h-7 rounded-md bg-gradient-to-br from-accent/20 to-accent/5 text-[10px] font-bold text-accent ring-1 ring-accent/10 shrink-0">
-                  {userInitial}
-                </div>
+                {userImage ? (
+                  <img
+                    src={userImage}
+                    alt={userName}
+                    className="w-7 h-7 rounded-md object-cover ring-1 ring-accent/10 shrink-0"
+                  />
+                ) : (
+                  <div className="flex justify-center items-center w-7 h-7 rounded-md bg-gradient-to-br from-accent/20 to-accent/5 text-[10px] font-bold text-accent ring-1 ring-accent/10 shrink-0">
+                    {userInitial}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0 text-left">
                   <div className="text-[12px] text-text-primary truncate font-medium">
+                    {userName}
+                  </div>
+                  <div className="text-[10px] text-text-muted truncate">
                     {userEmail}
                   </div>
                 </div>
@@ -613,7 +643,7 @@ function WorkspaceLayoutInner() {
                     </span>
                   </Link>
                   <Link
-                    to="/workspace/models"
+                    to="/workspace/settings"
                     onClick={() => {
                       track("workspace_settings_click");
                       setMobileDrawerOpen(false);

@@ -829,7 +829,9 @@ export function HomePage() {
                                   type="button"
                                   onClick={() => {
                                     setShowModelDropdown(false);
-                                    navigate("/workspace/models");
+                                    navigate(
+                                      "/workspace/settings?tab=providers",
+                                    );
                                   }}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors hover:bg-surface-2"
                                 >

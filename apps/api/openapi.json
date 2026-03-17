@@ -1874,6 +1874,102 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "User"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "image": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^data:image\\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$"
+                      },
+                      {
+                        "nullable": true
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current user profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "image": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "plan": {
+                          "type": "string"
+                        },
+                        "inviteAccepted": {
+                          "type": "boolean"
+                        },
+                        "onboardingCompleted": {
+                          "type": "boolean"
+                        },
+                        "authSource": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "name",
+                        "plan",
+                        "inviteAccepted",
+                        "onboardingCompleted"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "profile"
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/me/auth-source": {
@@ -8396,7 +8492,8 @@
                             "type": "string",
                             "enum": [
                               "official",
-                              "custom"
+                              "custom",
+                              "community"
                             ]
                           },
                           "tools": {
@@ -8431,6 +8528,12 @@
                           },
                           "githubUrl": {
                             "type": "string"
+                          },
+                          "installed": {
+                            "type": "boolean"
+                          },
+                          "updatable": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -8556,7 +8659,8 @@
                       "type": "string",
                       "enum": [
                         "official",
-                        "custom"
+                        "custom",
+                        "community"
                       ]
                     },
                     "tools": {
@@ -8660,7 +8764,8 @@
                             "type": "string",
                             "enum": [
                               "official",
-                              "custom"
+                              "custom",
+                              "community"
                             ]
                           },
                           "tools": {
@@ -8695,6 +8800,12 @@
                           },
                           "githubUrl": {
                             "type": "string"
+                          },
+                          "installed": {
+                            "type": "boolean"
+                          },
+                          "updatable": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -8724,6 +8835,186 @@
           },
           "404": {
             "description": "Skill not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills/filesystem": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "responses": {
+          "200": {
+            "description": "Merged list of catalog and locally installed skills",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "longDescription": {
+                            "type": "string"
+                          },
+                          "iconName": {
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "type": "string"
+                          },
+                          "fallbackIconUrl": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "examples": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tag": {
+                            "type": "string",
+                            "enum": [
+                              "office-collab",
+                              "file-knowledge",
+                              "creative-design",
+                              "biz-analysis",
+                              "av-generation",
+                              "info-content",
+                              "dev-tools"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "official",
+                              "custom",
+                              "community"
+                            ]
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "iconUrl": {
+                                  "type": "string"
+                                },
+                                "fallbackIconUrl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "slug",
+                                "name",
+                                "provider",
+                                "iconUrl",
+                                "fallbackIconUrl"
+                              ]
+                            }
+                          },
+                          "githubUrl": {
+                            "type": "string"
+                          },
+                          "installed": {
+                            "type": "boolean"
+                          },
+                          "updatable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name",
+                          "description",
+                          "iconName",
+                          "prompt",
+                          "tag",
+                          "source"
+                        ]
+                      }
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "office-collab",
+                              "file-knowledge",
+                              "creative-design",
+                              "biz-analysis",
+                              "av-generation",
+                              "info-content",
+                              "dev-tools"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "count"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "skills",
+                    "tags"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {

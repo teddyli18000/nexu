@@ -167,6 +167,37 @@ const en = {
   // ── Models Page ──
   "models.pageTitle": "Settings",
   "models.pageSubtitle": "Manage AI model providers",
+  "settings.pageSubtitle": "Manage profile, language, and AI model providers",
+  "settings.tabGeneral": "General",
+  "settings.tabProviders": "AI Model Providers",
+  "settings.general.account": "Account",
+  "settings.general.avatar": "Avatar",
+  "settings.general.avatarHint": "JPG, PNG, WEBP, or GIF up to 1MB",
+  "settings.general.fullName": "Full name",
+  "settings.general.fullNameHint":
+    "Shown in the workspace sidebar and account surfaces",
+  "settings.general.email": "Email",
+  "settings.general.emailHint": "Managed by your current sign-in method",
+  "settings.general.preferences": "Preferences",
+  "settings.general.language": "Language",
+  "settings.general.languageHint":
+    "Stored locally for this browser or desktop client",
+  "settings.general.saveTitle": "Save changes",
+  "settings.general.saveHint": "Profile changes are applied after save",
+  "settings.general.save": "Save",
+  "settings.general.saved": "Profile updated",
+  "settings.general.saveFailed": "Failed to update profile",
+  "settings.general.nameRequired": "Full name is required",
+  "settings.general.avatarTooLarge": "Avatar must be 1MB or smaller",
+  "settings.general.avatarReadFailed": "Failed to read avatar file",
+  "settings.general.githubTitle": "Star us on GitHub",
+  "settings.general.githubBody":
+    "Follow releases and support the project in public.",
+  "settings.general.githubBadge": "GitHub",
+  "settings.general.githubStarred": "Thanks for starring Nexu",
+  "settings.general.githubStarredBody":
+    "You are helping shape the desktop and workspace experience.",
+  "settings.general.githubStarredBadge": "Starred",
   "models.loading": "Loading models...",
   "models.loadFailed": "Failed to load models",
   "models.loadFailedHint":

@@ -30,6 +30,7 @@ function DocumentTitleSync() {
       "/workspace/home": t("title.home"),
       "/workspace/integrations": t("title.integrations"),
       "/workspace/skills": t("title.skills"),
+      "/workspace/settings": t("title.settings"),
       "/workspace/models": t("title.settings"),
       "/feishu/bind": t("title.linkFeishu"),
     };
@@ -74,6 +75,7 @@ export function App() {
                 path="/workspace/integrations"
                 element={<IntegrationsPage />}
               />
+              <Route path="/workspace/settings" element={<ModelsPage />} />
               <Route path="/workspace/models" element={<ModelsPage />} />
               <Route path="/workspace/skills" element={<SkillsPage />} />
               <Route

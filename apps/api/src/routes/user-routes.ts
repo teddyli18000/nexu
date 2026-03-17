@@ -3,12 +3,14 @@ import type { OpenAPIHono } from "@hono/zod-openapi";
 import {
   updateAuthSourceResponseSchema,
   updateAuthSourceSchema,
+  updateUserProfileResponseSchema,
+  updateUserProfileSchema,
   userProfileResponseSchema,
 } from "@nexu/shared";
 import { createId } from "@paralleldrive/cuid2";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users } from "../db/schema/index.js";
+import { authUsers, users } from "../db/schema/index.js";
 import type { AppBindings } from "../types.js";
 
 const getMeRoute = createRoute({
@@ -44,6 +46,25 @@ const updateAuthSourceRoute = createRoute({
   },
 });
 
+const updateMeRoute = createRoute({
+  method: "patch",
+  path: "/api/v1/me",
+  tags: ["User"],
+  request: {
+    body: {
+      content: { "application/json": { schema: updateUserProfileSchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": { schema: updateUserProfileResponseSchema },
+      },
+      description: "Current user profile updated",
+    },
+  },
+});
+
 export function registerUserRoutes(app: OpenAPIHono<AppBindings>) {
   app.openapi(getMeRoute, async (c) => {
     const authUserId = c.get("userId");
@@ -70,16 +91,74 @@ export function registerUserRoutes(app: OpenAPIHono<AppBindings>) {
         .where(eq(users.authUserId, authUserId));
     }
 
+    const [authUser] = await db
+      .select()
+      .from(authUsers)
+      .where(eq(authUsers.id, authUserId));
+
     return c.json(
       {
         id: session.user.id,
         email: session.user.email,
-        name: session.user.name,
-        image: session.user.image ?? null,
+        name: authUser?.name ?? session.user.name,
+        image: authUser?.image ?? session.user.image ?? null,
         plan: appUser?.plan ?? "free",
         inviteAccepted: true,
         onboardingCompleted: appUser?.onboardingCompletedAt != null,
         authSource: appUser?.authSource ?? null,
+      },
+      200,
+    );
+  });
+
+  app.openapi(updateMeRoute, async (c) => {
+    const authUserId = c.get("userId");
+    const input = c.req.valid("json");
+    const now = new Date();
+
+    const updateValues: {
+      updatedAt: Date;
+      name?: string;
+      image?: string | null;
+    } = {
+      updatedAt: now,
+    };
+
+    if (input.name !== undefined) {
+      updateValues.name = input.name.trim();
+    }
+
+    if (input.image !== undefined) {
+      updateValues.image = input.image;
+    }
+
+    await db
+      .update(authUsers)
+      .set(updateValues)
+      .where(eq(authUsers.id, authUserId));
+
+    const [authUser] = await db
+      .select()
+      .from(authUsers)
+      .where(eq(authUsers.id, authUserId));
+    const [appUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.authUserId, authUserId));
+
+    return c.json(
+      {
+        ok: true,
+        profile: {
+          id: authUser?.id ?? authUserId,
+          email: authUser?.email ?? "",
+          name: authUser?.name ?? "",
+          image: authUser?.image ?? null,
+          plan: appUser?.plan ?? "free",
+          inviteAccepted: true,
+          onboardingCompleted: appUser?.onboardingCompletedAt != null,
+          authSource: appUser?.authSource ?? null,
+        },
       },
       200,
     );

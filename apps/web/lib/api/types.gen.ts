@@ -724,6 +724,37 @@ export type GetApiV1MeResponses = {
 
 export type GetApiV1MeResponse = GetApiV1MeResponses[keyof GetApiV1MeResponses];
 
+export type PatchApiV1MeData = {
+    body?: {
+        name?: string;
+        image?: string | unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/me';
+};
+
+export type PatchApiV1MeResponses = {
+    /**
+     * Current user profile updated
+     */
+    200: {
+        ok: boolean;
+        profile: {
+            id: string;
+            email: string;
+            name: string;
+            image?: string;
+            plan: string;
+            inviteAccepted: boolean;
+            onboardingCompleted: boolean;
+            authSource?: string;
+        };
+    };
+};
+
+export type PatchApiV1MeResponse = PatchApiV1MeResponses[keyof PatchApiV1MeResponses];
+
 export type PostApiV1MeAuthSourceData = {
     body?: {
         source: 'email' | 'google' | 'slack_shared_claim' | 'IM' | 'Landing';
@@ -2873,7 +2904,7 @@ export type GetApiV1SkillsResponses = {
             prompt: string;
             examples?: Array<string>;
             tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
-            source: 'official' | 'custom';
+            source: 'official' | 'custom' | 'community';
             tools?: Array<{
                 slug: string;
                 name: string;
@@ -2882,6 +2913,8 @@ export type GetApiV1SkillsResponses = {
                 fallbackIconUrl: string;
             }>;
             githubUrl?: string;
+            installed?: boolean;
+            updatable?: boolean;
         }>;
         tags: Array<{
             id: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
@@ -2928,7 +2961,7 @@ export type GetApiV1SkillsBySlugResponses = {
         prompt: string;
         examples?: Array<string>;
         tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
-        source: 'official' | 'custom';
+        source: 'official' | 'custom' | 'community';
         tools?: Array<{
             slug: string;
             name: string;
@@ -2951,7 +2984,7 @@ export type GetApiV1SkillsBySlugResponses = {
             prompt: string;
             examples?: Array<string>;
             tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
-            source: 'official' | 'custom';
+            source: 'official' | 'custom' | 'community';
             tools?: Array<{
                 slug: string;
                 name: string;
@@ -2960,11 +2993,69 @@ export type GetApiV1SkillsBySlugResponses = {
                 fallbackIconUrl: string;
             }>;
             githubUrl?: string;
+            installed?: boolean;
+            updatable?: boolean;
         }>;
     };
 };
 
 export type GetApiV1SkillsBySlugResponse = GetApiV1SkillsBySlugResponses[keyof GetApiV1SkillsBySlugResponses];
+
+export type GetApiV1SkillsFilesystemData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/skills/filesystem';
+};
+
+export type GetApiV1SkillsFilesystemErrors = {
+    /**
+     * Internal server error
+     */
+    500: {
+        message: string;
+    };
+};
+
+export type GetApiV1SkillsFilesystemError = GetApiV1SkillsFilesystemErrors[keyof GetApiV1SkillsFilesystemErrors];
+
+export type GetApiV1SkillsFilesystemResponses = {
+    /**
+     * Merged list of catalog and locally installed skills
+     */
+    200: {
+        skills: Array<{
+            slug: string;
+            name: string;
+            description: string;
+            longDescription?: string;
+            iconName: string;
+            iconUrl?: string;
+            fallbackIconUrl?: string;
+            prompt: string;
+            examples?: Array<string>;
+            tag: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
+            source: 'official' | 'custom' | 'community';
+            tools?: Array<{
+                slug: string;
+                name: string;
+                provider: string;
+                iconUrl: string;
+                fallbackIconUrl: string;
+            }>;
+            githubUrl?: string;
+            installed?: boolean;
+            updatable?: boolean;
+        }>;
+        tags: Array<{
+            id: 'office-collab' | 'file-knowledge' | 'creative-design' | 'biz-analysis' | 'av-generation' | 'info-content' | 'dev-tools';
+            label: string;
+            count: number;
+        }>;
+    };
+};
+
+export type GetApiV1SkillsFilesystemResponse = GetApiV1SkillsFilesystemResponses[keyof GetApiV1SkillsFilesystemResponses];
 
 export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});

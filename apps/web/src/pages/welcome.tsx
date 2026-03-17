@@ -250,7 +250,7 @@ export function WelcomePage() {
 
   const handleByokEntry = () => {
     markSetupComplete();
-    navigate("/workspace/models?setup=1");
+    navigate("/workspace/settings?setup=1&tab=providers");
   };
 
   return (
