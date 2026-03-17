@@ -60,17 +60,41 @@ function isApiRequest(pathname) {
   return pathname.startsWith("/api") || pathname.startsWith("/v1") || pathname === "/openapi.json";
 }
 
+// Headers that must not be forwarded between proxy hops
+const HOP_BY_HOP = new Set([
+  "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+  "te", "trailers", "transfer-encoding", "upgrade", "host"
+]);
+
+function filterHeaders(raw) {
+  const out = {};
+  for (const [k, v] of raw) {
+    if (!HOP_BY_HOP.has(k.toLowerCase())) out[k] = v;
+  }
+  return out;
+}
+
 async function proxyRequest(request, response, pathname) {
   const upstreamUrl = new URL(pathname + (request.url?.includes("?") ? request.url.slice(request.url.indexOf("?")) : ""), apiOrigin);
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : request;
+
+  // Strip hop-by-hop headers before forwarding upstream
+  const fwdHeaders = {};
+  for (const [k, v] of Object.entries(request.headers)) {
+    if (!HOP_BY_HOP.has(k.toLowerCase()) && v != null) fwdHeaders[k] = v;
+  }
+
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
-    headers: request.headers,
+    headers: fwdHeaders,
     body,
     duplex: body ? "half" : undefined
   });
 
-  response.writeHead(upstreamResponse.status, Object.fromEntries(upstreamResponse.headers.entries()));
+  // Strip hop-by-hop headers from upstream response
+  const respHeaders = filterHeaders(upstreamResponse.headers.entries());
+  response.writeHead(upstreamResponse.status, respHeaders);
+
   if (upstreamResponse.body) {
     for await (const chunk of upstreamResponse.body) {
       response.write(chunk);
@@ -94,6 +118,10 @@ async function serveStatic(response, pathname) {
 
   const extension = extname(filePath);
   response.setHeader("Content-Type", contentTypes.get(extension) ?? "application/octet-stream");
+  // Prevent webview from caching HTML (JS/CSS use content-hash filenames)
+  if (extension === ".html") {
+    response.setHeader("Cache-Control", "no-store");
+  }
   createReadStream(filePath).pipe(response);
 }
 
