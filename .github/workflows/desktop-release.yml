@@ -124,6 +124,28 @@ jobs:
 
           shasum -a 256 "${artifacts[@]}" > apps/desktop/release/desktop-sha256.txt
 
+      - name: Upload to Cloudflare R2
+        if: env.CLOUDFLARE_ACCOUNT_ID != ''
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          channel="stable"
+          if [ "${{ steps.meta.outputs.prerelease }}" = "true" ]; then
+            channel="beta"
+          fi
+
+          npx wrangler r2 object put "nexu-desktop-releases/${channel}/latest-mac.yml" \
+            --file apps/desktop/release/latest-mac.yml
+
+          for file in apps/desktop/release/*.zip; do
+            npx wrangler r2 object put "nexu-desktop-releases/${channel}/$(basename "$file")" \
+              --file "$file"
+          done
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:

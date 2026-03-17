@@ -11,9 +11,9 @@ export interface UpdateManagerOptions {
   initialDelayMs?: number;
 }
 
-const OSS_FEED_URLS: Record<UpdateChannelName, string> = {
-  stable: "https://nexu-desktop-release.oss-cn-hangzhou.aliyuncs.com/stable",
-  beta: "https://nexu-desktop-release.oss-cn-hangzhou.aliyuncs.com/beta",
+const R2_FEED_URLS: Record<UpdateChannelName, string> = {
+  stable: "https://desktop-releases.nexu.io/stable",
+  beta: "https://desktop-releases.nexu.io/beta",
 };
 
 export class UpdateManager {
@@ -44,6 +44,16 @@ export class UpdateManager {
   }
 
   private configureFeedUrl(): void {
+    const envFeedUrl = process.env.NEXU_UPDATE_FEED_URL;
+
+    if (envFeedUrl) {
+      autoUpdater.setFeedURL({
+        provider: "generic",
+        url: envFeedUrl,
+      });
+      return;
+    }
+
     if (this.source === "github") {
       autoUpdater.setFeedURL({
         provider: "github",
@@ -53,7 +63,7 @@ export class UpdateManager {
     } else {
       autoUpdater.setFeedURL({
         provider: "generic",
-        url: OSS_FEED_URLS[this.channel],
+        url: R2_FEED_URLS[this.channel],
       });
     }
   }

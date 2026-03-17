@@ -13,6 +13,8 @@ import type {
   RuntimeUnitPhase,
   RuntimeUnitState,
 } from "../shared/host";
+import { UpdateBanner } from "./components/update-banner";
+import { useAutoUpdate } from "./hooks/use-auto-update";
 import {
   checkComponentUpdates,
   getRuntimeConfig,
@@ -530,6 +532,7 @@ function DesktopShell() {
   const [webSurfaceVersion, setWebSurfaceVersion] = useState(0);
   const [runtimeConfig, setRuntimeConfig] =
     useState<DesktopRuntimeConfig | null>(null);
+  const update = useAutoUpdate();
 
   useEffect(() => {
     void getRuntimeConfig()
@@ -667,6 +670,16 @@ function DesktopShell() {
           />
         </div>
       </main>
+
+      <UpdateBanner
+        errorMessage={update.errorMessage}
+        onDismiss={update.dismiss}
+        onDownload={() => void update.download()}
+        onInstall={() => void update.install()}
+        percent={update.percent}
+        phase={update.phase}
+        version={update.version}
+      />
     </div>
   );
 }
