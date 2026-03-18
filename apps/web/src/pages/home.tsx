@@ -275,6 +275,9 @@ function FeishuIconChat({ size = 14 }: { size?: number }) {
 const actionCardBaseClass =
   "block group rounded-[18px] border border-border/70 bg-surface-1/95 px-3.5 py-2.5 text-left transition-all duration-200 hover:border-border-hover hover:bg-surface-1 hover:shadow-[0_4px_12px_rgba(0,0,0,0.035)]";
 
+const actionCardHighlightClass =
+  "block group rounded-[18px] border border-accent/30 bg-accent/[0.03] px-3.5 py-2.5 text-left transition-all duration-200 hover:border-accent/50 hover:bg-accent/[0.06] hover:shadow-md";
+
 export function HomePage() {
   const { t } = useTranslation();
   const [modalChannel, setModalChannel] = useState<
@@ -973,11 +976,11 @@ export function HomePage() {
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className={actionCardBaseClass}
+            className={actionCardHighlightClass}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-6 h-6 rounded-lg bg-[#111]/8 dark:bg-white/8 flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
                   {GITHUB_SVG}
                 </div>
                 <div className="text-[14px] font-semibold text-text-primary truncate">
