@@ -39,6 +39,7 @@ const electronRoot = app.isPackaged
   ? process.resourcesPath
   : getDesktopAppRoot();
 const runtimeConfig = getDesktopRuntimeConfig(process.env, {
+  appVersion: app.getVersion(),
   resourcesPath: electronRoot,
 });
 const orchestrator = new RuntimeOrchestrator(
