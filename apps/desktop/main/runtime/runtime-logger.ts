@@ -22,9 +22,9 @@ const version =
   process.env.npm_package_version;
 
 function isIgnorableWriteError(error: unknown): boolean {
-  const errorCode =
-    error instanceof Error && "code" in error ? String(error.code) : null;
-  return errorCode === "EIO" || errorCode === "EPIPE";
+  if (!(error instanceof Error) || !("code" in error)) return false;
+  const code = String(error.code);
+  return code === "EIO" || code === "EPIPE" || code === "ERR_STREAM_DESTROYED";
 }
 
 let stdioErrorHandlersAttached = false;

@@ -2,17 +2,25 @@ import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { app } from "electron";
 
+function isIgnorableWriteError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) return false;
+  const code = String(error.code);
+  return code === "EIO" || code === "EPIPE" || code === "ERR_STREAM_DESTROYED";
+}
+
 function safeWrite(stream: NodeJS.WriteStream, message: string): void {
   if (stream.destroyed || !stream.writable) {
     return;
   }
 
   try {
-    stream.write(message);
+    stream.write(message, (err) => {
+      if (err && !isIgnorableWriteError(err)) {
+        console.error("[safeWrite] async write error:", err);
+      }
+    });
   } catch (error) {
-    const errorCode =
-      error instanceof Error && "code" in error ? String(error.code) : null;
-    if (errorCode === "EIO" || errorCode === "EPIPE") {
+    if (isIgnorableWriteError(error)) {
       return;
     }
     throw error;
