@@ -35,6 +35,14 @@ import { UpdateManager } from "./updater/update-manager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Info.plist declares LSUIElement=true so that child processes (spawned with
+// ELECTRON_RUN_AS_NODE) don't create extra Dock icons.  Show the dock icon
+// BEFORE any blocking initialization (tar extraction, directory creation, etc.)
+// so users see it immediately on first launch.
+app.setName("Nexu Desktop");
+void app.dock?.show();
+
 const electronRoot = app.isPackaged
   ? process.resourcesPath
   : getDesktopAppRoot();
