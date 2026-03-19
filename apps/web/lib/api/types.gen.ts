@@ -738,6 +738,31 @@ export type GetApiV1ChannelsByChannelIdStatusResponses = {
 
 export type GetApiV1ChannelsByChannelIdStatusResponse = GetApiV1ChannelsByChannelIdStatusResponses[keyof GetApiV1ChannelsByChannelIdStatusResponses];
 
+export type GetApiV1ChannelsByChannelIdReadinessData = {
+    body?: never;
+    path: {
+        channelId: string;
+    };
+    query?: never;
+    url: '/api/v1/channels/{channelId}/readiness';
+};
+
+export type GetApiV1ChannelsByChannelIdReadinessResponses = {
+    /**
+     * Channel readiness status from OpenClaw gateway
+     */
+    200: {
+        ready: boolean;
+        connected: boolean;
+        running: boolean;
+        configured: boolean;
+        lastError: string | null;
+        gatewayConnected: boolean;
+    };
+};
+
+export type GetApiV1ChannelsByChannelIdReadinessResponse = GetApiV1ChannelsByChannelIdReadinessResponses[keyof GetApiV1ChannelsByChannelIdReadinessResponses];
+
 export type GetApiV1BotQuotaData = {
     body?: never;
     path?: never;

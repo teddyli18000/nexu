@@ -1,15 +1,11 @@
-import { ActivityFeed } from "@/components/activity-feed";
 import { ChannelConnectModal } from "@/components/channel-connect-modal";
 import { InlineModelSelector } from "@/components/inline-model-selector";
-import { useActiveChannel } from "@/hooks/use-active-channel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRight,
   ArrowUpRight,
-  ChevronDown,
   MessageSquare,
-  Settings,
   Sparkles,
-  Unlink,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +13,6 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import "@/lib/api";
 import {
-  deleteApiV1ChannelsByChannelId,
   getApiV1Channels,
   getApiV1ChannelsByChannelIdReadiness,
   getApiV1Sessions,
@@ -52,7 +47,6 @@ function getChatUrl(
         ? `https://applink.feishu.cn/client/bot/open?appId=${appId}`
         : "https://www.feishu.cn/";
     case "slack": {
-      // accountId format: "slack-{appId}-{teamId}"
       const teamId = accountId?.replace(/^slack-[^-]+-/, "");
       if (teamId && botUserId) {
         return `https://app.slack.com/client/${teamId}/${botUserId}`;
@@ -77,7 +71,7 @@ function getChannelShortNames(
 }
 
 const SLACK_SVG = (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" role="img">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" role="img">
     <title>Slack</title>
     <path
       d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"
@@ -99,7 +93,7 @@ const SLACK_SVG = (
 );
 
 const DISCORD_SVG = (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="#5865F2" role="img">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2" role="img">
     <title>Discord</title>
     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
   </svg>
@@ -119,101 +113,15 @@ const GITHUB_SVG = (
   </svg>
 );
 
-function getChannelOptions(t: (key: string) => string) {
-  return [
-    {
-      id: "feishu",
-      name: t("home.channel.feishu"),
-      icon: (
-        <img
-          width={22}
-          height={22}
-          alt="Feishu"
-          src="/feishu-logo.png"
-          style={{ objectFit: "contain" }}
-        />
-      ),
-      smallIcon: (
-        <img
-          width={16}
-          height={16}
-          alt="Feishu"
-          src="/feishu-logo.png"
-          style={{ objectFit: "contain" }}
-        />
-      ),
-      subtitle: t("home.channel.addBot"),
-      recommended: true,
-    },
-    {
-      id: "slack",
-      name: t("home.channel.slack"),
-      icon: SLACK_SVG,
-      smallIcon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <title>Slack</title>
-          <path
-            d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"
-            fill="#E01E5A"
-          />
-          <path
-            d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.527 2.527 0 0 1 2.521 2.521 2.527 2.527 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z"
-            fill="#36C5F0"
-          />
-          <path
-            d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.27 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.163 0a2.528 2.528 0 0 1 2.523 2.522v6.312z"
-            fill="#2EB67D"
-          />
-          <path
-            d="M15.163 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.163 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.27a2.527 2.527 0 0 1-2.52-2.523 2.527 2.527 0 0 1 2.52-2.52h6.315A2.528 2.528 0 0 1 24 15.163a2.528 2.528 0 0 1-2.522 2.523h-6.315z"
-            fill="#ECB22E"
-          />
-        </svg>
-      ),
-      subtitle: t("home.channel.addBot"),
-    },
-    {
-      id: "discord",
-      name: t("home.channel.discord"),
-      icon: DISCORD_SVG,
-      smallIcon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2">
-          <title>Discord</title>
-          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-        </svg>
-      ),
-      subtitle: t("home.channel.addBot"),
-    },
-  ];
-}
-
-function TypingText({ message }: { message: string }) {
-  const [displayed, setDisplayed] = useState("");
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset typing when message changes
-  useEffect(() => {
-    setDisplayed("");
-  }, [message]);
-
-  useEffect(() => {
-    if (displayed.length >= message.length) return;
-    const timer = setTimeout(() => {
-      setDisplayed(message.slice(0, displayed.length + 1));
-    }, 25);
-    return () => clearTimeout(timer);
-  }, [displayed, message]);
-
-  const done = displayed.length >= message.length;
-
-  return (
-    <p className="text-[12px] text-text-muted leading-relaxed max-w-lg">
-      {displayed}
-      {!done && (
-        <span className="inline-block w-0.5 h-3.5 ml-0.5 bg-accent animate-pulse align-middle" />
-      )}
-    </p>
-  );
-}
+const FEISHU_ICON = (
+  <img
+    width={16}
+    height={16}
+    alt="Feishu"
+    src="/feishu-logo.png"
+    style={{ objectFit: "contain" }}
+  />
+);
 
 function FeishuIconChat({ size = 14 }: { size?: number }) {
   return (
@@ -227,6 +135,50 @@ function FeishuIconChat({ size = 14 }: { size?: number }) {
   );
 }
 
+const ONBOARDING_CHANNELS = [
+  {
+    id: "feishu",
+    name: "Feishu",
+    icon: FEISHU_ICON,
+    recommended: true,
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    icon: SLACK_SVG,
+    recommended: false,
+  },
+  {
+    id: "discord",
+    name: "Discord",
+    icon: DISCORD_SVG,
+    recommended: false,
+  },
+];
+
+function getChannelOptions(t: (key: string) => string) {
+  return [
+    {
+      id: "feishu",
+      name: t("home.channel.feishu"),
+      icon: FEISHU_ICON,
+      recommended: true,
+    },
+    {
+      id: "slack",
+      name: t("home.channel.slack"),
+      icon: SLACK_SVG,
+      recommended: false,
+    },
+    {
+      id: "discord",
+      name: t("home.channel.discord"),
+      icon: DISCORD_SVG,
+      recommended: false,
+    },
+  ];
+}
+
 const actionCardBaseClass =
   "block group rounded-[18px] border border-border/70 bg-surface-1/95 px-3.5 py-2.5 text-left transition-all duration-200 hover:border-border-hover hover:bg-surface-1 hover:shadow-[0_4px_12px_rgba(0,0,0,0.035)]";
 
@@ -235,7 +187,6 @@ export function HomePage() {
   const [modalChannel, setModalChannel] = useState<
     "feishu" | "slack" | "discord" | null
   >(null);
-  const [showChannelManager, setShowChannelManager] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -244,9 +195,13 @@ export function HomePage() {
   const CHANNEL_OPTIONS = useMemo(() => getChannelOptions(t), [t]);
   const CHANNEL_SHORT_NAMES = useMemo(() => getChannelShortNames(t), [t]);
 
+  // Per-channel readiness state
+  const [channelReadiness, setChannelReadiness] = useState<
+    Record<string, "checking" | "ready" | "connecting" | "error">
+  >({});
+
   const handleConnected = async () => {
     await queryClient.refetchQueries({ queryKey: ["channels"] });
-    // Mark newly connected channels as "checking" until readiness polling resolves
     const updated = queryClient.getQueryData<{
       channels?: Array<{ channelType: string }>;
     }>(["channels"]);
@@ -257,16 +212,6 @@ export function HomePage() {
           [ch.channelType]: prev[ch.channelType] ?? "checking",
         }));
       }
-    }
-  };
-
-  const handleDisconnect = async (channelId: string) => {
-    try {
-      await deleteApiV1ChannelsByChannelId({ path: { channelId } });
-      queryClient.invalidateQueries({ queryKey: ["channels"] });
-      toast.success(t("home.disconnected"));
-    } catch {
-      toast.error(t("home.disconnectFailed"));
     }
   };
 
@@ -281,17 +226,14 @@ export function HomePage() {
       if (readinessPollingRef.current) {
         clearInterval(readinessPollingRef.current.timer);
       }
-
       const toastId = toast.loading(t("home.channel.syncing"));
       let attempts = 0;
-
       const timer = setInterval(async () => {
         attempts++;
         try {
           const { data } = await getApiV1ChannelsByChannelIdReadiness({
             path: { channelId },
           });
-
           if (!data?.gatewayConnected) {
             toast.loading(t("home.channel.gatewayStarting"), { id: toastId });
           } else if (data?.ready) {
@@ -308,7 +250,6 @@ export function HomePage() {
           } else if (data?.configured) {
             toast.loading(t("home.channel.connecting"), { id: toastId });
           }
-
           if (attempts >= 15) {
             clearInterval(timer);
             readinessPollingRef.current = null;
@@ -319,10 +260,9 @@ export function HomePage() {
             }
           }
         } catch {
-          // Ignore single poll failures, keep trying
+          // keep trying
         }
       }, 2000);
-
       readinessPollingRef.current = { channelId, timer };
     },
     [t],
@@ -335,31 +275,6 @@ export function HomePage() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = 0;
-    v.loop = false;
-    v.play().catch(() => {});
-    const onEnded = () => {
-      v.pause();
-    };
-    v.addEventListener("ended", onEnded);
-    return () => v.removeEventListener("ended", onEnded);
-  }, []);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (videoHover) {
-      v.currentTime = 0;
-      v.loop = true;
-      v.play().catch(() => {});
-    } else {
-      v.loop = false;
-    }
-  }, [videoHover]);
 
   const { data: channelsData, isLoading: channelsLoading } = useQuery({
     queryKey: ["channels"],
@@ -395,27 +310,20 @@ export function HomePage() {
 
   const channels = channelsData?.channels ?? [];
   const connectedCount = channels.length;
-  const connectedTypes = new Set<string>(channels.map((c) => c.channelType));
+  const hasChannel = connectedCount > 0;
 
-  // Per-channel readiness state: "checking" | "ready" | "connecting" | "error"
-  const [channelReadiness, setChannelReadiness] = useState<
-    Record<string, "checking" | "ready" | "connecting" | "error">
-  >({});
+  // Poll readiness for existing channels on mount
   const initialCheckDone = useRef(false);
   const initialPollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
-
-  // Poll readiness for all existing channels on mount until ready
   useEffect(() => {
     if (channelsLoading || channels.length === 0 || initialCheckDone.current)
       return;
     initialCheckDone.current = true;
-
     for (const ch of channels) {
       setChannelReadiness((prev) => ({
         ...prev,
         [ch.channelType]: "checking",
       }));
-
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
@@ -430,7 +338,6 @@ export function HomePage() {
               [ch.channelType]: "ready",
             }));
           } else if (attempts >= 1) {
-            // After first check, show "connecting" instead of "checking"
             setChannelReadiness((prev) => ({
               ...prev,
               [ch.channelType]:
@@ -438,14 +345,11 @@ export function HomePage() {
             }));
           }
         } catch {
-          // keep polling
+          /* keep polling */
         }
-        if (attempts >= 15) {
-          clearInterval(poll);
-        }
+        if (attempts >= 15) clearInterval(poll);
       }, 2000);
-
-      // Fire first check immediately
+      // Immediate first check
       (async () => {
         try {
           const { data } = await getApiV1ChannelsByChannelIdReadiness({
@@ -470,237 +374,298 @@ export function HomePage() {
           }));
         }
       })();
-
       initialPollTimers.current.push(poll);
     }
-
     return () => {
       for (const t of initialPollTimers.current) clearInterval(t);
       initialPollTimers.current = [];
     };
   }, [channelsLoading, channels]);
-  const connectedChannelIds = useMemo(
-    () => channels.map((c) => c.id),
-    [channels],
-  );
 
-  // Active channel state (persisted in localStorage)
-  const [activeChannelId, setActiveChannelId] =
-    useActiveChannel(connectedChannelIds);
-
-  // Derive active channel info for CTA
-  const activeChannel = channels.find((c) => c.id === activeChannelId);
-  const activeChannelType = activeChannel?.channelType ?? "feishu";
+  const connectedTypes = new Set<string>(channels.map((c) => c.channelType));
+  const firstChannel = channels[0];
+  const firstChannelType = firstChannel?.channelType ?? "feishu";
   const chatShortName =
-    CHANNEL_SHORT_NAMES[activeChannelType] ?? activeChannelType;
+    CHANNEL_SHORT_NAMES[firstChannelType] ?? firstChannelType;
   const chatUrl = getChatUrl(
-    activeChannelType,
-    activeChannel?.appId,
-    activeChannel?.botUserId,
-    activeChannel?.accountId,
+    firstChannelType,
+    firstChannel?.appId,
+    firstChannel?.botUserId,
+    firstChannel?.accountId,
   );
 
-  /* ── Always show full dashboard ── */
-  const welcomeMessage = channelsLoading
-    ? "Welcome! 🎉 We're so glad you're here. Loading your setup..."
-    : connectedCount > 0
-      ? `Welcome! 🎉 We're so glad you're here. Your setup is complete — click "Chat in ${chatShortName}" on the right to start chatting with nexu. We're here whenever you need us.`
-      : "Welcome! 🎉 nexu is ready and running. Connect a channel to start chatting, or configure your AI models in Settings.";
+  // Video playback effects — reset when channel state changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hasChannel triggers reset intentionally
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = 0;
+    v.loop = false;
+    v.play().catch(() => {});
+    const onEnded = () => {
+      v.pause();
+    };
+    v.addEventListener("ended", onEnded);
+    return () => v.removeEventListener("ended", onEnded);
+  }, [hasChannel]);
 
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Hero card */}
-        <div className="mb-8 rounded-2xl bg-surface-1 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="px-6 pt-6 pb-5">
-            {/* Top: Avatar + Identity */}
-            <div className="flex items-start gap-6">
-              {/* Avatar */}
-              <div
-                className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden bg-surface-2 shrink-0 cursor-default"
-                onMouseEnter={() => setVideoHover(true)}
-                onMouseLeave={() => setVideoHover(false)}
-              >
-                <video
-                  ref={videoRef}
-                  src="https://static.refly.ai/video/nexu-alpha.mp4"
-                  poster="/nexu-alpha-poster.jpg"
-                  preload="auto"
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              </div>
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (videoHover) {
+      v.currentTime = 0;
+      v.loop = true;
+      v.play().catch(() => {});
+    } else {
+      v.loop = false;
+    }
+  }, [videoHover]);
 
-              {/* Identity + Status + Actions */}
-              <div className="flex-1 min-w-0 pt-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h2
-                    className="text-[22px] sm:text-[26px] font-normal tracking-tight text-text-primary"
-                    style={{ fontFamily: "var(--font-script)" }}
-                  >
-                    nexu Alpha
-                  </h2>
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {t("home.running")}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-text-muted mb-3">
-                  <InlineModelSelector />
-                  <span className="text-border">&middot;</span>
-                  <span>
-                    {sessionsData
-                      ? t("home.todayMessages", { count: messagesToday })
-                      : "..."}
-                  </span>
-                  <span className="text-border">&middot;</span>
-                  <span>
-                    {sessionsData ? formatRelativeTime(lastActiveAt, t) : "..."}
-                  </span>
-                </div>
-                <TypingText message={welcomeMessage} />
-                {/* Actions */}
-                <div className="flex items-center gap-2 mt-4">
-                  {connectedCount > 0 && (
-                    <a
-                      href={chatUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-medium bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
-                    >
-                      {activeChannelType === "feishu" ? (
-                        <FeishuIconChat size={14} />
-                      ) : (
-                        CHANNEL_OPTIONS.find((c) => c.id === activeChannelType)
-                          ?.smallIcon
-                      )}
-                      Chat in {chatShortName}
-                      <ArrowUpRight size={12} className="opacity-70" />
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowChannelManager(!showChannelManager)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-border text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
-                  >
-                    <Settings size={13} />
-                    {t("home.changeConfig")}
-                    <ChevronDown
-                      size={12}
-                      className={`transition-transform ${showChannelManager ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                </div>
-              </div>
+  /* ══════════════════════════════════════════════════════════════════════
+     Scene A: First-run — No channels connected (Idle state)
+     ══════════════════════════════════════════════════════════════════════ */
+  if (!hasChannel && !channelsLoading) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+          {/* ═══ TOP: Hero — Bot idle, waiting to be activated ═══ */}
+          <div className="flex flex-col items-center text-center">
+            <div
+              className="relative w-32 h-32 mb-5 cursor-default"
+              onMouseEnter={() => setVideoHover(true)}
+              onMouseLeave={() => setVideoHover(false)}
+            >
+              <video
+                ref={videoRef}
+                src="https://static.refly.ai/video/nexu-alpha.mp4"
+                poster="/nexu-alpha-poster.jpg"
+                preload="auto"
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <h2
+              className="text-[26px] font-normal tracking-tight text-text-primary mb-1.5"
+              style={{ fontFamily: "var(--font-script)" }}
+            >
+              nexu alpha
+            </h2>
+            <div className="flex items-center gap-3 text-[11px] text-text-muted">
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-warning)] animate-pulse" />
+                Idle
+              </span>
+              <span>Waiting for activation</span>
             </div>
 
-            {/* Channel manager panel */}
-            {showChannelManager && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {CHANNEL_OPTIONS.map((ch) => {
-                    const isConnected = connectedTypes.has(ch.id);
-                    const connectedChannel = channels.find(
-                      (c) => c.channelType === ch.id,
-                    );
-                    const isActive =
-                      isConnected && connectedChannel?.id === activeChannelId;
-                    const showBreathe =
-                      !isConnected && connectedCount === 0 && ch.recommended;
-                    return (
-                      <div
-                        key={ch.id}
-                        className={`rounded-xl border px-3 py-3 transition-all ${
-                          isActive
-                            ? "border-accent bg-accent/8 ring-1 ring-accent/20"
-                            : isConnected
-                              ? "border-accent/20 bg-accent/5"
-                              : showBreathe
-                                ? "border-border bg-surface-0 animate-breathe"
-                                : "border-border bg-surface-0"
-                        }`}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center border border-border bg-white shrink-0">
-                            {ch.smallIcon}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[13px] font-medium text-text-primary">
-                                {ch.name}
-                              </span>
-                              {isActive && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
-                                  {t("home.active")}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 text-[11px] text-text-muted">
-                              {channelsLoading
-                                ? t("home.loading")
-                                : isConnected
-                                  ? channelReadiness[ch.id] === "checking"
-                                    ? t("home.checking")
-                                    : channelReadiness[ch.id] === "connecting"
-                                      ? t("home.channelConnecting")
-                                      : t("home.connected")
-                                  : t("home.notConnected")}
-                            </div>
-                          </div>
+            {/* Speech bubble — minimal pill */}
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-1 border border-border/60 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand-primary)] animate-pulse shrink-0" />
+              <span className="text-[12px] text-text-secondary">
+                Connect an IM channel to activate me.
+              </span>
+            </div>
+          </div>
+
+          {/* ═══ MIDDLE: Channels — default open, Feishu highlighted ═══ */}
+          <div className="card card-static overflow-visible">
+            <div className="px-5 pt-4 pb-3">
+              <span className="text-[12px] font-medium text-text-primary">
+                Choose a channel to get started
+              </span>
+            </div>
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {ONBOARDING_CHANNELS.map((ch) => (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() =>
+                      setModalChannel(ch.id as "feishu" | "slack" | "discord")
+                    }
+                    className={`group relative rounded-xl border px-3 py-3 text-left transition-all cursor-pointer active:scale-[0.98] border-border bg-surface-0 hover:border-border-hover hover:bg-surface-1 ${
+                      ch.recommended ? "animate-breathe" : ""
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center border border-border bg-white shrink-0">
+                        {ch.icon}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-medium text-text-primary">
+                          {ch.name}
                         </div>
-                        <div className="mt-3 flex justify-end gap-2">
-                          {isConnected && connectedChannel ? (
-                            <>
-                              {!isActive && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setActiveChannelId(connectedChannel.id)
-                                  }
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-accent/30 text-accent hover:bg-accent/5 transition-colors"
-                                >
-                                  {t("home.setActive")}
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDisconnect(connectedChannel.id)
-                                }
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-red-500 hover:bg-red-500/5 border border-red-500/20 hover:border-red-500/30 transition-colors"
-                              >
-                                <Unlink size={12} />
-                                {t("home.disconnect")}
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowChannelManager(false);
-                                setModalChannel(
-                                  ch.id as "feishu" | "slack" | "discord",
-                                );
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border text-text-secondary hover:bg-surface-2 hover:border-border-hover transition-colors"
-                            >
-                              {t("home.connect")}
-                            </button>
-                          )}
+                        <div className="mt-0.5 text-[11px] text-text-muted">
+                          Add nexu Bot
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <ArrowRight
+                        size={13}
+                        className="text-text-muted group-hover:text-text-secondary transition-colors shrink-0 mt-0.5"
+                      />
+                    </div>
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* Action cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-7">
+        {modalChannel && (
+          <ChannelConnectModal
+            channelType={modalChannel}
+            onClose={() => setModalChannel(null)}
+            onConnected={handleConnected}
+            onStartReadinessPolling={(channelId) =>
+              startReadinessPolling(channelId, modalChannel)
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Scene B: Operational — Channels connected (Running state)
+     ══════════════════════════════════════════════════════════════════════ */
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
+        {/* ═══ TOP: Hero — Bot running ═══ */}
+        <div className="flex flex-col items-center text-center">
+          <div
+            className="relative w-32 h-32 mb-5 cursor-default"
+            onMouseEnter={() => setVideoHover(true)}
+            onMouseLeave={() => setVideoHover(false)}
+          >
+            <video
+              ref={videoRef}
+              src="https://static.refly.ai/video/nexu-alpha.mp4"
+              poster="/nexu-alpha-poster.jpg"
+              preload="auto"
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <h2
+            className="text-[26px] font-normal tracking-tight text-text-primary mb-1.5"
+            style={{ fontFamily: "var(--font-script)" }}
+          >
+            nexu alpha
+          </h2>
+          <div className="flex items-center gap-3 text-[11px] text-text-muted mb-2">
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {t("home.running")}
+            </span>
+            <InlineModelSelector />
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+            <span>
+              {sessionsData
+                ? t("home.todayMessages", { count: messagesToday })
+                : "..."}
+            </span>
+            <span className="text-border">&middot;</span>
+            <span>
+              {sessionsData ? formatRelativeTime(lastActiveAt, t) : "..."}
+            </span>
+          </div>
+
+          {/* Primary CTA */}
+          <div className="mt-5">
+            <a
+              href={chatUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium bg-accent text-accent-fg hover:bg-accent-hover transition-colors shadow-sm"
+            >
+              {firstChannelType === "feishu" ? (
+                <FeishuIconChat size={15} />
+              ) : (
+                CHANNEL_OPTIONS.find((c) => c.id === firstChannelType)?.icon
+              )}
+              Chat in {chatShortName}
+              <ArrowUpRight size={13} className="opacity-70" />
+            </a>
+          </div>
+        </div>
+
+        {/* ═══ MIDDLE: Channels panel ═══ */}
+        <div className="card card-static">
+          <div className="px-5 pt-4 pb-3">
+            <span className="text-[12px] font-medium text-text-primary">
+              Channels
+            </span>
+          </div>
+          <div className="px-5 pb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {CHANNEL_OPTIONS.map((ch) => {
+                const isConnected = connectedTypes.has(ch.id);
+                const connectedChannel = channels.find(
+                  (c) => c.channelType === ch.id,
+                );
+                const channelChatUrl = connectedChannel
+                  ? getChatUrl(
+                      ch.id,
+                      connectedChannel.appId,
+                      connectedChannel.botUserId,
+                      connectedChannel.accountId,
+                    )
+                  : "";
+                return (
+                  <div
+                    key={ch.id}
+                    className="rounded-xl border border-border bg-surface-0 px-3 py-3"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center border border-border bg-white shrink-0">
+                        {ch.icon}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-medium text-text-primary">
+                          {ch.name}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-text-muted">
+                          {channelsLoading
+                            ? t("home.loading")
+                            : isConnected
+                              ? channelReadiness[ch.id] === "checking"
+                                ? t("home.checking")
+                                : channelReadiness[ch.id] === "connecting"
+                                  ? t("home.channelConnecting")
+                                  : t("home.connected")
+                              : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      {isConnected && connectedChannel ? (
+                        <a
+                          href={channelChatUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+                        >
+                          Chat
+                        </a>
+                      ) : (
+                        <span className="h-[30px]" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ BOTTOM: Quick actions ═══ */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <button
             type="button"
             onClick={() => navigate("/workspace/sessions")}
@@ -774,9 +739,6 @@ export function HomePage() {
             </div>
           </a>
         </div>
-
-        {/* Activity Feed */}
-        <ActivityFeed />
       </div>
 
       {modalChannel && (
@@ -784,9 +746,6 @@ export function HomePage() {
           channelType={modalChannel}
           onClose={() => setModalChannel(null)}
           onConnected={handleConnected}
-          onStartReadinessPolling={(channelId) =>
-            startReadinessPolling(channelId, modalChannel)
-          }
         />
       )}
     </div>

@@ -31,7 +31,6 @@ import {
   patchApiV1Me,
   postApiInternalDesktopCloudConnect,
   postApiInternalDesktopCloudDisconnect,
-  postApiV1ProvidersByProviderIdRefreshModels,
   postApiV1ProvidersByProviderIdVerify,
   putApiInternalDesktopDefaultModel,
   putApiV1ProvidersByProviderId,
@@ -115,17 +114,18 @@ const PROVIDER_META: Record<
   },
 };
 
-async function refreshProviderModels(
-  providerId: string,
-): Promise<{ models: string[]; error?: string }> {
-  const { data, error } = await postApiV1ProvidersByProviderIdRefreshModels({
-    path: { providerId },
-  });
-  if (error || !data) return { models: [], error: "Request failed" };
-  return { models: data.models ?? [], error: data.error ?? undefined };
-}
+// Well-known models per provider (shown when no verify result yet)
+const DEFAULT_MODELS: Record<string, string[]> = {
+  anthropic: [
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-haiku-4-5-20251001",
+  ],
+  openai: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
+  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+};
 
-const GITHUB_URL = "https://github.com/nexu-io/nexu";
+const GITHUB_URL = "https://github.com/refly-ai/nexu";
 
 function buildProviders(
   apiModels: Array<{
@@ -916,12 +916,8 @@ export function ModelsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <h2 className="text-[18px] font-semibold text-text-primary mb-1">
-          {t("models.pageTitle")}
-        </h2>
-        <p className="text-[12px] text-text-muted mb-5">
-          {t("settings.pageSubtitle")}
-        </p>
+        <h2 className="heading-page">{t("models.pageTitle")}</h2>
+        <p className="heading-page-desc mb-8">{t("settings.pageSubtitle")}</p>
         <div className="mb-6 flex items-center gap-5 border-b border-border">
           {[
             { id: "general", label: t("settings.tabGeneral") },
@@ -965,42 +961,100 @@ export function ModelsPage() {
               className="flex gap-0 rounded-xl border border-border bg-surface-1 overflow-hidden"
               style={{ minHeight: 520 }}
             >
-              <div className="w-56 shrink-0 border-r border-border bg-surface-0 overflow-y-auto">
+              {/* Left: Provider list with Enabled / Providers grouping */}
+              <div className="w-56 shrink-0 bg-surface-0 overflow-y-auto">
                 <div className="p-2">
-                  <div className="space-y-0.5">
-                    {sidebarItems.map((item) => {
-                      const isActive = activeProvider?.id === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedProviderId(item.id);
-                            clearSetupParam();
-                          }}
-                          className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
-                            isActive ? "bg-accent/10" : "hover:bg-surface-2",
-                          )}
-                        >
-                          <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-                            <ProviderLogo provider={item.id} size={16} />
-                          </span>
-                          <span
-                            className={cn(
-                              "flex-1 text-[12px] font-medium truncate",
-                              isActive ? "text-accent" : "text-text-primary",
-                            )}
-                          >
-                            {item.name}
-                          </span>
-                          {item.configured && (
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Enabled providers */}
+                  {sidebarItems.filter((p) => p.configured).length > 0 && (
+                    <>
+                      <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">
+                        Enabled
+                      </div>
+                      <div className="space-y-0.5 mb-3">
+                        {sidebarItems
+                          .filter((p) => p.configured)
+                          .map((item) => {
+                            const isActive = activeProvider?.id === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProviderId(item.id);
+                                  clearSetupParam();
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
+                                  isActive
+                                    ? "bg-surface-3"
+                                    : "hover:bg-surface-2",
+                                )}
+                              >
+                                <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+                                  <ProviderLogo provider={item.id} size={16} />
+                                </span>
+                                <span
+                                  className={cn(
+                                    "flex-1 text-[12px] font-medium truncate",
+                                    isActive
+                                      ? "text-accent"
+                                      : "text-text-primary",
+                                  )}
+                                >
+                                  {item.name}
+                                </span>
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[var(--color-success)] ml-auto" />
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </>
+                  )}
+                  {/* Other providers */}
+                  {sidebarItems.filter((p) => !p.configured).length > 0 && (
+                    <>
+                      <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">
+                        Providers
+                      </div>
+                      <div className="space-y-0.5">
+                        {sidebarItems
+                          .filter((p) => !p.configured)
+                          .map((item) => {
+                            const isActive = activeProvider?.id === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProviderId(item.id);
+                                  clearSetupParam();
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
+                                  isActive
+                                    ? "bg-surface-3"
+                                    : "hover:bg-surface-2",
+                                )}
+                              >
+                                <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+                                  <ProviderLogo provider={item.id} size={16} />
+                                </span>
+                                <span
+                                  className={cn(
+                                    "flex-1 text-[12px] font-medium truncate",
+                                    isActive
+                                      ? "text-accent"
+                                      : "text-text-primary",
+                                  )}
+                                >
+                                  {item.name}
+                                </span>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1491,9 +1545,8 @@ function ByokProviderDetail({
     !dbProvider?.hasApiKey,
   );
 
-  // Available models from verification or auto-refresh
+  // Available models from verification
   const [verifiedModels, setVerifiedModels] = useState<string[] | null>(null);
-  const [modelsRefreshing, setModelsRefreshing] = useState(false);
 
   // Reset form when provider changes
   useEffect(() => {
@@ -1502,26 +1555,6 @@ function ByokProviderDetail({
     setIsEditingApiKey(!dbProvider?.hasApiKey);
     setVerifiedModels(null);
   }, [dbProvider, meta.defaultProxyUrl]);
-
-  // Auto-fetch models from provider when API key is saved
-  const autoRefreshDone = useRef(false);
-  useEffect(() => {
-    if (!dbProvider?.hasApiKey || autoRefreshDone.current) return;
-    autoRefreshDone.current = true;
-    setModelsRefreshing(true);
-    refreshProviderModels(providerId)
-      .then((result) => {
-        if (result.models.length > 0) {
-          setVerifiedModels(result.models);
-        }
-      })
-      .finally(() => setModelsRefreshing(false));
-  }, [dbProvider?.hasApiKey, providerId]);
-
-  // Reset auto-refresh flag when provider changes
-  useEffect(() => {
-    autoRefreshDone.current = false;
-  }, [providerId]);
 
   // ── Verify mutation ──────────────────────────────────
   const verifyMutation = useMutation({
@@ -1545,23 +1578,15 @@ function ByokProviderDetail({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["models"] });
       setApiKey("");
       setIsEditingApiKey(false);
       markSetupComplete();
-      // Fetch fresh models from provider after saving credentials
-      setModelsRefreshing(true);
-      refreshProviderModels(providerId)
-        .then((result) => {
-          if (result.models.length > 0) {
-            setVerifiedModels(result.models);
-            const firstModel = result.models[0];
-            if (firstModel) onAutoSelectModel(firstModel);
-          }
-        })
-        .finally(() => {
-          setModelsRefreshing(false);
-          queryClient.invalidateQueries({ queryKey: ["models"] });
-        });
+      // Auto-select first model if no model is currently selected
+      const firstModel = displayModels[0];
+      if (firstModel) {
+        onAutoSelectModel(firstModel);
+      }
     },
   });
 
@@ -1578,12 +1603,13 @@ function ByokProviderDetail({
     },
   });
 
-  // Model list to show: verified/refreshed > DB stored
+  // Model list to show: verified > DB stored > defaults
   const displayModels = useMemo(() => {
     if (verifiedModels && verifiedModels.length > 0) return verifiedModels;
     const stored: string[] = JSON.parse(dbProvider?.modelsJson ?? "[]");
-    return stored;
-  }, [verifiedModels, dbProvider]);
+    if (stored.length > 0) return stored;
+    return DEFAULT_MODELS[providerId] ?? [];
+  }, [verifiedModels, dbProvider, providerId]);
 
   return (
     <div>
@@ -1714,55 +1740,18 @@ function ByokProviderDetail({
         </div>
       </div>
 
-      {/* Model list */}
+      {/* Model list — read-only */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[13px] font-semibold text-text-primary">
-            {t("models.byok.modelList")}
-            <span className="ml-2 text-[11px] font-normal text-text-muted">
-              {t("models.byok.modelsTotalCount", {
-                count: displayModels.length,
-              })}
-            </span>
-          </div>
-          {dbProvider?.hasApiKey && (
-            <button
-              type="button"
-              disabled={modelsRefreshing}
-              onClick={() => {
-                setModelsRefreshing(true);
-                refreshProviderModels(providerId)
-                  .then((result) => {
-                    if (result.models.length > 0) {
-                      setVerifiedModels(result.models);
-                      queryClient.invalidateQueries({ queryKey: ["models"] });
-                    } else if (result.error) {
-                      toast.error(result.error);
-                    }
-                  })
-                  .finally(() => setModelsRefreshing(false));
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
-            >
-              <RefreshCw
-                size={11}
-                className={modelsRefreshing ? "animate-spin" : ""}
-              />
-              {t("models.byok.refreshModels")}
-            </button>
-          )}
+        <div className="text-[13px] font-semibold text-text-primary mb-3">
+          {t("models.byok.modelList")}
+          <span className="ml-2 text-[11px] font-normal text-text-muted">
+            {t("models.byok.modelsTotalCount", { count: displayModels.length })}
+          </span>
         </div>
         <div className="space-y-1.5">
           {displayModels.length === 0 && (
-            <div className="text-[11px] text-text-muted/60 py-3 text-center flex items-center justify-center gap-2">
-              {modelsRefreshing ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  {t("models.byok.fetchingModels")}
-                </>
-              ) : (
-                t("models.byok.none")
-              )}
+            <div className="text-[11px] text-text-muted/60 py-3 text-center">
+              {t("models.byok.none")}
             </div>
           )}
           {displayModels.map((modelId) => {
