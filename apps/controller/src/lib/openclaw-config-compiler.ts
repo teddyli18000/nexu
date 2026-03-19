@@ -231,7 +231,15 @@ function resolveModelId(config: NexuConfig, rawModelId: string): string {
   }
 
   if (isDesktopCloudConfig(config.desktop.cloud)) {
-    return `link/${rawModelId}`;
+    const cloudModels = config.desktop.cloud.models;
+    // Only use Link fallback if the model actually exists in Link's model list
+    if (cloudModels.some((m) => m.id === rawModelId)) {
+      return `link/${rawModelId}`;
+    }
+    // Model not found in Link — pick the first available Link model
+    if (cloudModels.length > 0) {
+      return `link/${cloudModels[0]!.id}`;
+    }
   }
 
   return rawModelId;
