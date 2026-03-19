@@ -19,6 +19,7 @@ import type {
   RuntimeUnitSnapshot,
   RuntimeUnitState,
 } from "../shared/host";
+import { getDesktopSentryBuildMetadata } from "../shared/sentry-build-metadata";
 import { UpdateBanner } from "./components/update-banner";
 import { useAutoUpdate } from "./hooks/use-auto-update";
 import {
@@ -49,10 +50,18 @@ function initializeRendererSentry(dsn: string): void {
     return;
   }
 
+  const sentryBuildMetadata = getDesktopSentryBuildMetadata(
+    window.nexuHost.bootstrap.buildInfo,
+  );
+
   Sentry.init({
     dsn,
     environment: import.meta.env.MODE,
+    release: sentryBuildMetadata.release,
+    ...(sentryBuildMetadata.dist ? { dist: sentryBuildMetadata.dist } : {}),
   });
+
+  Sentry.setContext("build", sentryBuildMetadata.buildContext);
 
   rendererSentryInitialized = true;
 }
@@ -804,7 +813,11 @@ function DiagnosticsActionCard({
   );
 }
 
-function DiagnosticsPage() {
+function DiagnosticsPage({
+  runtimeConfig,
+}: {
+  runtimeConfig: DesktopRuntimeConfig | null;
+}) {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [diagnosticsInfo, setDiagnosticsInfo] =
     useState<DiagnosticsInfo | null>(null);
@@ -916,6 +929,11 @@ function DiagnosticsPage() {
           }
         />
         <SummaryCard
+          label="Nexu Home"
+          className="diagnostics-summary-wide"
+          value={runtimeConfig?.paths.nexuHome ?? "-"}
+        />
+        <SummaryCard
           label="Crash dumps"
           className="diagnostics-summary-wide"
           value={diagnosticsInfo?.crashDumpsPath ?? "-"}
@@ -1007,12 +1025,12 @@ function DesktopShell() {
     });
   }, []);
 
-  // Poll the API ready endpoint through the web sidecar proxy before mounting the webview.
-  const [apiReady, setApiReady] = useState(false);
+  // Poll the controller ready endpoint through the web sidecar proxy before mounting the webview.
+  const [controllerReady, setControllerReady] = useState(false);
 
   useEffect(() => {
     if (!runtimeConfig) return;
-    if (apiReady) return;
+    if (controllerReady) return;
 
     let cancelled = false;
     const readyUrl = new URL(
@@ -1029,12 +1047,12 @@ function DesktopShell() {
           if (res.ok) {
             const data = await res.json();
             if (data.ready) {
-              if (!cancelled) setApiReady(true);
+              if (!cancelled) setControllerReady(true);
               return;
             }
           }
         } catch {
-          // API or web sidecar not ready yet — keep polling
+          // Controller or web sidecar not ready yet — keep polling
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
@@ -1044,10 +1062,10 @@ function DesktopShell() {
     return () => {
       cancelled = true;
     };
-  }, [runtimeConfig, apiReady]);
+  }, [runtimeConfig, controllerReady]);
 
   const desktopWebUrl =
-    runtimeConfig && apiReady
+    runtimeConfig && controllerReady
       ? new URL("/workspace", runtimeConfig.urls.web).toString()
       : null;
   const desktopOpenClawUrl = runtimeConfig
@@ -1174,7 +1192,7 @@ function DesktopShell() {
             display: activeSurface === "diagnostics" ? "contents" : "none",
           }}
         >
-          <DiagnosticsPage />
+          <DiagnosticsPage runtimeConfig={runtimeConfig} />
         </div>
       </main>
 
