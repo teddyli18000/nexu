@@ -1388,8 +1388,8 @@ function ManagedProviderDetail({
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-accent/15 bg-accent/5 px-4 py-4 mb-6">
-          <div className="text-[13px] font-semibold text-accent">
+        <div className="rounded-xl border border-[var(--color-brand-primary)]/25 bg-[var(--color-brand-subtle)] px-4 py-4 mb-6">
+          <div className="text-[13px] font-semibold text-[var(--color-brand-primary)]">
             {t("models.managed.loginPrompt")}
           </div>
           <div className="text-[12px] leading-[1.7] text-text-secondary mt-1.5">

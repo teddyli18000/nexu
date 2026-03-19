@@ -246,9 +246,9 @@ const en = {
     "Cloud models are now available. View and manage below.",
   "models.managed.refresh": "Refresh",
   "models.managed.disconnect": "Disconnect",
-  "models.managed.loginPrompt": "Log in to use Nexu official models",
+  "models.managed.loginPrompt": "Sign in to use Nexu official models",
   "models.managed.loginDescription":
-    "After logging into your Nexu account, you can directly use officially provided premium models without configuring an API key separately.",
+    "Sign in with your Nexu account to access unlimited premium models like Claude Opus 4.6, GPT-5.4, and more — no API key needed.",
   "models.managed.waitingLogin": "Waiting for browser login...",
   "models.managed.loginButton": "Log in to Nexu",
   "models.managed.availableModels": "Available models",
