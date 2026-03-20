@@ -3,6 +3,7 @@ import {
   useInstallSkill,
   useUninstallSkill,
 } from "@/hooks/use-community-catalog";
+import { getTagLabel, useSkillTranslations } from "@/lib/skill-translations";
 import type { MinimalSkill } from "@/types/desktop";
 import { Download, Star } from "lucide-react";
 import { useState } from "react";
@@ -17,17 +18,22 @@ function formatDownloads(count: number): string {
 export function CommunitySkillCard({
   skill,
   isInstalled,
+  locale = "en",
 }: {
   skill: MinimalSkill;
   isInstalled: boolean;
+  locale?: string;
 }) {
   const installMutation = useInstallSkill();
   const uninstallMutation = useUninstallSkill();
   const [pendingAction, setPendingAction] = useState<
     "install" | "uninstall" | null
   >(null);
+  const { getSkillDescription, getSkillName } = useSkillTranslations(locale);
 
   const isBusy = pendingAction !== null;
+  const displayName = getSkillName(skill.slug, skill.name);
+  const displayDescription = getSkillDescription(skill.slug, skill.description);
 
   async function handleToggle(checked: boolean) {
     if (checked) {
@@ -57,7 +63,7 @@ export function CommunitySkillCard({
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <span className="text-[13px] font-semibold text-text-primary truncate block">
-            {skill.name}
+            {displayName}
           </span>
           <span className="text-[11px] text-text-muted font-mono">
             {skill.slug}
@@ -86,7 +92,7 @@ export function CommunitySkillCard({
       </div>
 
       <p className="text-[12px] text-text-muted leading-relaxed line-clamp-2 mb-3">
-        {skill.description}
+        {displayDescription}
       </p>
 
       <div className="flex items-center justify-between">
@@ -96,7 +102,7 @@ export function CommunitySkillCard({
               key={tag}
               className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-text-muted font-medium truncate"
             >
-              {tag}
+              {getTagLabel(tag, locale)}
             </span>
           ))}
         </div>
