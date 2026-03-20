@@ -7,6 +7,7 @@ import {
   type MenuItemConstructorOptions,
   app,
   crashReporter,
+  powerMonitor,
   powerSaveBlocker,
   session,
   shell,
@@ -30,6 +31,7 @@ import {
   rotateDesktopLogSession,
   writeDesktopMainLog,
 } from "./runtime/runtime-logger";
+import { SleepGuard, type SleepGuardLogEntry } from "./sleep-guard";
 import { ComponentUpdater } from "./updater/component-updater";
 import { StartupHealthCheck } from "./updater/rollback";
 import { UpdateManager } from "./updater/update-manager";
@@ -54,8 +56,6 @@ const runtimeConfig = getDesktopRuntimeConfig(process.env, {
   resourcesPath: app.isPackaged ? electronRoot : undefined,
   useBuildConfig: app.isPackaged,
 });
-let powerSaveId: number | null = null;
-
 const orchestrator = new RuntimeOrchestrator(
   createRuntimeUnitManifests(
     electronRoot,
@@ -181,6 +181,7 @@ if (sentryDsn) {
 
 let mainWindow: BrowserWindow | null = null;
 let diagnosticsReporter: DesktopDiagnosticsReporter | null = null;
+let sleepGuard: SleepGuard | null = null;
 
 function sendDesktopCommand(
   surface: DesktopSurface,
@@ -327,6 +328,17 @@ function logRendererEvent({
     message,
     logFilePath: getDesktopLogFilePath("desktop-main.log"),
     windowId,
+  });
+}
+
+function logSleepGuard(entry: SleepGuardLogEntry): void {
+  writeDesktopMainLog({
+    source: "sleep-guard",
+    stream: entry.stream,
+    kind: entry.kind,
+    message: entry.message,
+    logFilePath: getDesktopLogFilePath("desktop-main.log"),
+    windowId: getMainWindowId(),
   });
 }
 
@@ -639,8 +651,16 @@ app.whenReady().then(async () => {
   registerIpcHandlers(orchestrator, runtimeConfig);
   diagnosticsReporter = new DesktopDiagnosticsReporter(orchestrator);
   const unsubscribeDiagnostics = diagnosticsReporter.start();
+  sleepGuard = new SleepGuard({
+    powerMonitor,
+    powerSaveBlocker,
+    log: logSleepGuard,
+    onSnapshot: (snapshot) => {
+      diagnosticsReporter?.setSleepGuardSnapshot(snapshot);
+    },
+  });
   const win = createMainWindow();
-  powerSaveId = powerSaveBlocker.start("prevent-app-suspension");
+  sleepGuard.start("desktop-runtime-active");
 
   void (async () => {
     const healthCheck = new StartupHealthCheck();
@@ -705,9 +725,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  if (powerSaveId !== null && powerSaveBlocker.isStarted(powerSaveId)) {
-    powerSaveBlocker.stop(powerSaveId);
-  }
+  sleepGuard?.dispose("app-before-quit");
   void diagnosticsReporter?.flushNow().catch(() => undefined);
   flushRuntimeLoggers();
   void orchestrator.dispose();
