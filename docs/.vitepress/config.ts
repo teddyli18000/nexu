@@ -100,6 +100,7 @@ const enSidebar = [
         text: "Channel Configuration",
         link: "/guide/channels",
         items: [
+          { text: "WeChat", link: "/guide/channels/wechat" },
           { text: "Feishu", link: "/guide/channels/feishu" },
           { text: "Slack", link: "/guide/channels/slack" },
           { text: "Discord", link: "/guide/channels/discord" },
@@ -136,6 +137,7 @@ const zhSidebar = [
         text: "渠道配置",
         link: "/zh/guide/channels",
         items: [
+          { text: "微信", link: "/zh/guide/channels/wechat" },
           { text: "飞书", link: "/zh/guide/channels/feishu" },
           { text: "Slack", link: "/zh/guide/channels/slack" },
           { text: "Discord", link: "/zh/guide/channels/discord" },

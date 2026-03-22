@@ -239,7 +239,9 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 ## 📄 License
 
-[MIT License](LICENSE)
+nexu is open-sourced under the [MIT License](LICENSE) — free to use, modify, distribute, and build upon for any purpose, including commercial use.
+
+We believe open source is the future of AI infrastructure. Fork it, contribute, or build your own product on top of nexu.
 
 ---
 

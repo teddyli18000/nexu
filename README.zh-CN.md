@@ -239,7 +239,9 @@ pnpm test
 
 ## 📄 许可证
 
-[MIT License](LICENSE)
+nexu 基于 [MIT License](LICENSE) 开源——你可以自由使用、修改、分发。
+
+我们相信开源是 AI 基础设施的未来。欢迎 fork、贡献、或基于 nexu 构建你自己的产品。
 
 ---
 
