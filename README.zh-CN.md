@@ -35,14 +35,18 @@
 
 **nexu**（奈苏，next to you）是一个开源桌面客户端，让你的 **OpenClaw 🦞** Agent 直接运行在微信、飞书、Slack、Discord 等 IM 中。
 
-下载即用，图形化配置，已适配微信 ClawBot 插件，内置飞书 Skills，支持 Claude / GPT / Gemini 等多模型与自带 API Key。
+**已支持微信接入 OpenClaw** —— 适配微信 8.0.7 OpenClaw 插件，点击连接、微信扫码，即可在微信中与 AI Agent 对话。
+
+下载即用，图形化配置，内置飞书 Skills，支持 Claude / GPT / Gemini 等多模型与自带 API Key。
 
 连接 IM 后，Agent 7×24 小时在线——手机上随时对话，不受桌面限制。
 
 所有数据保存在本机，隐私安全，完全可控。
 
 <p align="center">
-  <img src="site/media/readme-screenshot.png" width="660" alt="nexu 截图" />
+  <img src="site/media/readme-screenshot.png" width="49%" alt="nexu 截图" />
+  &nbsp;
+  <img src="site/media/readme-wechat-demo.png" width="49%" alt="nexu 微信扫码连接" />
 </p>
 
 ---
