@@ -301,4 +301,131 @@ describe("SessionsRuntime", () => {
       openId: "ou_00c644f271002b17348e992569f0f327",
     });
   });
+
+  it("uses a stable WeChat fallback title when sender metadata is missing", async () => {
+    rootDir = await mkdtemp(path.join(tmpdir(), "nexu-sessions-runtime-"));
+    const runtime = new SessionsRuntime(
+      createEnv({
+        openclawStateDir: rootDir,
+        openclawConfigPath: path.join(rootDir, "openclaw.json"),
+        openclawSkillsDir: path.join(rootDir, "skills"),
+        openclawCuratedSkillsDir: path.join(rootDir, "bundled-skills"),
+        openclawWorkspaceTemplatesDir: path.join(
+          rootDir,
+          "workspace-templates",
+        ),
+      }),
+    );
+
+    const sessionsDir = path.join(rootDir, "agents", "bot-weixin", "sessions");
+    await mkdir(sessionsDir, { recursive: true });
+    const sessionPath = path.join(
+      sessionsDir,
+      "b1392694-8959-454f-8571-a83cf1f6abef.jsonl",
+    );
+
+    await writeFile(
+      sessionPath,
+      `${JSON.stringify({
+        type: "message",
+        id: "msg-weixin-1",
+        timestamp: "2026-03-22T10:49:06.478Z",
+        message: {
+          role: "user",
+          timestamp: 1774176546475,
+          content: [
+            {
+              type: "text",
+              text: [
+                "Conversation info (untrusted metadata):",
+                "```json",
+                JSON.stringify(
+                  {
+                    message_id: "openclaw-weixin:1774176546217-9644087e",
+                    timestamp: "Sun 2026-03-22 18:49 GMT+8",
+                  },
+                  null,
+                  2,
+                ),
+                "```",
+              ].join("\n"),
+            },
+          ],
+        },
+      })}\n`,
+      "utf8",
+    );
+
+    const sessions = await runtime.listSessions();
+    const session = sessions.find(
+      (item) => item.sessionKey === "b1392694-8959-454f-8571-a83cf1f6abef",
+    );
+
+    expect(session?.title).toBe("WeChat ClawBot");
+  });
+
+  it("replaces persisted uuid-like titles with inferred WeChat conversation titles", async () => {
+    rootDir = await mkdtemp(path.join(tmpdir(), "nexu-sessions-runtime-"));
+    const runtime = new SessionsRuntime(
+      createEnv({
+        openclawStateDir: rootDir,
+        openclawConfigPath: path.join(rootDir, "openclaw.json"),
+        openclawSkillsDir: path.join(rootDir, "skills"),
+        openclawCuratedSkillsDir: path.join(rootDir, "bundled-skills"),
+        openclawWorkspaceTemplatesDir: path.join(
+          rootDir,
+          "workspace-templates",
+        ),
+      }),
+    );
+
+    const sessionsDir = path.join(rootDir, "agents", "bot-weixin", "sessions");
+    await mkdir(sessionsDir, { recursive: true });
+    const sessionKey = "b1392694-8959-454f-8571-a83cf1f6abef";
+    const sessionPath = path.join(sessionsDir, `${sessionKey}.jsonl`);
+
+    await writeFile(
+      sessionPath,
+      `${JSON.stringify({
+        type: "message",
+        id: "msg-weixin-2",
+        timestamp: "2026-03-22T10:49:06.478Z",
+        message: {
+          role: "user",
+          timestamp: 1774176546475,
+          content: [
+            {
+              type: "text",
+              text: [
+                "Conversation info (untrusted metadata):",
+                "```json",
+                JSON.stringify(
+                  {
+                    message_id: "openclaw-weixin:1774176546217-9644087e",
+                    timestamp: "Sun 2026-03-22 18:49 GMT+8",
+                    channel: "openclaw-weixin",
+                  },
+                  null,
+                  2,
+                ),
+                "```",
+              ].join("\n"),
+            },
+          ],
+        },
+      })}\n`,
+      "utf8",
+    );
+    await writeFile(
+      sessionPath.replace(/\.jsonl$/, ".meta.json"),
+      `${JSON.stringify({ title: sessionKey }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const sessions = await runtime.listSessions();
+    const session = sessions.find((item) => item.sessionKey === sessionKey);
+
+    expect(session?.channelType).toBe("openclaw-weixin");
+    expect(session?.title).toBe("WeChat ClawBot");
+  });
 });

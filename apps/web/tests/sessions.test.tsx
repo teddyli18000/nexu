@@ -106,6 +106,51 @@ describe("SessionsPage", () => {
     expect(markup).toContain("Open in Slack");
   });
 
+  it("strips conversation metadata blocks before rendering user text", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    queryClient.setQueryData(["session-meta", "sess-meta-only"], {
+      id: "sess-meta-only",
+      title: "测试",
+      channelType: "web",
+      messageCount: 1,
+      lastMessageAt: "2026-03-22T10:49:06.000Z",
+      metadata: {},
+    });
+    queryClient.setQueryData(["chat-history", "sess-meta-only"], {
+      messages: [
+        {
+          id: "msg-meta-only",
+          role: "user",
+          content:
+            'Conversation info (untrusted metadata):\n```json\n{\n  "message_id": "openclaw-weixin:1774176546217-9644087e",\n  "timestamp": "Sun 2026-03-22 18:49 GMT+8"\n}\n```\n\n测试',
+          timestamp: new Date("2026-03-22T10:49:06.000Z").getTime(),
+          createdAt: "2026-03-22T10:49:06.000Z",
+        },
+      ],
+    });
+
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/workspace/sessions/sess-meta-only"]}>
+          <Routes>
+            <Route path="/workspace/sessions/:id" element={<SessionsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(markup).toContain("测试");
+    expect(markup).not.toContain("Conversation info (untrusted metadata)");
+    expect(markup).not.toContain("openclaw-weixin:1774176546217-9644087e");
+  });
+
   it("renders a Feishu deep link when the backing channel config is available", () => {
     const queryClient = new QueryClient({
       defaultOptions: {

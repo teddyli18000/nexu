@@ -36,12 +36,14 @@ export interface WechatSetupViewProps {
   disabled?: boolean;
   /** When true, gateway is known to be running — skip "waiting gateway" hint. */
   gatewayReady?: boolean;
+  showHeader?: boolean;
 }
 
 export function WechatSetupView({
   onConnected,
   disabled,
   gatewayReady,
+  showHeader = true,
 }: WechatSetupViewProps) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -198,19 +200,21 @@ export function WechatSetupView({
 
   return (
     <div className="p-5 rounded-xl border bg-surface-1 border-border">
-      <div className="flex gap-3 items-start mb-5">
-        <div className="flex justify-center items-center w-9 h-9 rounded-lg bg-green-500/10 shrink-0">
-          <Smartphone size={18} className="text-green-600" />
+      {showHeader && (
+        <div className="flex gap-3 items-start mb-5">
+          <div className="flex justify-center items-center w-9 h-9 rounded-lg bg-green-500/10 shrink-0">
+            <Smartphone size={18} className="text-green-600" />
+          </div>
+          <div>
+            <h3 className="text-[14px] font-semibold text-text-primary">
+              {t("wechatSetup.title")}
+            </h3>
+            <p className="text-[12px] text-text-muted mt-1 leading-relaxed">
+              {t("wechatSetup.desc")}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-[14px] font-semibold text-text-primary">
-            {t("wechatSetup.title")}
-          </h3>
-          <p className="text-[12px] text-text-muted mt-1 leading-relaxed">
-            {t("wechatSetup.desc")}
-          </p>
-        </div>
-      </div>
+      )}
 
       <div className="flex flex-col items-center gap-4 py-4">
         {/* QR code display area */}

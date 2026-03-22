@@ -53,6 +53,9 @@ type ControllerConfigRecord = {
   secrets?: Record<string, string>;
 };
 
+const UUID_LIKE_TITLE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function sessionMetadataPath(filePath: string): string {
   return filePath.replace(/\.jsonl$/, ".meta.json");
 }
@@ -109,17 +112,36 @@ export class SessionsRuntime {
           if (!channelType && hints.channelType) {
             channelType = hints.channelType;
           }
-          if (!title && hints.senderName) {
-            title = channelType
-              ? `${hints.senderName} · ${channelType}`
-              : hints.senderName;
+          if (
+            this.shouldReplaceInferredTitle(title, sessionKey) &&
+            hints.senderName
+          ) {
+            title =
+              channelType === "openclaw-weixin"
+                ? hints.senderName
+                : channelType
+                  ? `${hints.senderName} · ${channelType}`
+                  : hints.senderName;
+          }
+          if (
+            this.shouldReplaceInferredTitle(title, sessionKey) &&
+            channelType === "openclaw-weixin"
+          ) {
+            title = "WeChat ClawBot";
           }
 
           const { metadata: mergedMetadata, changed: metadataBackfilled } =
             this.mergeSessionMetadata(extra.metadata, resolvedHintMetadata);
-          if (metadataBackfilled) {
+          const titleInferred =
+            title !== extra.title && typeof title === "string";
+          const channelTypeInferred =
+            channelType !== extra.channelType &&
+            typeof channelType === "string";
+          if (metadataBackfilled || titleInferred || channelTypeInferred) {
             extra = {
               ...extra,
+              title,
+              channelType,
               metadata: mergedMetadata,
             };
             await this.writeSessionMetadata(filePath, extra);
@@ -451,6 +473,11 @@ export class SessionsRuntime {
       /\b(?:ou|oc)_[a-f0-9]{32}\b/.test(combined)
     ) {
       channelType = "feishu";
+    } else if (
+      combined.includes("openclaw-weixin") ||
+      combined.includes("wechat")
+    ) {
+      channelType = "openclaw-weixin";
     } else if (combined.includes("slack")) {
       channelType = "slack";
     } else if (combined.includes("discord")) {
@@ -487,6 +514,24 @@ export class SessionsRuntime {
     } catch {
       return null;
     }
+  }
+
+  private shouldReplaceInferredTitle(
+    title: string | undefined,
+    sessionKey: string,
+  ): boolean {
+    if (!title) {
+      return true;
+    }
+
+    const normalized = title.trim();
+    if (!normalized) {
+      return true;
+    }
+
+    return (
+      normalized === sessionKey || UUID_LIKE_TITLE_PATTERN.test(normalized)
+    );
   }
 
   private extractExactChatTargetMetadata(

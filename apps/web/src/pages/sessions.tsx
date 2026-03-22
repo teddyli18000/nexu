@@ -36,6 +36,15 @@ const BOT_AVATAR = "/brand/ip-nexu.svg";
  * only the real user text after the last metadata marker.
  */
 function stripMetadata(raw: string): string {
+  const withoutConversationMeta = raw.replace(
+    /Conversation info \(untrusted metadata\):\s*```json\s*[\s\S]*?```\s*/g,
+    "",
+  );
+  const withoutSenderMeta = withoutConversationMeta.replace(
+    /Sender \(untrusted metadata\):\s*```json\s*[\s\S]*?```\s*/g,
+    "",
+  );
+
   // Pattern 1 (Feishu/Slack): [message_id: ...]\nsenderName: actualMessage
   const markerMatch = raw.match(
     /\[message_id:\s*[^\]]+\](?:\n|\\n)(.+?):\s*([\s\S]*)$/,
@@ -50,10 +59,8 @@ function stripMetadata(raw: string): string {
   if (tsMatch?.[1] != null) {
     return tsMatch[1].trim();
   }
-  // Fallback: if there's a Sender metadata block, take everything after it
-  const senderBlockEnd = raw.lastIndexOf("```\n\n");
-  if (senderBlockEnd !== -1 && raw.includes("Sender (untrusted metadata)")) {
-    return raw.slice(senderBlockEnd + 5).trim();
+  if (withoutSenderMeta !== raw) {
+    return withoutSenderMeta.trim();
   }
   return raw;
 }
@@ -148,7 +155,8 @@ type Platform =
   | "whatsapp"
   | "telegram"
   | "web"
-  | "feishu";
+  | "feishu"
+  | "wechat";
 
 interface PlatformConfig {
   badgeClass: string;
@@ -193,6 +201,12 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
       "border-[rgba(51,112,255,0.14)] bg-[rgba(51,112,255,0.08)] text-[#3370FF]",
     label: "Feishu",
     openLabel: "Open in Feishu",
+  },
+  wechat: {
+    badgeClass:
+      "border-[rgba(141,200,27,0.14)] bg-[rgba(141,200,27,0.08)] text-[#8DC81B]",
+    label: "WeChat",
+    openLabel: "Open in WeChat",
   },
   web: DEFAULT_PLATFORM_CONFIG,
 };
@@ -564,6 +578,7 @@ export function SessionsPage() {
               <span>Open Folder</span>
             </button>
             {platform !== "web" &&
+              platform !== "wechat" &&
               (externalChatUrl ? (
                 <a
                   href={externalChatUrl}
