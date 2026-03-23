@@ -44,7 +44,7 @@ pnpm install
 
 ### 仓库结构（节选）
 
-```
+```text
 nexu/
 ├── apps/
 │   ├── api/

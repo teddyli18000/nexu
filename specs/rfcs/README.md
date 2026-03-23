@@ -13,7 +13,7 @@ Bug fixes, small features, and docs improvements do **not** need an RFC — an I
 
 ## Lifecycle
 
-```
+```text
 Draft  →  Open for feedback  →  Accepted / Rejected / Superseded
 ```
 

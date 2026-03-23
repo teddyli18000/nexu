@@ -44,7 +44,7 @@ pnpm install
 
 ### Repository layout (excerpt)
 
-```
+```text
 nexu/
 ├── apps/
 │   ├── api/

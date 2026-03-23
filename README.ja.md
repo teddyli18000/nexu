@@ -166,7 +166,7 @@ nexu アカウントでサインインすれば対応モデルにすぐアクセ
 
 ### リポジトリ構成（抜粋）
 
-```
+```text
 nexu/
 ├── apps/
 │   ├── api/              # Backend API
@@ -224,7 +224,7 @@ pnpm test
 ### コントリビューター
 
 <a href="https://github.com/nexu-io/nexu/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/nexu" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/nexu" alt="Contributors" />
 </a>
 
 ---

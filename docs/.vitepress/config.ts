@@ -52,9 +52,9 @@ const localePreferenceScript = `
 
   const pathname = normalizePath(window.location.pathname);
 
-  if (pathname === "/" || pathname === zhPrefix) {
+  if (pathname === "/" || pathname === zhPrefix || pathname === jaPrefix) {
     const preferredLocale = getPreferredLocale();
-    const targetPath = preferredLocale === "zh" ? zhPrefix : "/";
+    const targetPath = preferredLocale === "zh" ? zhPrefix : preferredLocale === "ja" ? jaPrefix : "/";
 
     if (pathname !== targetPath) {
       window.location.replace(targetPath + window.location.search + window.location.hash);
