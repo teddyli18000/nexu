@@ -406,6 +406,14 @@ export function startEmbeddedWebServer(opts: {
   });
 }
 
+async function collectBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 async function proxyToController(
   req: IncomingMessage,
   res: ServerResponse,
@@ -414,15 +422,20 @@ async function proxyToController(
   const targetUrl = `${controllerUrl}${req.url}`;
 
   try {
+    let body: Buffer | undefined;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      body = await collectBody(req);
+    }
+
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: req.headers as Record<string, string>,
-      body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
+      body,
     });
 
     res.writeHead(response.status, Object.fromEntries(response.headers));
-    const body = await response.arrayBuffer();
-    res.end(Buffer.from(body));
+    const resBody = await response.arrayBuffer();
+    res.end(Buffer.from(resBody));
   } catch (err) {
     res.writeHead(502);
     res.end("Bad Gateway");
@@ -625,6 +638,11 @@ export async function bootstrapWithLaunchd(env: DesktopEnv): Promise<void> {
 ### 6.3 Exit Behavior
 
 ```typescript
+const SERVICE_LABELS = {
+  controller: app.isPackaged ? "com.nexu.controller" : "com.nexu.controller.dev",
+  openclaw: app.isPackaged ? "com.nexu.openclaw" : "com.nexu.openclaw.dev",
+};
+
 app.on("before-quit", async (event) => {
   event.preventDefault();
 
@@ -642,8 +660,8 @@ app.on("before-quit", async (event) => {
   if (response === 0) {
     // Quit completely: gracefully stop all services
     const launchd = new LaunchdManager();
-    await launchd.stopServiceGracefully(labels.openclaw);
-    await launchd.stopServiceGracefully(labels.controller);
+    await launchd.stopServiceGracefully(SERVICE_LABELS.openclaw);
+    await launchd.stopServiceGracefully(SERVICE_LABELS.controller);
   }
 
   app.exit(0);
