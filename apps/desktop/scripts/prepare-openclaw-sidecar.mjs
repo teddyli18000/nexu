@@ -415,10 +415,10 @@ export type MonitorSingleAccountParams = {
 `.trim();
 
 const FEISHU_MONITOR_WEBSOCKET_CALL_SEARCH = `
-  const monitorPromise =
-    mode === "websocket"
-      ? monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher })
-      : monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+  if (connectionMode === "webhook") {
+    return monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+  }
+  return monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher });
 `.trim();
 
 const FEISHU_MONITOR_WEBSOCKET_CALL_REPLACEMENT = `
@@ -426,10 +426,10 @@ const FEISHU_MONITOR_WEBSOCKET_CALL_REPLACEMENT = `
     ? (patch: { connected?: boolean; lastConnectedAt?: number }) =>
         params.setStatus?.({ ...patch, accountId })
     : undefined;
-  const monitorPromise =
-    mode === "websocket"
-      ? monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher, updateStatus })
-      : monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+  if (connectionMode === "webhook") {
+    return monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+  }
+  return monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher, updateStatus });
 `.trim();
 
 const packagedOpenclawEntry = resolve(
