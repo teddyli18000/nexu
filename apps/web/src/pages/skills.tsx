@@ -506,7 +506,7 @@ export function SkillsPage() {
                 {
                   id: "all" as const,
                   label: t("skills.all"),
-                  count: yourSkillsList.length,
+                  count: installedSkills.length,
                 },
                 {
                   id: "recommended" as const,
