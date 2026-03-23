@@ -18,12 +18,16 @@ import {
 } from "./monitor.state.js";
 import type { ResolvedFeishuAccount } from "./types.js";
 
+export type ChannelStatusUpdater = (patch: { connected?: boolean; lastConnectedAt?: number }) => void;
+
 export type MonitorTransportParams = {
   account: ResolvedFeishuAccount;
   accountId: string;
   runtime?: RuntimeEnv;
   abortSignal?: AbortSignal;
   eventDispatcher: Lark.EventDispatcher;
+  /** Optional callback to update channel status (connected state) */
+  updateStatus?: ChannelStatusUpdater;
 };
 
 type WSStateChangeEvent = {
@@ -58,6 +62,7 @@ export async function monitorWebSocket({
   runtime,
   abortSignal,
   eventDispatcher,
+  updateStatus,
 }: MonitorTransportParams): Promise<void> {
   const log = runtime?.log ?? console.log;
   log(`feishu[${accountId}]: starting WebSocket connection...`);
@@ -75,6 +80,15 @@ export async function monitorWebSocket({
         `feishu[${accountId}]: WebSocket state changed: ${event.state} (isReconnect: ${event.isReconnect})`,
       );
       emitWsStateChangeEvent(runtime, accountId, event);
+
+      // Update channel status for UI display
+      if (updateStatus) {
+        const isConnected = event.state === "connected";
+        updateStatus({
+          connected: isConnected,
+          ...(isConnected ? { lastConnectedAt: Date.now() } : {}),
+        });
+      }
     };
   }
 

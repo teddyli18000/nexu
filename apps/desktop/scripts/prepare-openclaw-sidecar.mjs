@@ -306,6 +306,132 @@ const LARK_WS_CLIENT_CLOSED_REPLACEMENT = `
             this.reConnect();
         });
 `.trim();
+
+// Feishu channel status update patch constants
+// Patch channel.ts: pass setStatus to monitorFeishuProvider
+const FEISHU_CHANNEL_MONITOR_CALL_SEARCH = `
+      return monitorFeishuProvider({
+        config: ctx.cfg,
+        runtime: ctx.runtime,
+        abortSignal: ctx.abortSignal,
+        accountId: ctx.accountId,
+      });
+`.trim();
+
+const FEISHU_CHANNEL_MONITOR_CALL_REPLACEMENT = `
+      return monitorFeishuProvider({
+        config: ctx.cfg,
+        runtime: ctx.runtime,
+        abortSignal: ctx.abortSignal,
+        accountId: ctx.accountId,
+        setStatus: ctx.setStatus,
+      });
+`.trim();
+
+// Patch monitor.ts: add setStatus to MonitorFeishuOpts and pass to monitorSingleAccount
+const FEISHU_MONITOR_OPTS_SEARCH = `
+export type MonitorFeishuOpts = {
+  config?: ClawdbotConfig;
+  runtime?: RuntimeEnv;
+  abortSignal?: AbortSignal;
+  accountId?: string;
+};
+`.trim();
+
+const FEISHU_MONITOR_OPTS_REPLACEMENT = `
+export type MonitorFeishuOpts = {
+  config?: ClawdbotConfig;
+  runtime?: RuntimeEnv;
+  abortSignal?: AbortSignal;
+  accountId?: string;
+  setStatus?: (patch: { connected?: boolean; lastConnectedAt?: number; accountId: string }) => void;
+};
+`.trim();
+
+const FEISHU_MONITOR_SINGLE_ACCOUNT_CALL_SEARCH = `
+    return monitorSingleAccount({
+      cfg,
+      account,
+      runtime: opts.runtime,
+      abortSignal: opts.abortSignal,
+    });
+`.trim();
+
+const FEISHU_MONITOR_SINGLE_ACCOUNT_CALL_REPLACEMENT = `
+    return monitorSingleAccount({
+      cfg,
+      account,
+      runtime: opts.runtime,
+      abortSignal: opts.abortSignal,
+      setStatus: opts.setStatus,
+    });
+`.trim();
+
+const FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH = `
+    monitorPromises.push(
+      monitorSingleAccount({
+        cfg,
+        account,
+        runtime: opts.runtime,
+        abortSignal: opts.abortSignal,
+        botOpenIdSource: { kind: "prefetched", botOpenId, botName },
+      }),
+    );
+`.trim();
+
+const FEISHU_MONITOR_MULTI_ACCOUNT_CALL_REPLACEMENT = `
+    monitorPromises.push(
+      monitorSingleAccount({
+        cfg,
+        account,
+        runtime: opts.runtime,
+        abortSignal: opts.abortSignal,
+        setStatus: opts.setStatus,
+        botOpenIdSource: { kind: "prefetched", botOpenId, botName },
+      }),
+    );
+`.trim();
+
+// Patch monitor.account.ts: add setStatus param and pass to monitorWebSocket
+const FEISHU_MONITOR_ACCOUNT_PARAMS_SEARCH = `
+export type MonitorSingleAccountParams = {
+  cfg: ClawdbotConfig;
+  account: ResolvedFeishuAccount;
+  runtime?: RuntimeEnv;
+  abortSignal?: AbortSignal;
+  botOpenIdSource?: BotOpenIdSource;
+};
+`.trim();
+
+const FEISHU_MONITOR_ACCOUNT_PARAMS_REPLACEMENT = `
+export type MonitorSingleAccountParams = {
+  cfg: ClawdbotConfig;
+  account: ResolvedFeishuAccount;
+  runtime?: RuntimeEnv;
+  abortSignal?: AbortSignal;
+  botOpenIdSource?: BotOpenIdSource;
+  setStatus?: (patch: { connected?: boolean; lastConnectedAt?: number; accountId: string }) => void;
+};
+`.trim();
+
+const FEISHU_MONITOR_WEBSOCKET_CALL_SEARCH = `
+  const monitorPromise =
+    mode === "websocket"
+      ? monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher })
+      : monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+`.trim();
+
+const FEISHU_MONITOR_WEBSOCKET_CALL_REPLACEMENT = `
+  const updateStatus = params.setStatus
+    ? (patch: { connected?: boolean; lastConnectedAt?: number }) =>
+        params.setStatus?.({ ...patch, accountId })
+    : undefined;
+  const monitorPromise =
+    mode === "websocket"
+      ? monitorWebSocket({ account, accountId, runtime, abortSignal, eventDispatcher, updateStatus })
+      : monitorWebhook({ account, accountId, runtime, abortSignal, eventDispatcher });
+`.trim();
+
 const packagedOpenclawEntry = resolve(
   sidecarNodeModules,
   "openclaw/openclaw.mjs",
@@ -863,6 +989,109 @@ async function patchLarkSdkWebSocketStateCallback(nodeModulesRoot) {
   );
 }
 
+async function patchFeishuChannelStatusUpdates(openclawPackageRoot) {
+  const patchedFiles = new Map();
+  let patchCount = 0;
+
+  // Patch channel.ts
+  const channelPath = resolve(openclawPackageRoot, "extensions", "feishu", "src", "channel.ts");
+  if (await pathExists(channelPath)) {
+    let source = await readFile(channelPath, "utf8");
+    if (source.includes(FEISHU_CHANNEL_MONITOR_CALL_SEARCH) && !source.includes("setStatus: ctx.setStatus")) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_CHANNEL_MONITOR_CALL_SEARCH,
+        FEISHU_CHANNEL_MONITOR_CALL_REPLACEMENT,
+        "feishu channel.ts: pass setStatus to monitorFeishuProvider",
+      );
+      patchedFiles.set(relative(openclawPackageRoot, channelPath), source);
+      patchCount++;
+    }
+  }
+
+  // Patch monitor.ts
+  const monitorPath = resolve(openclawPackageRoot, "extensions", "feishu", "src", "monitor.ts");
+  if (await pathExists(monitorPath)) {
+    let source = await readFile(monitorPath, "utf8");
+    let patched = false;
+
+    if (source.includes(FEISHU_MONITOR_OPTS_SEARCH) && !source.includes("setStatus?:")) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_MONITOR_OPTS_SEARCH,
+        FEISHU_MONITOR_OPTS_REPLACEMENT,
+        "feishu monitor.ts: add setStatus to MonitorFeishuOpts",
+      );
+      patched = true;
+    }
+
+    if (source.includes(FEISHU_MONITOR_SINGLE_ACCOUNT_CALL_SEARCH) && !source.includes("setStatus: opts.setStatus")) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_MONITOR_SINGLE_ACCOUNT_CALL_SEARCH,
+        FEISHU_MONITOR_SINGLE_ACCOUNT_CALL_REPLACEMENT,
+        "feishu monitor.ts: pass setStatus to single account call",
+      );
+      patched = true;
+    }
+
+    if (source.includes(FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH)) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH,
+        FEISHU_MONITOR_MULTI_ACCOUNT_CALL_REPLACEMENT,
+        "feishu monitor.ts: pass setStatus to multi account call",
+      );
+      patched = true;
+    }
+
+    if (patched) {
+      patchedFiles.set(relative(openclawPackageRoot, monitorPath), source);
+      patchCount++;
+    }
+  }
+
+  // Patch monitor.account.ts
+  const monitorAccountPath = resolve(openclawPackageRoot, "extensions", "feishu", "src", "monitor.account.ts");
+  if (await pathExists(monitorAccountPath)) {
+    let source = await readFile(monitorAccountPath, "utf8");
+    let patched = false;
+
+    if (source.includes(FEISHU_MONITOR_ACCOUNT_PARAMS_SEARCH) && !source.includes("setStatus?:")) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_MONITOR_ACCOUNT_PARAMS_SEARCH,
+        FEISHU_MONITOR_ACCOUNT_PARAMS_REPLACEMENT,
+        "feishu monitor.account.ts: add setStatus to MonitorSingleAccountParams",
+      );
+      patched = true;
+    }
+
+    if (source.includes(FEISHU_MONITOR_WEBSOCKET_CALL_SEARCH) && !source.includes("updateStatus")) {
+      source = applyExactReplacement(
+        source,
+        FEISHU_MONITOR_WEBSOCKET_CALL_SEARCH,
+        FEISHU_MONITOR_WEBSOCKET_CALL_REPLACEMENT,
+        "feishu monitor.account.ts: pass updateStatus to monitorWebSocket",
+      );
+      patched = true;
+    }
+
+    if (patched) {
+      patchedFiles.set(relative(openclawPackageRoot, monitorAccountPath), source);
+      patchCount++;
+    }
+  }
+
+  if (patchCount > 0) {
+    console.log(
+      `[openclaw-sidecar] patched feishu channel status updates (${patchCount} files)`,
+    );
+  }
+
+  return patchedFiles;
+}
+
 async function stagePatchedOpenclawPackage() {
   await mkdir(dirname(sidecarRoot), { recursive: true });
   const stageRoot = await mkdtemp(
@@ -877,7 +1106,8 @@ async function stagePatchedOpenclawPackage() {
 
   const overlayFiles = await applyOpenclawRuntimePatches();
   const bridgePatchedFiles = await patchReplyOutcomeBridge(stagedOpenclawRoot);
-  const patchedFiles = new Map([...overlayFiles, ...bridgePatchedFiles]);
+  const channelStatusPatchedFiles = await patchFeishuChannelStatusUpdates(stagedOpenclawRoot);
+  const patchedFiles = new Map([...overlayFiles, ...bridgePatchedFiles, ...channelStatusPatchedFiles]);
 
   for (const [patchRelativePath, patchedSource] of patchedFiles) {
     await writeFile(
