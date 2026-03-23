@@ -1056,7 +1056,10 @@ async function patchFeishuChannelStatusUpdates(openclawPackageRoot) {
       patched = true;
     }
 
-    if (source.includes(FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH)) {
+    if (
+      source.includes(FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH) &&
+      !source.includes("setStatus: opts.setStatus,\n        botOpenIdSource:")
+    ) {
       source = applyExactReplacement(
         source,
         FEISHU_MONITOR_MULTI_ACCOUNT_CALL_SEARCH,
