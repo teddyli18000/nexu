@@ -84,7 +84,7 @@ export default function ImportSkillModal({
     try {
       const result = await importMutation.mutateAsync(selectedFile);
       track("workspace_skill_enable", {
-        name: result.slug ?? selectedFile.name.replace(/\.zip$/i, ""),
+        name: result.slug ?? "unknown_skill",
         skill_source: "custom",
       });
       setDone(true);

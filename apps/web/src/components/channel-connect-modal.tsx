@@ -153,13 +153,13 @@ export function ChannelConnectModal({
   const allFilled = config.fields.every((f) => fieldValues[f.id]?.trim());
 
   const handleClose = useCallback(() => {
-    if (!submittedSuccessfully) {
+    if (!submittedSuccessfully && !loading) {
       track("workspace_channel_config_cancel", {
         channel: channelType,
       });
     }
     onClose();
-  }, [channelType, onClose, submittedSuccessfully]);
+  }, [channelType, loading, onClose, submittedSuccessfully]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -174,6 +174,7 @@ export class AnalyticsService {
         this.readResolvedSkills(filePath),
       ]);
       const { userMessages, skillUses } = this.analyzeSession({
+        sessionId: session.id,
         entries,
         channel,
         resolvedSkills,
@@ -406,6 +407,7 @@ export class AnalyticsService {
   }
 
   private analyzeSession(params: {
+    sessionId: string;
     entries: TranscriptEntry[];
     channel: AnalyticsChannel;
     resolvedSkills: Map<string, ResolvedSkillInfo>;
@@ -444,7 +446,7 @@ export class AnalyticsService {
           continue;
         }
         userMessages.push({
-          id,
+          id: `${params.sessionId}:${id}`,
           timestampMs: parseTimestampMs(
             entry.timestamp ?? null,
             entry.message.timestamp ?? null,
@@ -491,9 +493,9 @@ export class AnalyticsService {
           params.skillLedger,
         );
         skillUses.push({
-          id:
-            toolCall.id ??
-            `${entry.id ?? "assistant"}:${toolCall.name}:${String(index)}`,
+          id: toolCall.id
+            ? `${params.sessionId}:${toolCall.id}`
+            : `${params.sessionId}:${entry.id ?? "assistant"}:${toolCall.name}:${String(index)}`,
           timestampMs: parseTimestampMs(
             entry.timestamp ?? null,
             entry.message?.timestamp ?? null,

@@ -133,7 +133,8 @@ export const env = {
   runtimeSyncIntervalMs: parsed.RUNTIME_SYNC_INTERVAL_MS,
   runtimeHealthIntervalMs: parsed.RUNTIME_HEALTH_INTERVAL_MS,
   defaultModelId: parsed.DEFAULT_MODEL_ID,
-  amplitudeApiKey: parsed.AMPLITUDE_API_KEY ?? parsed.VITE_AMPLITUDE_API_KEY,
+  amplitudeApiKey:
+    parsed.AMPLITUDE_API_KEY?.trim() || parsed.VITE_AMPLITUDE_API_KEY,
 };
 
 export type ControllerEnv = typeof env;

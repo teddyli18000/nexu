@@ -90,6 +90,9 @@ function getProviderIdFromModelId(
   if (matched) {
     return matched.provider;
   }
+  if (!modelId.includes("/")) {
+    return null;
+  }
   const [provider] = modelId.split("/");
   return provider || null;
 }

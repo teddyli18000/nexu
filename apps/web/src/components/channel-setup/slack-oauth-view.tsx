@@ -231,6 +231,10 @@ export function SlackOAuthView({
       identify({ channels_connected: 1 });
       onConnected();
     } catch {
+      track("workspace_channel_config_submit", {
+        channel: "slack",
+        success: false,
+      });
       toast.error(t("slackSetup.connectFailed"));
     } finally {
       setConnecting(false);

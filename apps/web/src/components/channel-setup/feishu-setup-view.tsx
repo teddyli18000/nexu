@@ -160,6 +160,10 @@ export function FeishuSetupView({
       identify({ channels_connected: 1 });
       onConnected();
     } catch {
+      track("workspace_channel_config_submit", {
+        channel: "feishu",
+        success: false,
+      });
       toast.error(t("feishuSetup.connectFailed"));
     } finally {
       setConnecting(false);
