@@ -27,6 +27,8 @@
 
 ---
 
+> 🦞 **The smoothest way to connect OpenClaw to WeChat**: Scan, connect, and go.
+>
 > 🎉 **Beta Perk**: During the beta period, top-tier models like Claude, GPT, Gemini, Kimi, GLM, and more are **completely free with unlimited usage**. [Download and try now →](https://nexu.io)
 
 ---
@@ -44,9 +46,9 @@ Once connected to IM, your Agent is online 24/7 — chat from your phone anytime
 All data stays on your machine. Your privacy, fully in your control.
 
 <p align="center">
-  <img src="site/media/readme-screenshot.png" width="49%" alt="nexu screenshot" />
-  &nbsp;
-  <img src="site/media/readme-wechat-demo.png" width="49%" alt="nexu WeChat scan to connect" />
+  <video src="site/media/readme-wechat-demo-en.mov" width="100%" autoplay loop muted playsinline>
+    Your browser does not support video playback. <a href="site/media/readme-wechat-demo-en.mov">Download the video</a> to watch.
+  </video>
 </p>
 
 ---

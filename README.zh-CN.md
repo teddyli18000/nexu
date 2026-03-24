@@ -27,6 +27,8 @@
 
 ---
 
+> 🦞 **最丝滑接入微信 OpenClaw**：扫码即连，开箱即用。
+>
 > 🎉 **内测福利**：内测期间，Claude、GPT、Gemini、Kimi、GLM 等顶级模型 **全部免费、无限量使用**。[立即下载体验 →](https://nexu.io)
 
 ---
@@ -44,9 +46,9 @@
 所有数据保存在本机，隐私安全，完全可控。
 
 <p align="center">
-  <img src="site/media/readme-screenshot.png" width="49%" alt="nexu 截图" />
-  &nbsp;
-  <img src="site/media/readme-wechat-demo.png" width="49%" alt="nexu 微信扫码连接" />
+  <video src="site/media/readme-wechat-demo-zh.mov" width="100%" autoplay loop muted playsinline>
+    您的浏览器不支持视频播放，请 <a href="site/media/readme-wechat-demo-zh.mov">点击下载</a> 观看。
+  </video>
 </p>
 
 ---
