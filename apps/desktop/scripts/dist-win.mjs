@@ -225,7 +225,6 @@ async function main() {
       `--config.electronVersion=${electronVersion}`,
       `--config.buildVersion=${buildVersion}`,
       `--config.directories.output=${releaseRoot}`,
-      "--config.win.signAndEditExecutable=false",
     ],
     {
       cwd: electronRoot,

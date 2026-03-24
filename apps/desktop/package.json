@@ -137,10 +137,11 @@
       "artifactName": "nexu-${version}-${arch}.${ext}"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": false,
+      "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false,
       "artifactName": "nexu-setup-${version}-${arch}.${ext}"
     },
