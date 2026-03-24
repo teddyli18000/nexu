@@ -403,6 +403,9 @@ const en = {
   "skills.yours": "Yours",
   "skills.recommended": "Recommended",
   "skills.installed": "Installed",
+  "skills.installQueued": "Skill queued for installation",
+  "skills.skillNotFound":
+    '"{{slug}}" is not available on ClawHub. It may have been removed or renamed.',
   "skills.import": "Import",
   "skills.importSkill": "Import Skill",
   "skills.importSkillDesc":
