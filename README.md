@@ -62,7 +62,7 @@ All data stays on your machine. Your privacy, fully in your control.
 
 | | OpenClaw (official) | Typical hosted Feishu + agent stacks | **nexu** ✅ |
 |---|---|---|---|
-| **🧠 Models** | BYO, but manual config required ⚠️ | Platform-locked, no switching ❌ | **Pick Gemini, etc. — one-click switch in GUI** ✅ |
+| **🧠 Models** | BYO, but manual config required ⚠️ | Platform-locked, no switching ❌ | **Pick Gemini, etc. — one-click switch in GUI; MiniMax / Codex / GLM support OAuth** ✅ |
 | **📡 Data path** | Local | Routed through vendor servers, data out of your control ❌ | **Local-first; we don't host your business data** ✅ |
 | **💰 Cost** | Free, but self-deploy required ⚠️ | Subscription / per-seat pricing ❌ | **Client is free; pay providers via your own API keys** ✅ |
 | **📜 Source** | Open source | Closed source, no audit possible ❌ | **MIT — fork and audit** ✅ |
@@ -84,6 +84,10 @@ Native OpenClaw 🦞 Skills and full Feishu Skills ship together. Agents move be
 ### 🧠 Top-tier models, out of the box
 
 Use Gemini and more directly via your nexu account. No extra config. Switch to your own API Key anytime.
+
+### 🔐 OAuth login, no key needed
+
+MiniMax, OpenAI Codex, and GLM (Z.AI Coding Plan) support OAuth login—authorize with one click, no need to copy-paste API keys.
 
 ### 🔑 Bring your own API Key, no login
 
