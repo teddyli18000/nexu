@@ -729,11 +729,6 @@ function WorkspaceLayoutInner() {
                         >
                           {s.title}
                         </div>
-                        {s.status === "active" && (
-                          <span className="shrink-0 rounded-full bg-[var(--color-success-subtle)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-success)]">
-                            Live
-                          </span>
-                        )}
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted truncate whitespace-nowrap">
                         <span>{getPlatformLabel(s.channelType ?? "web")}</span>
@@ -742,9 +737,14 @@ function WorkspaceLayoutInner() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      {s.status === "active" && (
-                        <div className="w-2 h-2 rounded-full bg-[var(--color-success)] shrink-0" />
-                      )}
+                      <div
+                        className={cn(
+                          "w-2 h-2 rounded-full shrink-0",
+                          s.status === "active"
+                            ? "bg-[var(--color-success)]"
+                            : "bg-[var(--color-warning)]",
+                        )}
+                      />
                     </div>
                   </button>
                 );
@@ -1088,11 +1088,6 @@ function WorkspaceLayoutInner() {
                               <div className="text-[13px] truncate font-medium">
                                 {s.title}
                               </div>
-                              {s.status === "active" && (
-                                <span className="shrink-0 rounded-full bg-[var(--color-success-subtle)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-success)]">
-                                  Live
-                                </span>
-                              )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted truncate">
                               <span>
@@ -1102,11 +1097,14 @@ function WorkspaceLayoutInner() {
                               <span>{formatTime(s.lastTime)}</span>
                             </div>
                           </div>
-                          {s.status === "active" ? (
-                            <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-[var(--color-success)]" />
-                          ) : (
-                            <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-text-muted/30" />
-                          )}
+                          <div
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full shrink-0",
+                              s.status === "active"
+                                ? "bg-[var(--color-success)]"
+                                : "bg-[var(--color-warning)]",
+                            )}
+                          />
                         </button>
                       );
                     })}

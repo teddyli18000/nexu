@@ -2,8 +2,8 @@ import { ToolkitIcon } from "@/components/toolkit-icon";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowUpRight,
   Check,
-  ExternalLink,
   Eye,
   EyeOff,
   Key,
@@ -343,7 +343,7 @@ function IntegrationCard({
               {isConnecting ? (
                 <Loader2 size={12} className="animate-spin" />
               ) : (
-                <ExternalLink size={12} />
+                <ArrowUpRight size={12} />
               )}
               {t("common.connect")}
             </button>

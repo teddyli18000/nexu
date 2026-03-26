@@ -2,11 +2,10 @@ import { Input } from "@/components/ui/input";
 import { identify, track } from "@/lib/tracking";
 import {
   ArrowLeft,
-  BookOpen,
+  ArrowUpRight,
   Check,
   CheckCircle2,
   ChevronRight,
-  ExternalLink,
   Loader2,
   Lock,
 } from "lucide-react";
@@ -177,7 +176,7 @@ export function DiscordSetupView({
               rel="noopener noreferrer"
               className="inline-flex gap-1.5 items-center px-3.5 py-2 text-[12px] font-medium rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-border-hover hover:bg-surface-3 transition-all"
             >
-              <ExternalLink size={12} />
+              <ArrowUpRight size={12} />
               {t("discordSetup.openPortal")}
             </a>
           </div>
@@ -424,20 +423,17 @@ export function DiscordSetupView({
       </div>
 
       {/* Help link */}
-      <div className="flex gap-3 items-center p-4 mt-5 rounded-xl border bg-surface-1 border-border">
-        <BookOpen size={14} className="text-[#5865F2] shrink-0" />
-        <p className="text-[11px] text-text-muted leading-relaxed">
-          {t("discordSetup.helpText")}{" "}
-          <a
-            href="https://discord.com/developers/docs/getting-started"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#5865F2] hover:underline underline-offset-2 font-medium"
-          >
-            {t("discordSetup.helpLinkText")}
-          </a>{" "}
+      <div className="mt-5">
+        <a
+          href="https://discord.com/developers/docs/getting-started"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link text-[11px]"
+        >
+          {t("discordSetup.helpText")} {t("discordSetup.helpLinkText")}{" "}
           {t("discordSetup.helpSuffix")}
-        </p>
+          <ArrowUpRight size={12} />
+        </a>
       </div>
     </div>
   );

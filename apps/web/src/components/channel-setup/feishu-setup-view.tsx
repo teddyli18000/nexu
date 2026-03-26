@@ -2,10 +2,10 @@ import { Input } from "@/components/ui/input";
 import { identify, track } from "@/lib/tracking";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Check,
   ChevronRight,
   Copy,
-  ExternalLink,
   Loader2,
   Lock,
 } from "lucide-react";
@@ -247,7 +247,7 @@ export function FeishuSetupView({
               rel="noopener noreferrer"
               className="inline-flex gap-1.5 items-center px-3.5 py-2 text-[12px] font-medium rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-border-hover hover:bg-surface-3 transition-all"
             >
-              <ExternalLink size={12} />
+              <ArrowUpRight size={12} />
               {t("feishuSetup.openConsole")}
             </a>
           </div>
@@ -438,7 +438,7 @@ export function FeishuSetupView({
         >
           {t("feishuSetup.helpText")} {t("feishuSetup.helpLinkText")}{" "}
           {t("feishuSetup.helpSuffix")}
-          <ExternalLink size={10} />
+          <ArrowUpRight size={12} />
         </a>
       </div>
     </div>

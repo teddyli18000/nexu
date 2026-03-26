@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Download,
-  ExternalLink,
   FileText,
   Loader2,
   Star,
@@ -449,7 +449,7 @@ export function CommunitySkillDetailPage() {
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[12px] text-accent hover:underline"
             >
-              <ExternalLink size={12} />
+              <ArrowUpRight size={12} />
               {t("skillDetail.homepage")}
             </a>
           )}

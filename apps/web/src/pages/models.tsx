@@ -11,7 +11,6 @@ import {
   ArrowUpRight,
   Camera,
   Check,
-  ExternalLink,
   FolderOpen,
   Loader2,
   LogIn,
@@ -764,9 +763,10 @@ export function ModelsPage() {
       const matched = models.find((m) => m.id === newId);
       const providerName =
         PROVIDER_META[matched?.provider ?? ""]?.name ?? matched?.provider;
-      const label = providerName
-        ? `${matched?.name ?? newId} (${providerName})`
-        : (matched?.name ?? newId);
+      const rawName = matched?.name ?? newId;
+      const segments = rawName.split("/");
+      const shortName = segments[segments.length - 1] ?? rawName;
+      const label = providerName ? `${shortName} (${providerName})` : shortName;
       toast.info(t("models.autoSwitched", { model: label }));
     }
     userSwitchRef.current = false;
@@ -1690,7 +1690,7 @@ function ByokProviderDetail({
                   className="text-link text-[11px]"
                 >
                   {t("models.byok.getApiKey")}
-                  <ExternalLink size={10} />
+                  <ArrowUpRight size={12} />
                 </a>
               )}
             </div>

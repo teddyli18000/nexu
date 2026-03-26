@@ -3,10 +3,9 @@ import { identify, track } from "@/lib/tracking";
 import {
   AlertCircle,
   ArrowLeft,
-  BookOpen,
+  ArrowUpRight,
   Check,
   ChevronRight,
-  ExternalLink,
   Loader2,
   Lock,
   MessageSquare,
@@ -350,7 +349,7 @@ export function SlackOAuthView({
               setOauthErrorMsg("");
               setPhase("install");
             }}
-            className="mt-2 text-[12px] font-medium text-[#4A154B] hover:underline underline-offset-2 cursor-pointer"
+            className="mt-2 text-[12px] font-medium text-[var(--color-link)] hover:underline underline-offset-2 cursor-pointer"
           >
             {t("slackSetup.tryOauthAgain")}
           </button>
@@ -418,7 +417,7 @@ export function SlackOAuthView({
               rel="noopener noreferrer"
               className="inline-flex gap-1.5 items-center px-4 py-2 text-[12px] font-medium text-white rounded-lg bg-[#4A154B] hover:bg-[#3a1039] transition-all"
             >
-              <ExternalLink size={12} />
+              <ArrowUpRight size={12} />
               {t("slackSetup.createSlackApp")}
             </a>
           </div>
@@ -677,20 +676,17 @@ export function SlackOAuthView({
       </div>
 
       {/* Help link */}
-      <div className="flex gap-3 items-center p-4 mt-5 rounded-xl border bg-surface-1 border-border">
-        <BookOpen size={14} className="text-[#4A154B] shrink-0" />
-        <p className="text-[11px] text-text-muted leading-relaxed">
-          {t("slackSetup.helpText")}{" "}
-          <a
-            href="https://api.slack.com/authentication/basics"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#4A154B] hover:underline underline-offset-2 font-medium"
-          >
-            {t("slackSetup.helpLinkText")}
-          </a>{" "}
+      <div className="mt-5">
+        <a
+          href="https://api.slack.com/authentication/basics"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link text-[11px]"
+        >
+          {t("slackSetup.helpText")} {t("slackSetup.helpLinkText")}{" "}
           {t("slackSetup.helpSuffix")}
-        </p>
+          <ArrowUpRight size={12} />
+        </a>
       </div>
     </div>
   );

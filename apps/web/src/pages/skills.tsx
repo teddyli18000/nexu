@@ -13,7 +13,47 @@ import { getTagLabel } from "@/lib/skill-translations";
 import { mapInstalledSkillSource, track } from "@/lib/tracking";
 import { cn } from "@/lib/utils";
 import type { InstalledSkill, MinimalSkill } from "@/types/desktop";
-import { Compass, Loader2, Plus, Search, Settings2, Zap } from "lucide-react";
+import {
+  Bot,
+  Calendar,
+  CheckSquare,
+  Compass,
+  FileEdit,
+  FilePlus,
+  FileSearch,
+  Globe,
+  Loader2,
+  type LucideIcon,
+  MessageSquare,
+  Plus,
+  Search,
+  Settings2,
+  Sparkles,
+  Table2,
+  Wrench,
+  Zap,
+} from "lucide-react";
+
+const SKILL_ICON_MAP: Record<string, LucideIcon> = {
+  Table2,
+  Calendar,
+  FilePlus,
+  FileSearch,
+  MessageSquare,
+  CheckSquare,
+  Wrench,
+  FileEdit,
+  Sparkles,
+  Bot,
+  Globe,
+  Search,
+  Zap,
+};
+
+function SkillIcon({ name, size }: { name: string | null; size: number }) {
+  const Icon = (name && SKILL_ICON_MAP[name]) || Zap;
+  return <Icon size={size} className="text-text-primary" />;
+}
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
@@ -164,7 +204,7 @@ function SkillCard({
       {/* Header: Icon + Name + Category */}
       <div className="flex items-center gap-3 mb-2">
         <div className="w-9 h-9 rounded-[10px] bg-white border border-border flex items-center justify-center shrink-0">
-          <Zap size={18} className="text-text-primary" />
+          <SkillIcon name={skill.icon} size={18} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-text-heading truncate">
@@ -359,6 +399,7 @@ export function SkillsPage() {
           downloads: 0,
           stars: 0,
           tags: [],
+          icon: null,
           version: "",
           updatedAt: "",
         }
