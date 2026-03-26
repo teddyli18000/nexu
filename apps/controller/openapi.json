@@ -6994,6 +6994,10 @@
                               "type": "string"
                             }
                           },
+                          "icon": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "version": {
                             "type": "string"
                           },
@@ -7008,6 +7012,7 @@
                           "downloads",
                           "stars",
                           "tags",
+                          "icon",
                           "version",
                           "updatedAt"
                         ]
