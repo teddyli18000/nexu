@@ -2118,7 +2118,27 @@ function ByokProviderDetail({
       )}
 
       {!isOAuthConnected && (
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center justify-end gap-3 mb-6">
+          {hasSavedAccess && (!isMiniMax || authMode !== "oauth") && (
+            <button
+              type="button"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (confirm(t("models.byok.confirmRemove"))) {
+                  deleteMutation.mutate();
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-[12px] font-medium text-red-500 transition-colors hover:bg-red-500/5"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Trash2 size={13} />
+              )}
+              {t("models.byok.remove")}
+            </button>
+          )}
+
           {(!isMiniMax || authMode === "apiKey") && (
             <button
               type="button"
@@ -2139,26 +2159,6 @@ function ByokProviderDetail({
               {dbProvider?.hasApiKey
                 ? t("models.byok.updateConfig")
                 : t("models.byok.saveAndEnable")}
-            </button>
-          )}
-
-          {hasSavedAccess && (!isMiniMax || authMode !== "oauth") && (
-            <button
-              type="button"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (confirm(t("models.byok.confirmRemove"))) {
-                  deleteMutation.mutate();
-                }
-              }}
-              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-[12px] font-medium text-red-500 transition-colors hover:bg-red-500/5"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Trash2 size={13} />
-              )}
-              {t("models.byok.remove")}
             </button>
           )}
         </div>
