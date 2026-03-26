@@ -30,7 +30,7 @@
 
 > 🦞 **最丝滑接入微信 OpenClaw**：扫码即连，开箱即用。
 >
-> 🖥 **已支持平台**：macOS（Apple Silicon）· macOS（Intel）· Windows — [下载地址](https://powerformer.feishu.cn/wiki/VgIvwDqxgiBSXhkGp7gc4z8rnPe)
+> 🖥 **已支持平台**：macOS（Apple Silicon）· macOS（Intel）· Windows — [下载地址](https://powerformer.feishu.cn/wiki/IWQZwt1qSiExq7kfioWcI1qVnFf)
 >
 > 🎉 **内测福利**：内测期间，Gemini 等顶级模型 **免费使用**。[立即下载体验 →](https://nexu.io)
 
@@ -160,8 +160,8 @@ nexu 面向 **One Person Company** 与小团队，让一个人就能拥有一支
 | 平台 | 下载 |
 |------|------|
 | 🍎 macOS（Apple Silicon） | [官网](https://nexu.io) · [Releases](https://github.com/nexu-io/nexu/releases) |
-| 🍎 macOS（Intel） | [下载](https://powerformer.feishu.cn/wiki/VgIvwDqxgiBSXhkGp7gc4z8rnPe) |
-| 🪟 Windows | [下载](https://powerformer.feishu.cn/wiki/VgIvwDqxgiBSXhkGp7gc4z8rnPe) |
+| 🍎 macOS（Intel） | [下载](https://powerformer.feishu.cn/wiki/IWQZwt1qSiExq7kfioWcI1qVnFf) |
+| 🪟 Windows | [下载](https://powerformer.feishu.cn/wiki/IWQZwt1qSiExq7kfioWcI1qVnFf) |
 
 ### 首次启动
 
