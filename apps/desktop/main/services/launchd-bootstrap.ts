@@ -681,6 +681,8 @@ export function resolveLaunchdPaths(
   openclawPath: string;
   controllerCwd: string;
   openclawCwd: string;
+  openclawBinPath: string;
+  openclawExtensionsDir: string;
 } {
   if (isPackaged) {
     // Packaged app: extract openclaw sidecar from tar archive if needed,
@@ -707,6 +709,13 @@ export function resolveLaunchdPaths(
       ),
       controllerCwd: path.join(runtimeDir, "controller"),
       openclawCwd: openclawSidecarRoot,
+      openclawBinPath: path.join(openclawSidecarRoot, "bin", "openclaw"),
+      openclawExtensionsDir: path.join(
+        openclawSidecarRoot,
+        "node_modules",
+        "openclaw",
+        "extensions",
+      ),
     };
   }
 
@@ -730,5 +739,22 @@ export function resolveLaunchdPaths(
     ),
     controllerCwd: path.join(repoRoot, "apps", "controller"),
     openclawCwd: repoRoot,
+    openclawBinPath: path.join(
+      repoRoot,
+      ".tmp",
+      "sidecars",
+      "openclaw",
+      "bin",
+      "openclaw",
+    ),
+    openclawExtensionsDir: path.join(
+      repoRoot,
+      ".tmp",
+      "sidecars",
+      "openclaw",
+      "node_modules",
+      "openclaw",
+      "extensions",
+    ),
   };
 }

@@ -531,11 +531,8 @@ async function runLaunchdColdStart(): Promise<void> {
   const openclawSkillsDir = getOpenclawSkillsDir(userDataPath);
   const openclawTmpDir = resolve(openclawRuntimeRoot, "tmp");
   const openclawBinPath =
-    process.env.NEXU_OPENCLAW_BIN ?? resolve(paths.openclawCwd, "bin/openclaw");
-  const openclawPackageRoot = resolve(
-    paths.openclawCwd,
-    "node_modules/openclaw",
-  );
+    process.env.NEXU_OPENCLAW_BIN ?? paths.openclawBinPath;
+  const openclawPackageRoot = dirname(paths.openclawPath);
   const openclawExtensionsDir = resolve(openclawPackageRoot, "extensions");
   const skillhubStaticSkillsDir = app.isPackaged
     ? resolve(electronRoot, "static/bundled-skills")

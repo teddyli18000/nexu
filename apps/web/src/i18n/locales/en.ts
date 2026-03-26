@@ -173,6 +173,8 @@ const en = {
   "home.channel.slack": "Slack",
   "home.channel.discord": "Discord",
   "home.channel.wechat": "WeChat",
+  "home.channel.telegram": "Telegram",
+  "home.channel.whatsapp": "WhatsApp",
   "home.channel.addBot": "Add nexu Bot",
   "home.tab.channels": "Channels",
   "home.tab.models": "Models & Key",
@@ -360,7 +362,7 @@ const en = {
   "channels.pageTitle": "Channels",
   "channels.pageSubtitle":
     "Connect your messaging platforms and let nexu 🦞 join your workspace",
-  "channels.comingSoon": "Telegram, Microsoft Teams, Line and more coming soon",
+  "channels.comingSoon": "Microsoft Teams, Line and more coming soon",
   "channels.backToConfig": "Back to configuration",
   "channels.statusConnected": "{{platform}} Bot Connected",
   "channels.configuredDate": "configured {{date}}",
@@ -378,6 +380,10 @@ const en = {
   "channels.openInFeishu": "Open in Feishu",
   "channels.openFeishuDM": "Open a direct message with your bot in Feishu.",
   "channels.messageBotFeishu": "Message Bot in Feishu",
+  "channels.openInTelegram": "Open in Telegram",
+  "channels.openTelegramDesc":
+    "Open your bot profile, start a direct chat, or add it to a group. Group replies work when the bot is mentioned.",
+  "channels.openTelegramBot": "Open Bot",
   "channels.webhookUrl": "Webhook URL",
   "channels.credentials": "Credentials",
   "channels.accountId": "Account ID",
@@ -724,6 +730,28 @@ const en = {
   "wechatSetup.waitingGateway": "Waiting for gateway to start...",
   "wechatSetup.waitingGatewayHint": "Attempt {{attempt}}/{{total}}",
   "wechatSetup.loadingQr": "Loading QR code...",
+
+  // ── Telegram Setup ──
+  "telegramSetup.title": "Connect Telegram",
+  "telegramSetup.desc":
+    "Create a bot in BotFather, paste the token here, then add the bot to any group where you want replies. Nexu will reply in groups only when the bot is mentioned.",
+  "telegramSetup.quickSetup": "Quick setup",
+  "telegramSetup.step1": "Open Telegram and chat with BotFather.",
+  "telegramSetup.step2": "Create a bot with `/newbot`.",
+  "telegramSetup.step3": "Copy the HTTP API token and paste it below.",
+  "telegramSetup.step4": "Add the bot to a group if you want group replies.",
+  "telegramSetup.botTokenLabel": "Bot Token",
+  "telegramSetup.botTokenPlaceholder": "1234567890:AA...",
+  "telegramSetup.connect": "Connect Telegram",
+  "telegramSetup.tokenRequired": "Telegram bot token is required",
+  "telegramSetup.connectFailed": "Failed to connect Telegram",
+  "telegramSetup.connectSuccess": "Telegram connected",
+
+  // ── WhatsApp Setup ──
+  "whatsappSetup.title": "Connect WhatsApp",
+
+  // ── Common UI ──
+  "common.closeDialog": "Close dialog",
 
   // ── Slack Setup ──
   "slackSetup.stepCreateApp": "Create Slack App",
