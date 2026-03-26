@@ -925,7 +925,7 @@ export function ModelsPage() {
                       </span>
                       <span
                         className={cn(
-                          "flex-1 text-[12px] truncate",
+                          "flex-1 text-[13px] truncate",
                           isActive
                             ? "font-semibold text-text-primary"
                             : "font-medium text-text-primary",
@@ -1261,7 +1261,7 @@ function ManagedProviderDetail({
                   </span>
                   <span
                     className={cn(
-                      "flex-1 text-[12px] truncate",
+                      "flex-1 text-[13px] truncate",
                       isSelected
                         ? "font-semibold text-text-primary"
                         : "font-medium text-text-primary",
@@ -2214,7 +2214,7 @@ function ByokProviderDetail({
                 </span>
                 <span
                   className={cn(
-                    "flex-1 text-[12px] truncate",
+                    "flex-1 text-[13px] truncate",
                     isSelected
                       ? "font-semibold text-text-primary"
                       : "font-medium text-text-primary",
