@@ -60,6 +60,15 @@ export type DiagnosticsExportResult = {
   errorMessage?: string;
 };
 
+export type StartupProbeStatus = "ok" | "error";
+
+export type StartupProbePayload = {
+  source: "main" | "preload" | "renderer";
+  stage: string;
+  status: StartupProbeStatus;
+  detail?: string | null;
+};
+
 export type HostInvokePayloadMap = {
   "app:get-info": undefined;
   "diagnostics:get-info": undefined;
@@ -533,6 +542,7 @@ export type HostBridge = {
     channel: TChannel,
     payload: HostInvokePayloadMap[TChannel],
   ): Promise<HostInvokeResultMap[TChannel]>;
+  reportStartupProbe(payload: StartupProbePayload): void;
   onDesktopCommand(listener: (command: HostDesktopCommand) => void): () => void;
   onRuntimeEvent(listener: (event: RuntimeEvent) => void): () => void;
 };
