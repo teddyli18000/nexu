@@ -15,6 +15,8 @@ This workflow supports both CodeRabbit and Codex PR review signals.
 - **not** a review summary
 - **not** a nitpick
 
+Nitpick comments from CodeRabbit must always be ignored to avoid unnecessary noise.
+
 There is no need to analyze the comment content itself.
 
 ### Data sources
@@ -97,6 +99,11 @@ The final goal of the CodeRabbit workflow is always:
 
 > **Top-level inline comments left by CodeRabbit in `pulls/<pr_number>/comments` that are neither nitpicks nor summaries**
 
+Important:
+
+- Treat CodeRabbit nitpicks as non-actionable by default.
+- Do not include nitpicks in counts, summaries, or resolution queues unless the user explicitly asks for nitpicks.
+
 In practice, do the following:
 
 1. Get CodeRabbit top-level inline comments from `pulls/<pr_number>/comments`
@@ -115,6 +122,18 @@ If the output of `gh api --paginate ...` is too large and gets truncated:
    - each comment’s `path` / `line` / `body`
 
 ### Resolving review conversations
+
+### Resolution policy
+
+When triaging review feedback, apply this rule:
+
+- If a comment will **not** be fixed, you may resolve the conversation after triage.
+- If a comment **will** be fixed, do **not** resolve it first — make the code change first, then resolve the conversation afterward.
+
+In short:
+
+- **won't fix / no code change** → triage, then resolve
+- **will fix / code change required** → fix first, then resolve
 
 If the user asks to resolve a CodeRabbit review conversation:
 
