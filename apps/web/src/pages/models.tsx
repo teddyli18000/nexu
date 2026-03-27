@@ -968,7 +968,7 @@ export function ModelsPage() {
                         clearSetupParam();
                       }}
                       className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
+                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors focus:outline-none",
                         isActive ? "bg-surface-3" : "hover:bg-surface-2",
                       )}
                     >
@@ -1277,10 +1277,10 @@ function ManagedProviderDetail({
                   refreshCloudModels.mutate();
                 }}
                 disabled={refreshCloudModels.isPending}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-text-primary hover:text-text-primary/80 transition-colors cursor-pointer"
               >
                 <RefreshCw
-                  size={10}
+                  size={12}
                   className={cn(refreshCloudModels.isPending && "animate-spin")}
                 />
                 {t("models.managed.refreshModelList")}
@@ -2264,14 +2264,14 @@ function ByokProviderDetail({
             disabled={refreshModelsMutation.isPending || (!isOllama && !apiKey)}
             onClick={() => refreshModelsMutation.mutate()}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[10px] font-medium transition-colors",
+              "inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors",
               !refreshModelsMutation.isPending && (isOllama || apiKey)
-                ? "text-text-secondary hover:bg-surface-2"
+                ? "text-text-primary hover:text-text-primary/80"
                 : "text-text-muted cursor-not-allowed",
             )}
           >
             <RefreshCw
-              size={10}
+              size={12}
               className={cn(refreshModelsMutation.isPending && "animate-spin")}
             />
             {refreshModelsMutation.isPending

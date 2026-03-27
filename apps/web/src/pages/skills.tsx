@@ -690,7 +690,7 @@ export function SkillsPage() {
                   });
                 }}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-medium transition-all",
+                  "flex items-center justify-center gap-1.5 min-w-[110px] px-4 py-1.5 rounded-full text-[13px] font-medium transition-all",
                   active
                     ? "bg-white text-text-primary shadow-[var(--shadow-rest)]"
                     : "text-text-secondary hover:text-text-primary",
@@ -698,7 +698,7 @@ export function SkillsPage() {
               >
                 <TabIcon size={14} />
                 {tab.label}
-                {tab.id === "yours" && totalYoursCount > 0 && active && (
+                {tab.id === "yours" && totalYoursCount > 0 && (
                   <span
                     className={cn(
                       "tabular-nums text-[12px]",

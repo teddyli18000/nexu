@@ -284,7 +284,7 @@ const zhCN = {
   "models.managed.cloudConnected": "已连接 nexu 云端",
   "models.managed.cloudModelsAvailable": "云端模型已可用，可在下方查看和管理。",
   "models.managed.refresh": "刷新",
-  "models.managed.refreshModelList": "刷新模型列表",
+  "models.managed.refreshModelList": "刷新",
   "models.managed.disconnect": "断开",
   "models.managed.loginPrompt": "登录以使用 nexu 官方模型",
   "models.managed.loginDescription":
