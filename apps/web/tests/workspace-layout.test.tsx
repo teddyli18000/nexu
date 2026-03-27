@@ -67,6 +67,9 @@ vi.mock("../lib/api/sdk.gen", () => ({
       name: "Alice",
     },
   })),
+  getApiV1BotQuota: vi.fn(async () => ({
+    data: { available: true, resetsAt: "" },
+  })),
 }));
 
 const storage = new Map<string, string>();

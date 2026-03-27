@@ -4,6 +4,12 @@
 /* ═══════════════════════════════════════════════════════════════════
    Nexu Design System 2.0 — Single Source of Truth
    Synced from: design-system/src/index.css
+
+   Workspace growth (digital #106) — nexu web implementation:
+   `src/hooks/use-budget.ts`, `src/components/workspace-growth-sidebar.tsx`,
+   route `/workspace/rewards` (`workspace-rewards.tsx`); sidebar footer GitHub
+   link shows live star count (`use-github-stars.ts`). Keep visual parity with
+   the design-system shell; do not regress tuned Settings/Home styles.
    ═══════════════════════════════════════════════════════════════════ */
 
 @theme {

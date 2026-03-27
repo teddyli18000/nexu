@@ -16,6 +16,7 @@ import { SkillsPage } from "./pages/skills";
 import { SlackClaimPage } from "./pages/slack-claim";
 import { SlackOAuthCallbackPage } from "./pages/slack-oauth-callback";
 import { WelcomePage } from "./pages/welcome";
+import { WorkspaceRewardsPage } from "./pages/workspace-rewards";
 
 function DocumentTitleSync() {
   const location = useLocation();
@@ -30,6 +31,7 @@ function DocumentTitleSync() {
       "/workspace/skills": t("title.skills"),
       "/workspace/settings": t("title.settings"),
       "/workspace/models": t("title.settings"),
+      "/workspace/rewards": t("title.rewards"),
       "/feishu/bind": t("title.linkFeishu"),
     };
 
@@ -75,6 +77,10 @@ export function App() {
               <Route path="/workspace/settings" element={<ModelsPage />} />
               <Route path="/workspace/models" element={<ModelsPage />} />
               <Route path="/workspace/skills" element={<SkillsPage />} />
+              <Route
+                path="/workspace/rewards"
+                element={<WorkspaceRewardsPage />}
+              />
               <Route
                 path="/workspace/skills/:slug"
                 element={<CommunitySkillDetailPage />}

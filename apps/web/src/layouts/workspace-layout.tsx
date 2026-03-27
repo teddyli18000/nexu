@@ -1,7 +1,11 @@
 import { BrandMark } from "@/components/brand-mark";
 import { PlatformIcon } from "@/components/platform-icons";
+import { WorkspaceGrowthSidebar } from "@/components/workspace-growth-sidebar";
 import { useAutoUpdate } from "@/hooks/use-auto-update";
+import { useBotQuota } from "@/hooks/use-bot-quota";
+import { useBudget } from "@/hooks/use-budget";
 import { useCommunitySkills } from "@/hooks/use-community-catalog";
+import { useGitHubStars } from "@/hooks/use-github-stars";
 import { type Locale, useLocale } from "@/hooks/use-locale";
 import { authClient } from "@/lib/auth-client";
 import { normalizeChannel, track } from "@/lib/tracking";
@@ -11,6 +15,7 @@ import {
   BookOpen,
   ChevronUp,
   CircleHelp,
+  Gift,
   Globe,
   Home,
   LogOut,
@@ -305,6 +310,7 @@ function WorkspaceLayoutInner() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showHelpMenu, setShowHelpMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [showBudgetPanel, setShowBudgetPanel] = useState(false);
   const update = useAutoUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const hasUpdate =
@@ -365,9 +371,13 @@ function WorkspaceLayoutInner() {
   const logoutRef = useRef<HTMLDivElement>(null);
   const helpRef = useRef<HTMLDivElement>(null);
   const langRef = useRef<HTMLDivElement>(null);
+  const budgetPanelRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
+  const { available: quotaAvailable } = useBotQuota();
+  const budget = useBudget(quotaAvailable ? "healthy" : "depleted");
+  const { stars: githubStars } = useGitHubStars();
   const { data: skillsData } = useCommunitySkills();
   const installedSkillsCount = skillsData?.installedSkills?.length ?? 0;
 
@@ -430,6 +440,18 @@ function WorkspaceLayoutInner() {
   }, [showLangMenu]);
 
   useEffect(() => {
+    if (!showBudgetPanel) return;
+    const handler = (e: MouseEvent) => {
+      const el = budgetPanelRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setShowBudgetPanel(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showBudgetPanel]);
+
+  useEffect(() => {
     if (!mobileDrawerOpen) return;
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -454,6 +476,12 @@ function WorkspaceLayoutInner() {
     },
   });
 
+  const isLoggedIn = Boolean(
+    session?.user?.id ??
+      session?.user?.email ??
+      (typeof me?.email === "string" && me.email.length > 0 ? me.email : null),
+  );
+
   const sessions = sessionsData ?? [];
 
   const sessionMatch = location.pathname.match(/\/workspace\/sessions\/(.+)/);
@@ -462,6 +490,7 @@ function WorkspaceLayoutInner() {
     location.pathname === "/workspace" ||
     location.pathname === "/workspace/home";
   const isSkillsPage = location.pathname.includes("/skills");
+  const isRewardsPage = location.pathname.startsWith("/workspace/rewards");
   const isModelsPage =
     location.pathname.includes("/models") ||
     location.pathname.includes("/settings");
@@ -482,6 +511,7 @@ function WorkspaceLayoutInner() {
     sessions.length === 0 &&
     !isHomePage &&
     !isSkillsPage &&
+    !isRewardsPage &&
     !isModelsPage &&
     !selectedSessionId;
 
@@ -492,18 +522,22 @@ function WorkspaceLayoutInner() {
     ? t("layout.mobile.home")
     : isSkillsPage
       ? t("layout.mobile.skills")
-      : isModelsPage
-        ? t("layout.mobile.settings")
-        : selectedSession?.title || t("layout.mobile.conversations");
+      : isRewardsPage
+        ? t("layout.mobile.rewards")
+        : isModelsPage
+          ? t("layout.mobile.settings")
+          : selectedSession?.title || t("layout.mobile.conversations");
   const mobileSubtitle = isHomePage
     ? t("layout.mobile.homeSubtitle")
     : isSkillsPage
       ? t("layout.mobile.skillsSubtitle")
-      : isModelsPage
-        ? t("layout.mobile.settingsSubtitle")
-        : selectedSession
-          ? formatTime(selectedSession.lastTime)
-          : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
+      : isRewardsPage
+        ? t("layout.mobile.rewardsSubtitle")
+        : isModelsPage
+          ? t("layout.mobile.settingsSubtitle")
+          : selectedSession
+            ? formatTime(selectedSession.lastTime)
+            : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
   const desktopGlassTint = "rgba(255, 255, 255, 0.08)";
   const updateFloatWidth = Math.max(140, sidebarWidth - 20);
   const updateFloatLeft = 10;
@@ -608,9 +642,9 @@ function WorkspaceLayoutInner() {
           )}
         </div>
 
-        {/* Main nav + conversations */}
+        {/* Main nav + conversations — min-h-0 so flex does not steal space from growth/footer */}
         <div
-          className="flex-1 overflow-y-auto"
+          className="flex-1 min-h-0 overflow-y-auto"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
           {/* Nav items */}
@@ -735,6 +769,17 @@ function WorkspaceLayoutInner() {
           </div>
         </div>
 
+        <div className="shrink-0">
+          <WorkspaceGrowthSidebar
+            budget={budget}
+            isLoggedIn={isLoggedIn}
+            navigate={navigate}
+            showBudgetPanel={showBudgetPanel}
+            setShowBudgetPanel={setShowBudgetPanel}
+            budgetPanelRef={budgetPanelRef}
+          />
+        </div>
+
         {/* Bottom action row */}
         <div
           className="px-3 pb-1.5 flex items-center justify-between gap-1 shrink-0"
@@ -813,10 +858,19 @@ function WorkspaceLayoutInner() {
               onClick={() =>
                 track("workspace_github_click", { source: "sidebar" })
               }
-              className="w-7 h-7 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-black/5 transition-colors"
+              className="h-7 inline-flex items-center gap-1.5 rounded-md pl-1 pr-2 text-text-secondary hover:text-text-primary hover:bg-black/5 transition-colors"
               title="GitHub"
             >
-              <GitHubIcon />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+                <GitHubIcon />
+              </span>
+              {githubStars !== null && (
+                <span className="text-[12px] font-medium tabular-nums text-text-muted leading-none">
+                  {githubStars.toLocaleString(
+                    locale === "zh" ? "zh-CN" : "en-US",
+                  )}
+                </span>
+              )}
             </a>
           </div>
 
@@ -1026,6 +1080,22 @@ function WorkspaceLayoutInner() {
                   >
                     <Settings size={14} />
                     {t("layout.nav.settings")}
+                  </Link>
+                  <Link
+                    to="/workspace/rewards"
+                    onClick={() => {
+                      track("workspace_sidebar_click", { target: "rewards" });
+                      setMobileDrawerOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-0.5 px-3 py-2",
+                      isRewardsPage
+                        ? "bg-accent/10 text-accent"
+                        : "text-text-muted hover:text-text-primary hover:bg-surface-3",
+                    )}
+                  >
+                    <Gift size={14} />
+                    {t("layout.nav.rewards")}
                   </Link>
                 </div>
 
