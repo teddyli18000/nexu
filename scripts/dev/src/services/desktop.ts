@@ -1,14 +1,11 @@
-import { spawn } from "node:child_process";
-import { closeSync, existsSync, openSync } from "node:fs";
-import { createRequire } from "node:module";
-import { join } from "node:path";
-
 import {
   createNodeOptions,
   ensureParentDirectory,
   readDevLock,
   removeDevLock,
   repoRootPath,
+  resolveTsxPaths,
+  spawnHiddenProcess,
   terminateProcess,
   waitForProcessStart,
   writeDevLock,
@@ -19,12 +16,11 @@ import { createDesktopInjectedEnv } from "../shared/dev-runtime-config.js";
 import { type DevLogTail, readLogTailFromFile } from "../shared/logs.js";
 import {
   desktopDevLockPath,
+  desktopSupervisorPath,
   desktopWorkingDirectoryPath,
   getDesktopDevLogPath,
-  getDesktopRuntimeRootPath,
 } from "../shared/paths.js";
-
-const require = createRequire(import.meta.url);
+import { createDevMarkerArgs } from "../shared/trace.js";
 
 export type DesktopDevSnapshot = {
   service: "desktop";
@@ -45,67 +41,15 @@ function isPidRunning(pid: number): boolean {
   }
 }
 
-function resolveElectronExecutablePath(): string {
-  const electronEntryPath = require.resolve("electron", {
-    paths: [desktopWorkingDirectoryPath, repoRootPath],
-  });
-  const electronExecutablePath = require(electronEntryPath) as string;
+function createDesktopLaunchEnv(): NodeJS.ProcessEnv {
+  const launchId = `desktop-launch-${Date.now()}`;
 
-  ensure(
-    typeof electronExecutablePath === "string" &&
-      electronExecutablePath.length > 0,
-  ).orThrow(() => new Error("unable to resolve electron executable path"));
-
-  return electronExecutablePath;
-}
-
-function hasDesktopBuildArtifacts(): boolean {
-  return [
-    join(desktopWorkingDirectoryPath, "dist", "index.html"),
-    join(desktopWorkingDirectoryPath, "dist-electron", "main", "bootstrap.js"),
-  ].every((filePath) => existsSync(filePath));
-}
-
-async function runDesktopBuild(logFilePath: string): Promise<void> {
-  const stdoutFd = openSync(logFilePath, "a");
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-      ["--dir", desktopWorkingDirectoryPath, "build"],
-      {
-        cwd: repoRootPath,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: createNodeOptions(),
-        },
-        stdio: ["ignore", stdoutFd, stdoutFd],
-        windowsHide: true,
-      },
-    );
-
-    child.once("error", reject);
-    child.once("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`desktop build failed (exit ${String(code ?? 1)})`));
-    });
-  }).finally(() => {
-    closeSync(stdoutFd);
-  });
-}
-
-function createDesktopLaunchEnv(launchId: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     NODE_OPTIONS: createNodeOptions(),
     ...createDesktopInjectedEnv(),
     NEXU_WORKSPACE_ROOT: repoRootPath,
     NEXU_DESKTOP_APP_ROOT: desktopWorkingDirectoryPath,
-    NEXU_DESKTOP_RUNTIME_ROOT: getDesktopRuntimeRootPath(),
     NEXU_DESKTOP_BUILD_SOURCE:
       process.env.NEXU_DESKTOP_BUILD_SOURCE ?? "local-dev",
     NEXU_DESKTOP_BUILD_BRANCH:
@@ -118,35 +62,24 @@ function createDesktopLaunchEnv(launchId: string): NodeJS.ProcessEnv {
   };
 }
 
-async function launchDesktopProcess(options: {
-  launchId: string;
-  logFilePath: string;
-}): Promise<number> {
-  const stdoutFd = openSync(options.logFilePath, "a");
-  const child = spawn(
-    resolveElectronExecutablePath(),
-    [desktopWorkingDirectoryPath],
-    {
-      cwd: repoRootPath,
-      env: createDesktopLaunchEnv(options.launchId),
-      detached: true,
-      stdio: ["ignore", stdoutFd, stdoutFd],
-      windowsHide: true,
-    },
-  );
+function createDesktopCommand(sessionId: string): {
+  command: string;
+  args: string[];
+} {
+  const { cliPath } = resolveTsxPaths();
 
-  try {
-    await waitForProcessStart(child, "desktop dev process");
-  } finally {
-    child.unref();
-    closeSync(stdoutFd);
-  }
-
-  ensure(Boolean(child.pid)).orThrow(
-    () => new Error("desktop dev process did not expose an electron pid"),
-  );
-
-  return child.pid as number;
+  return {
+    command: process.execPath,
+    args: [
+      cliPath,
+      desktopSupervisorPath,
+      ...createDevMarkerArgs({
+        sessionId,
+        service: "desktop",
+        role: "supervisor",
+      }),
+    ],
+  };
 }
 
 export async function startDesktopDevProcess(options: {
@@ -163,29 +96,43 @@ export async function startDesktopDevProcess(options: {
 
   const runId = options.sessionId;
   const sessionId = options.sessionId;
-  const launchId = `desktop-launch-${Date.now()}`;
   const logFilePath = getDesktopDevLogPath(runId);
+  const commandSpec = createDesktopCommand(sessionId);
 
   await ensureParentDirectory(logFilePath);
 
-  if (!hasDesktopBuildArtifacts()) {
-    await runDesktopBuild(logFilePath);
+  const processHandle = await spawnHiddenProcess({
+    command: commandSpec.command,
+    args: commandSpec.args,
+    cwd: repoRootPath,
+    env: {
+      ...createDesktopLaunchEnv(),
+      NEXU_DEV_DESKTOP_RUN_ID: runId,
+      NEXU_DEV_SESSION_ID: sessionId,
+      NEXU_DEV_SERVICE: "desktop",
+      NEXU_DEV_ROLE: "supervisor",
+    },
+    logFilePath,
+  });
+
+  try {
+    if (processHandle.child) {
+      await waitForProcessStart(processHandle.child, "desktop dev process");
+    }
+  } finally {
+    processHandle.dispose();
   }
 
-  const pid = await launchDesktopProcess({ launchId, logFilePath });
-
   await writeDevLock(desktopDevLockPath, {
-    pid,
+    pid: processHandle.pid,
     runId,
     sessionId,
-    launchId,
   });
 
   return {
     service: "desktop",
     status: "running",
-    pid,
-    launchId,
+    pid: processHandle.pid,
     runId,
     sessionId,
     logFilePath,

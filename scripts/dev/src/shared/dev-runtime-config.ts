@@ -166,6 +166,8 @@ export function createWebInjectedEnv(): NodeJS.ProcessEnv {
   const config = getScriptsDevRuntimeConfig();
 
   return {
+    WEB_HOST: "127.0.0.1",
+    WEB_PORT: String(config.webPort),
     WEB_API_ORIGIN: config.controllerUrl,
   };
 }
@@ -192,6 +194,10 @@ export function createDesktopInjectedEnv(): NodeJS.ProcessEnv {
     NEXU_WEB_URL: config.webUrl,
     NEXU_OPENCLAW_BASE_URL: config.openclawBaseUrl,
     NEXU_OPENCLAW_GATEWAY_TOKEN: config.openclawGatewayToken,
+    NEXU_DESKTOP_DEV_HOST: "127.0.0.1",
+    NEXU_DESKTOP_DEV_PORT: "5180",
+    NEXU_DESKTOP_DEV_SERVER_URL: "http://127.0.0.1:5180",
+    NEXU_DESKTOP_DEV_API_ORIGIN: config.controllerUrl,
     NEXU_HOME: config.nexuHomeDir,
   };
 }

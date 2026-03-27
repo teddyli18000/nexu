@@ -190,7 +190,9 @@ export async function createRuntimeUnitManifests(
       launchStrategy: externalRuntimeMode ? "external" : "delegated",
       delegatedProcessMatch: "openclaw-gateway",
       binaryPath: openclawBinPath,
-      port: null,
+      port: new URL(runtimeConfig.urls.openclawBase).port
+        ? Number.parseInt(new URL(runtimeConfig.urls.openclawBase).port, 10)
+        : 18_789,
       autoStart: true,
       logFilePath: path.resolve(logsDir, "openclaw.log"),
     },

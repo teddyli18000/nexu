@@ -611,9 +611,19 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
-  void window.loadFile(resolve(__dirname, "../../dist/index.html"));
-  logLaunchTimeline("main window loadFile dispatched");
-  logStartupStep("createMainWindow:loadFile-dispatched");
+  const desktopDevServerUrl = process.env.NEXU_DESKTOP_DEV_SERVER_URL;
+
+  if (desktopDevServerUrl) {
+    void window.loadURL(desktopDevServerUrl);
+    logLaunchTimeline(
+      `main window loadURL dispatched url=${desktopDevServerUrl}`,
+    );
+    logStartupStep("createMainWindow:loadURL-dispatched");
+  } else {
+    void window.loadFile(resolve(__dirname, "../../dist/index.html"));
+    logLaunchTimeline("main window loadFile dispatched");
+    logStartupStep("createMainWindow:loadFile-dispatched");
+  }
   mainWindow = window;
   return window;
 }

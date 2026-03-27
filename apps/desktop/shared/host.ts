@@ -544,6 +544,7 @@ export type HostBootstrap = {
   buildInfo: DesktopBuildInfo;
   sentryDsn: string | null;
   isPackaged: boolean;
+  webviewPreloadUrl: string;
 };
 
 export type UpdateSource = "r2" | "github";

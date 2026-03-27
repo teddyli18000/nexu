@@ -33,6 +33,11 @@ export const openclawSupervisorPath = join(
   "supervisors",
   "openclaw.ts",
 );
+export const desktopSupervisorPath = join(
+  scriptsDevSourcePath,
+  "supervisors",
+  "desktop.ts",
+);
 export const controllerSourceDirectoryPath = join(
   controllerWorkingDirectoryPath,
   "src",

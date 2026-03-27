@@ -64,6 +64,9 @@
   - `pnpm start` now fails because that script no longer exists
   - `apps/desktop/dev.sh` and `apps/desktop/scripts/dev-cli.mjs` are deleted
   - validation helpers now invoke explicit `pnpm dev start|stop <service>` commands only
+- Two outdated root dev aliases were also removed:
+  - `dev:controller`
+  - `dev:desktop`
 - Root `AGENTS.md` and `scripts/dev/AGENTS.md` were updated to describe the explicit per-service local-dev workflow, the lack of an `all` target, and the new session-scoped logging contract
 - Cleaned obvious old script-managed dev wording in service errors so each service now points to the matching explicit stop command (`pnpm dev stop <service>`)
 - `apps/desktop/main/bootstrap.ts` now respects a pre-injected `NEXU_HOME` in local dev instead of always forcing the desktop-local fallback path
@@ -107,6 +110,8 @@
   - `pnpm --filter @nexu/desktop typecheck`
   - `pnpm dev restart desktop`
   - `pnpm dev logs desktop`
+- Root alias removal is committed and pushed on `feat/local-dev-workflow-optimization`
+  - latest commit at handoff: `5adcbe3` (`refactor: remove legacy desktop dev launchers`)
 - Verified controller now boots in `external` OpenClaw mode and successfully reaches `openclaw_ws_connected` through the `scripts/dev`-managed OpenClaw process
 - `pnpm lint` still fails, but only on pre-existing repo-wide Biome formatting drift unrelated to this branch
 - `pnpm test` still fails, but the observed failures are pre-existing desktop cross-platform/path test issues unrelated to this branch
@@ -122,6 +127,7 @@
 - Desktop launched via `scripts/dev` now goes straight through Electron + pid lock supervision instead of the extra `dev-cli` wrapper layer
 - Desktop session logs launched via `scripts/dev` now use `.tmp/dev/logs/<run_id>/desktop.log`
 - The old desktop launcher model is abolished; local desktop development is now only supported through explicit `pnpm dev <command> <service>` flows
+- Root `package.json` no longer exposes the old desktop launcher scripts or the old `dev:controller` / `dev:desktop` aliases
 - Remaining old-command references are documentation debt only in historical design/plan docs, not active executable paths
 
 ## Known Existing Issues
@@ -138,3 +144,4 @@
 1. Decide whether any per-service dependency guardrails are needed when users start `controller` or `desktop` without their expected upstream services already running
 2. Add the missing OpenClaw runtime-root/runtime-port contract that desktop still expects in external mode so the current `Missing external runtime port` warning disappears
 3. Continue tightening the `scripts/dev/.env` contract so every external injection is documented, named consistently, and traced to a single owner
+4. Optionally do a historical-doc cleanup pass for old `pnpm start` / `pnpm restart` references that no longer map to executable paths
