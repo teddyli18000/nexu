@@ -14,11 +14,13 @@ export const webWorkingDirectoryPath = join(repoRootPath, "apps", "web");
 
 export const controllerSupervisorPath = join(
   scriptsDevSourcePath,
-  "controller-supervisor.ts",
+  "supervisors",
+  "controller.ts",
 );
 export const webSupervisorPath = join(
   scriptsDevSourcePath,
-  "web-supervisor.ts",
+  "supervisors",
+  "web.ts",
 );
 export const controllerSourceDirectoryPath = join(
   controllerWorkingDirectoryPath,

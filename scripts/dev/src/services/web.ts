@@ -4,12 +4,14 @@ import {
   createNodeOptions,
   ensureDirectory,
   ensureParentDirectory,
+  getListeningPortPid,
   readDevLock,
   removeDevLock,
   repoRootPath,
   resolveTsxPaths,
   spawnHiddenProcess,
   terminateProcess,
+  waitForListeningPortPid,
   waitForProcessStart,
   writeDevLock,
 } from "@nexu/dev-utils";
@@ -19,9 +21,8 @@ import {
   getWebDevLogPath,
   webDevLockPath,
   webSupervisorPath,
-} from "./dev-paths.js";
-import { createDevMarkerArgs } from "./dev-trace.js";
-import { getListeningPortPid, waitForListeningPortPid } from "./ports.js";
+} from "../shared/paths.js";
+import { createDevMarkerArgs } from "../shared/trace.js";
 
 export type WebDevSnapshot = {
   service: "web";

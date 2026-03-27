@@ -5,12 +5,12 @@ import {
   removeDevLock,
   resolveViteBinPath,
   terminateProcess,
+  waitForChildExit,
   writeDevLock,
 } from "@nexu/dev-utils";
 
-import { waitForChildExit } from "./children.js";
-import { webDevLockPath, webWorkingDirectoryPath } from "./dev-paths.js";
-import { createDevTraceEnv } from "./dev-trace.js";
+import { webDevLockPath, webWorkingDirectoryPath } from "../shared/paths.js";
+import { createDevTraceEnv } from "../shared/trace.js";
 
 const runId = process.env.NEXU_DEV_WEB_RUN_ID;
 const sessionId = process.env.NEXU_DEV_SESSION_ID;

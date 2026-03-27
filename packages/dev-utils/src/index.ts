@@ -1,8 +1,10 @@
-export { isSupportedDevCommand, supportedDevCommandList } from "./commands.js";
 export { waitFor } from "./conditions.js";
 export {
   createNodeOptions,
+  getListeningPortPid,
   terminateProcess,
+  waitForChildExit,
+  waitForListeningPortPid,
   waitForProcessStart,
 } from "./process.js";
 export {
@@ -24,4 +26,3 @@ export {
   removeDevLock,
   writeDevLock,
 } from "./lock.js";
-export type { DevCommand } from "./commands.js";

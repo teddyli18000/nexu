@@ -7,17 +7,17 @@ import {
   resolveTsxPaths,
   terminateProcess,
   waitFor,
+  waitForChildExit,
   writeDevLock,
 } from "@nexu/dev-utils";
 
-import { waitForChildExit } from "./children.js";
-import { getControllerPortPid } from "./controller-dev.js";
+import { getControllerPortPid } from "../services/controller.js";
 import {
   controllerDevLockPath,
   controllerSourceDirectoryPath,
   controllerWorkingDirectoryPath,
-} from "./dev-paths.js";
-import { createDevTraceEnv } from "./dev-trace.js";
+} from "../shared/paths.js";
+import { createDevTraceEnv } from "../shared/trace.js";
 
 const runId = process.env.NEXU_DEV_CONTROLLER_RUN_ID;
 const logFilePath = process.env.NEXU_DEV_CONTROLLER_LOG_PATH;

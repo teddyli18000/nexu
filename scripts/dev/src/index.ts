@@ -1,21 +1,21 @@
-import { isSupportedDevCommand } from "@nexu/dev-utils";
 import { cac } from "cac";
 
+import { isSupportedDevCommand } from "./commands.js";
 import {
   getCurrentControllerDevSnapshot,
   readControllerDevLog,
   restartControllerDevProcess,
   startControllerDevProcess,
   stopControllerDevProcess,
-} from "./controller-dev.js";
-import { createDevSessionId } from "./dev-trace.js";
+} from "./services/controller.js";
 import {
   getCurrentWebDevSnapshot,
   readWebDevLog,
   restartWebDevProcess,
   startWebDevProcess,
   stopWebDevProcess,
-} from "./web-dev.js";
+} from "./services/web.js";
+import { createDevSessionId } from "./shared/trace.js";
 
 const cli = cac("scripts-dev");
 

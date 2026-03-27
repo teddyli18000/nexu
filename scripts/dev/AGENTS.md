@@ -27,6 +27,8 @@ This file captures local guidance for the `scripts/dev` CLI surface.
 - Keep the command surface small and intentional.
 - Preferred commands are `pnpm dev start`, `pnpm dev restart`, `pnpm dev stop`, and `pnpm dev logs <web|controller>`.
 - Validate behavior through the real command surface instead of temporary harness scripts.
+- Acceptance must be run from the repo root through `pnpm dev ...`, not by invoking `scripts/dev` internals directly.
+- The default end-to-end acceptance chain is: `pnpm dev status` -> `pnpm dev start` -> `pnpm dev status` -> `pnpm dev logs controller` -> `pnpm dev logs web` -> `pnpm dev stop` -> `pnpm dev status`.
 - Before introducing desktop concerns, stabilize the controller + web workflow first.
 
 ## Runtime model
