@@ -107,27 +107,22 @@ export function UpdateBanner({
       )}
 
       {isError && (
-        <>
-          {errorMessage ? (
-            <p className="update-card-error-message">{errorMessage}</p>
-          ) : null}
-          <div className="update-card-actions">
-            <button
-              className="update-card-btn update-card-btn--primary"
-              onClick={onRetry}
-              type="button"
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              className="update-card-changelog"
-              onClick={() => void openExternal(NEXU_GITHUB_RELEASES_URL)}
-            >
-              Changelog
-            </button>
-          </div>
-        </>
+        <div className="update-card-actions">
+          <button
+            className="update-card-btn update-card-btn--primary"
+            onClick={onRetry}
+            type="button"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            className="update-card-changelog"
+            onClick={() => void openExternal(NEXU_GITHUB_RELEASES_URL)}
+          >
+            Changelog
+          </button>
+        </div>
       )}
     </div>
   );

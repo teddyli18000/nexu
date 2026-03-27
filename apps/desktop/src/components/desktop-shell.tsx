@@ -12,7 +12,6 @@ import { DiagnosticsPage } from "../pages/diagnostics-page";
 import { RuntimePage } from "../pages/runtime-page";
 import { SurfaceButton } from "./surface-button";
 import { SurfaceFrame } from "./surface-frame";
-import { UpdateBanner } from "./update-banner";
 
 function getWebviewPreloadUrl(): string {
   return new URL(
@@ -163,16 +162,6 @@ export function DesktopShell() {
           <DiagnosticsPage />
         </div>
       </main>
-
-      <UpdateBanner
-        dismissed={update.dismissed}
-        errorMessage={update.errorMessage}
-        onDismiss={update.dismiss}
-        onInstall={() => void update.install()}
-        onRetry={() => void update.check()}
-        phase={update.phase}
-        version={update.version}
-      />
     </div>
   );
 }

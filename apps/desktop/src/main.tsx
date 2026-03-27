@@ -1120,16 +1120,6 @@ function DesktopShell() {
             </button>
           </div>
         ) : null}
-
-        <UpdateBanner
-          dismissed={update.dismissed}
-          errorMessage={update.errorMessage}
-          onDismiss={update.dismiss}
-          onInstall={() => void update.install()}
-          onRetry={() => void update.check()}
-          phase={update.phase}
-          version={update.version}
-        />
       </aside>
 
       <main className="desktop-shell-stage">
@@ -1174,6 +1164,16 @@ function DesktopShell() {
           <DiagnosticsPage runtimeConfig={runtimeConfig} />
         </div>
       </main>
+
+      <UpdateBanner
+        dismissed={update.dismissed}
+        errorMessage={update.errorMessage}
+        onDismiss={update.dismiss}
+        onInstall={() => void update.install()}
+        onRetry={() => void update.check()}
+        phase={update.phase}
+        version={update.version}
+      />
     </div>
   );
 }
