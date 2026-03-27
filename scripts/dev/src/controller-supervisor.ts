@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import chokidar from "chokidar";
 
 import {
@@ -44,11 +44,19 @@ function createControllerWorkerCommand(): { command: string; args: string[] } {
   const tsxPackageJsonPath = require.resolve("tsx/package.json", {
     paths: [repoRootPath],
   });
-  const tsxCliPath = join(dirname(tsxPackageJsonPath), "dist", "cli.mjs");
+  const tsxDistPath = join(dirname(tsxPackageJsonPath), "dist");
+  const tsxPreflightPath = join(tsxDistPath, "preflight.cjs");
+  const tsxLoaderPath = pathToFileURL(join(tsxDistPath, "loader.mjs")).href;
 
   return {
     command: process.execPath,
-    args: [tsxCliPath, "src/index.ts"],
+    args: [
+      "--require",
+      tsxPreflightPath,
+      "--import",
+      tsxLoaderPath,
+      "src/index.ts",
+    ],
   };
 }
 
