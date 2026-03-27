@@ -12,6 +12,7 @@ Nexu is a desktop-first OpenClaw platform. Users create AI bots, connect them to
 - `apps/web` — React + Ant Design + Vite
 - `openclaw-runtime` — Repo-local packaged OpenClaw runtime for local dev and desktop packaging; replaces global `openclaw` CLI
 - `packages/shared` — Shared Zod schemas
+- `packages/dev-utils` — TS-first reusable utilities for local script tooling
 
 ## Project overview
 
@@ -168,6 +169,7 @@ See `ARCHITECTURE.md` for the full bird's-eye view. Key points:
 | Workspace templates | `specs/guides/workspace-templates.md` |
 | Local Slack testing | `specs/references/local-slack-testing.md` |
 | Local Slack smoke probe | `scripts/probe/README.md`, `scripts/probe/slack-reply-probe.mjs` |
+| Local dev CLI guidance | `scripts/dev/AGENTS.md` |
 | Frontend conventions | `specs/FRONTEND.md` |
 | Desktop runtime guide | `specs/guides/desktop-runtime-guide.md` |
 | Security posture | `specs/SECURITY.md` |

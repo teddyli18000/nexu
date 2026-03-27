@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev.mjs",
+    "dev": "pnpm --dir ./scripts/dev exec tsx ./src/index.ts",
     "dev:controller": "pnpm --filter @nexu/controller dev",
     "dev:desktop": "pnpm --filter @nexu/desktop dev",
     "build": "pnpm -r build",
@@ -36,11 +36,12 @@
     "dist:mac:unsigned:x64": "pnpm --filter @nexu/desktop dist:mac:unsigned:x64"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
     "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^25.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
     "vitest": "^3.0.7"
   },
   "engines": {
