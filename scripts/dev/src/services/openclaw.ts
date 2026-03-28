@@ -64,13 +64,15 @@ export async function getOpenclawPortPid(): Promise<number> {
   );
 }
 
-async function waitForOpenclawPortPid(): Promise<number> {
+async function waitForOpenclawPortPid(supervisorPid: number): Promise<number> {
   return waitForListeningPortPid(
     getScriptsDevRuntimeConfig().openclawPort,
     "openclaw gateway",
     {
-      attempts: 30,
+      attempts: 120,
       delayMs: 500,
+      supervisorPid,
+      supervisorName: "openclaw supervisor",
     },
   );
 }
@@ -127,7 +129,7 @@ export async function startOpenclawDevProcess(options: {
     () => new Error("openclaw dev process did not expose a pid"),
   );
   const supervisorPid = processHandle.pid as number;
-  const listenerPid = await waitForOpenclawPortPid();
+  const listenerPid = await waitForOpenclawPortPid(supervisorPid);
 
   await writeDevLock(openclawDevLockPath, {
     pid: supervisorPid,
@@ -149,12 +151,13 @@ export async function startOpenclawDevProcess(options: {
 export async function stopOpenclawDevProcess(): Promise<OpenclawDevSnapshot> {
   const snapshot = await getCurrentOpenclawDevSnapshot();
 
-  ensure(snapshot.status === "running" && Boolean(snapshot.pid)).orThrow(
+  ensure(snapshot.status !== "stopped").orThrow(
     () => new Error("openclaw dev process is not running"),
   );
-  const supervisorPid = snapshot.pid as number;
 
-  await terminateProcess(supervisorPid);
+  if (snapshot.status === "running" && snapshot.pid) {
+    await terminateProcess(snapshot.pid);
+  }
 
   try {
     const listenerPid = await getOpenclawPortPid();

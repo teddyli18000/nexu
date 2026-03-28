@@ -24,7 +24,11 @@ All commands use pnpm. Target a single app with `pnpm --filter <package>`.
 
 ```bash
 pnpm install                          # Install
+pnpm --filter @nexu/shared build      # Build shared dist required by cold-start dev flows
+pnpm dev start                        # Start the lightweight local stack: openclaw -> controller -> web -> desktop
 pnpm dev start <service>              # Start one local-dev service: desktop|openclaw|controller|web
+pnpm dev restart                      # Restart the lightweight local stack
+pnpm dev stop                         # Stop the lightweight local stack in reverse order
 pnpm dev stop <service>               # Stop one local-dev service
 pnpm dev restart <service>            # Restart one local-dev service
 pnpm dev status <service>             # Show status for one local-dev service
@@ -67,9 +71,13 @@ This repo is desktop-first. Prefer the controller-first path and remove or ignor
 
 ## Desktop local development
 
-- For script-managed local development, use explicit per-service commands only: `pnpm dev start <desktop|openclaw|controller|web>`, `pnpm dev stop <service>`, `pnpm dev restart <service>`, `pnpm dev status <service>`, and `pnpm dev logs <service>`.
-- `pnpm dev` has no implicit aggregate default and intentionally does not support `all`; start each service deliberately in dependency order when you want the full local stack: `openclaw` -> `controller` -> `web` -> `desktop`.
+- Minimal cold-start setup on a fresh machine is: `pnpm install` -> `pnpm --filter @nexu/shared build` -> copy `scripts/dev/.env.example` to `scripts/dev/.env` only if you need dev-only overrides.
+- Default daily flow is: `pnpm dev start` -> `pnpm dev status <service>` / `pnpm dev logs <service>` as needed -> `pnpm dev stop`.
+- Use `pnpm dev restart` for a clean full-stack recycle; use `pnpm dev restart <service>` only when you are intentionally touching one service.
+- Explicit single-service control remains available through `pnpm dev start <desktop|openclaw|controller|web>`, `pnpm dev stop <service>`, `pnpm dev restart <service>`, `pnpm dev status <service>`, and `pnpm dev logs <service>`.
+- `pnpm dev` intentionally does not support `all`; the full local stack order remains `openclaw` -> `controller` -> `web` -> `desktop`.
 - `pnpm dev logs <service>` is session-scoped, prints a fixed header, and tails at most the last 200 lines from the active service session.
+- `scripts/dev/.env.example` is the source-of-truth template for dev-only overrides. Copy it to `scripts/dev/.env` only when you need to override ports, URLs, state paths, or the shared OpenClaw gateway token for local development.
 - Keep the detailed startup optimization rules, cache invalidation behavior, and troubleshooting notes in `specs/guides/desktop-runtime-guide.md`; keep only the core workflow expectations here.
 - The repo also includes a local Slack reply smoke probe at `scripts/probe/slack-reply-probe.mjs` (`pnpm probe:slack prepare` / `pnpm probe:slack run`) for verifying the end-to-end Slack DM reply path after local runtime or OpenClaw changes.
 - The Slack smoke probe is not zero-setup: install Chrome Canary first, then manually log into Slack in the opened Canary window before running `pnpm probe:slack run`.
@@ -252,11 +260,12 @@ This note should track:
 ## Local quick reference
 
 - Controller env path: `apps/controller/.env`
+- Fresh local-dev cold start: `pnpm install` -> `pnpm --filter @nexu/shared build` -> optional `copy scripts/dev/.env.example scripts/dev/.env` (Windows) or `cp scripts/dev/.env.example scripts/dev/.env` (POSIX) -> `pnpm dev start`
+- Daily local-dev flow: `pnpm dev start` -> `pnpm dev logs <service>` / `pnpm dev status <service>` when needed -> `pnpm dev restart` for a clean recycle -> `pnpm dev stop`
 - OpenClaw managed skills dir (expected default): `~/.openclaw/skills/`
 - Slack smoke probe setup: install Chrome Canary, set `PROBE_SLACK_URL`, run `pnpm probe:slack prepare`, then manually log into Slack in Canary before `pnpm probe:slack run`
 - `openclaw-runtime` is installed implicitly by `pnpm install`; local development should normally not use a global `openclaw` CLI
-- Local service startup order for the script-managed dev path: `pnpm dev start openclaw` -> `pnpm dev start controller` -> `pnpm dev start web` -> `pnpm dev start desktop`
-- Local service shutdown order for the script-managed dev path: `pnpm dev stop desktop` -> `pnpm dev stop web` -> `pnpm dev stop controller` -> `pnpm dev stop openclaw`
+- Full-stack startup order is `openclaw` -> `controller` -> `web` -> `desktop`; shutdown order is the reverse
 - Prefer `./openclaw-wrapper` over global `openclaw` in local development; it executes `openclaw-runtime/node_modules/openclaw/openclaw.mjs`
 - When OpenClaw is started manually, set `RUNTIME_MANAGE_OPENCLAW_PROCESS=false` for `@nexu/controller` to avoid launching a second OpenClaw process
 - If behavior differs, verify effective `OPENCLAW_STATE_DIR` / `OPENCLAW_CONFIG_PATH` used by the running controller process.

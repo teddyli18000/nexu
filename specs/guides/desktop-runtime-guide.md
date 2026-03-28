@@ -44,7 +44,7 @@ If total size (including transitive deps) exceeds ~5 MB, consider alternatives: 
 
 ## Local State Map
 
-### Dev desktop (`pnpm dev start <service>` / `pnpm dev restart <service>`)
+### Dev desktop (`pnpm dev start` / `pnpm dev restart` / explicit per-service commands)
 
 - Electron `userData`: `<repo>/.tmp/desktop/electron`
 - Desktop logs: `<repo>/.tmp/desktop/electron/logs`

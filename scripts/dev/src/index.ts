@@ -52,6 +52,25 @@ function readTargetOrThrow(target: string | undefined): DevTarget {
   return target as DevTarget;
 }
 
+async function startDefaultStack(): Promise<void> {
+  await startTarget("openclaw", createDevSessionId());
+  await startTarget("controller", createDevSessionId());
+  await startTarget("web", createDevSessionId());
+  await startTarget("desktop", createDevSessionId());
+}
+
+async function stopDefaultStack(): Promise<void> {
+  await stopTarget("desktop");
+  await stopTarget("web");
+  await stopTarget("controller");
+  await stopTarget("openclaw");
+}
+
+async function restartDefaultStack(): Promise<void> {
+  await stopDefaultStack();
+  await startDefaultStack();
+}
+
 async function startTarget(
   target: DevTarget,
   sessionId: string,
@@ -307,6 +326,11 @@ function printLogHeader(logFilePath: string, totalLineCount: number): void {
 cli
   .command("start [target]", "Start one local dev service")
   .action(async (target?: string) => {
+    if (!target) {
+      await startDefaultStack();
+      return;
+    }
+
     const resolvedTarget = readTargetOrThrow(target);
     const sessionId = createDevSessionId();
     await startTarget(resolvedTarget, sessionId);
@@ -315,6 +339,11 @@ cli
 cli
   .command("restart [target]", "Restart one local dev service")
   .action(async (target?: string) => {
+    if (!target) {
+      await restartDefaultStack();
+      return;
+    }
+
     const resolvedTarget = readTargetOrThrow(target);
     const sessionId = createDevSessionId();
     await restartTarget(resolvedTarget, sessionId);
@@ -323,6 +352,11 @@ cli
 cli
   .command("stop [target]", "Stop one local dev service")
   .action(async (target?: string) => {
+    if (!target) {
+      await stopDefaultStack();
+      return;
+    }
+
     const resolvedTarget = readTargetOrThrow(target);
     await stopTarget(resolvedTarget);
   });

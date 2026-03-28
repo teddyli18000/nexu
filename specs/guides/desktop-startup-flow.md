@@ -27,13 +27,13 @@ This document describes the desktop startup sequence. Packaged app startup still
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| **Scripts Dev (dev)** | `pnpm dev start openclaw` -> `pnpm dev start controller` -> `pnpm dev start web` -> `pnpm dev start desktop` | Explicit per-service startup. Desktop attaches to external controller/web/openclaw |
+| **Scripts Dev (dev)** | `pnpm dev start` | Lightweight full-stack startup (`openclaw` -> `controller` -> `web` -> `desktop`). Per-service commands remain available when needed. |
 | **Orchestrator** | `pnpm --filter @nexu/desktop dev` | Frontend development. Vite HMR, tmux orchestration |
 | **Packaged** | Open Nexu.app | Packaged desktop-managed runtime |
 
 ## Directory Layout
 
-### Development (`pnpm dev start <service>`)
+### Development (`pnpm dev start` / `pnpm dev start <service>`)
 
 All dev state is repo-scoped under `.tmp/`, fully isolated from the packaged app.
 

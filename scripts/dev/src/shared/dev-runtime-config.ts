@@ -179,6 +179,7 @@ export function createOpenclawInjectedEnv(): NodeJS.ProcessEnv {
     OPENCLAW_STATE_DIR: config.openclawStateDir,
     OPENCLAW_CONFIG_PATH: config.openclawConfigPath,
     OPENCLAW_LOG_LEVEL: config.openclawLogLevel,
+    OPENCLAW_GATEWAY_TOKEN: config.openclawGatewayToken,
   };
 }
 

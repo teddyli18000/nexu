@@ -2,6 +2,7 @@ export { waitFor } from "./conditions.js";
 export {
   createNodeOptions,
   getListeningPortPid,
+  isProcessRunning,
   terminateProcess,
   waitForChildExit,
   waitForListeningPortPid,

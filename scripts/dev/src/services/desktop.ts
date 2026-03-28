@@ -1,6 +1,7 @@
 import {
   createNodeOptions,
   ensureParentDirectory,
+  isProcessRunning,
   readDevLock,
   removeDevLock,
   repoRootPath,
@@ -21,6 +22,8 @@ import {
   getDesktopDevLogPath,
 } from "../shared/paths.js";
 import { createDevMarkerArgs } from "../shared/trace.js";
+import { getCurrentControllerDevSnapshot } from "./controller.js";
+import { getCurrentWebDevSnapshot } from "./web.js";
 
 export type DesktopDevSnapshot = {
   service: "desktop";
@@ -32,33 +35,52 @@ export type DesktopDevSnapshot = {
   logFilePath?: string;
 };
 
-function isPidRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+type DesktopLaunchEnv = {
+  env: NodeJS.ProcessEnv;
+  launchId: string;
+};
+
+async function ensureDesktopDependenciesReady(): Promise<void> {
+  const [controllerSnapshot, webSnapshot] = await Promise.all([
+    getCurrentControllerDevSnapshot(),
+    getCurrentWebDevSnapshot(),
+  ]);
+
+  ensure(controllerSnapshot.status === "running").orThrow(
+    () =>
+      new Error(
+        "controller is not running; start it with `pnpm dev start controller` before starting desktop",
+      ),
+  );
+  ensure(webSnapshot.status === "running").orThrow(
+    () =>
+      new Error(
+        "web is not running; start it with `pnpm dev start web` before starting desktop",
+      ),
+  );
 }
 
-function createDesktopLaunchEnv(): NodeJS.ProcessEnv {
+function createDesktopLaunchEnv(): DesktopLaunchEnv {
   const launchId = `desktop-launch-${Date.now()}`;
 
   return {
-    ...process.env,
-    NODE_OPTIONS: createNodeOptions(),
-    ...createDesktopInjectedEnv(),
-    NEXU_WORKSPACE_ROOT: repoRootPath,
-    NEXU_DESKTOP_APP_ROOT: desktopWorkingDirectoryPath,
-    NEXU_DESKTOP_BUILD_SOURCE:
-      process.env.NEXU_DESKTOP_BUILD_SOURCE ?? "local-dev",
-    NEXU_DESKTOP_BUILD_BRANCH:
-      process.env.NEXU_DESKTOP_BUILD_BRANCH ?? "unknown",
-    NEXU_DESKTOP_BUILD_COMMIT:
-      process.env.NEXU_DESKTOP_BUILD_COMMIT ?? "unknown",
-    NEXU_DESKTOP_BUILD_TIME:
-      process.env.NEXU_DESKTOP_BUILD_TIME ?? new Date().toISOString(),
-    NEXU_DESKTOP_LAUNCH_ID: launchId,
+    launchId,
+    env: {
+      ...process.env,
+      NODE_OPTIONS: createNodeOptions(),
+      ...createDesktopInjectedEnv(),
+      NEXU_WORKSPACE_ROOT: repoRootPath,
+      NEXU_DESKTOP_APP_ROOT: desktopWorkingDirectoryPath,
+      NEXU_DESKTOP_BUILD_SOURCE:
+        process.env.NEXU_DESKTOP_BUILD_SOURCE ?? "local-dev",
+      NEXU_DESKTOP_BUILD_BRANCH:
+        process.env.NEXU_DESKTOP_BUILD_BRANCH ?? "unknown",
+      NEXU_DESKTOP_BUILD_COMMIT:
+        process.env.NEXU_DESKTOP_BUILD_COMMIT ?? "unknown",
+      NEXU_DESKTOP_BUILD_TIME:
+        process.env.NEXU_DESKTOP_BUILD_TIME ?? new Date().toISOString(),
+      NEXU_DESKTOP_LAUNCH_ID: launchId,
+    },
   };
 }
 
@@ -85,6 +107,8 @@ function createDesktopCommand(sessionId: string): {
 export async function startDesktopDevProcess(options: {
   sessionId: string;
 }): Promise<DesktopDevSnapshot> {
+  await ensureDesktopDependenciesReady();
+
   const existingSnapshot = await getCurrentDesktopDevSnapshot();
 
   ensure(existingSnapshot.status !== "running").orThrow(
@@ -98,6 +122,7 @@ export async function startDesktopDevProcess(options: {
   const sessionId = options.sessionId;
   const logFilePath = getDesktopDevLogPath(runId);
   const commandSpec = createDesktopCommand(sessionId);
+  const desktopLaunch = createDesktopLaunchEnv();
 
   await ensureParentDirectory(logFilePath);
 
@@ -106,7 +131,7 @@ export async function startDesktopDevProcess(options: {
     args: commandSpec.args,
     cwd: repoRootPath,
     env: {
-      ...createDesktopLaunchEnv(),
+      ...desktopLaunch.env,
       NEXU_DEV_DESKTOP_RUN_ID: runId,
       NEXU_DEV_SESSION_ID: sessionId,
       NEXU_DEV_SERVICE: "desktop",
@@ -127,12 +152,14 @@ export async function startDesktopDevProcess(options: {
     pid: processHandle.pid,
     runId,
     sessionId,
+    launchId: desktopLaunch.launchId,
   });
 
   return {
     service: "desktop",
     status: "running",
     pid: processHandle.pid,
+    launchId: desktopLaunch.launchId,
     runId,
     sessionId,
     logFilePath,
@@ -142,11 +169,14 @@ export async function startDesktopDevProcess(options: {
 export async function stopDesktopDevProcess(): Promise<DesktopDevSnapshot> {
   const snapshot = await getCurrentDesktopDevSnapshot();
 
-  ensure(snapshot.status === "running" && Boolean(snapshot.pid)).orThrow(
+  ensure(snapshot.status !== "stopped").orThrow(
     () => new Error("desktop dev process is not running"),
   );
 
-  await terminateProcess(snapshot.pid as number);
+  if (snapshot.status === "running" && snapshot.pid) {
+    await terminateProcess(snapshot.pid);
+  }
+
   await removeDevLock(desktopDevLockPath);
 
   return snapshot;
@@ -169,7 +199,7 @@ export async function getCurrentDesktopDevSnapshot(): Promise<DesktopDevSnapshot
     const lock = await readDevLock(desktopDevLockPath);
     const logFilePath = getDesktopDevLogPath(lock.runId);
 
-    if (!isPidRunning(lock.pid)) {
+    if (!isProcessRunning(lock.pid)) {
       return {
         service: "desktop",
         status: "stale",

@@ -141,12 +141,13 @@ export async function startWebDevProcess(options: {
 export async function stopWebDevProcess(): Promise<WebDevSnapshot> {
   const snapshot = await getCurrentWebDevSnapshot();
 
-  ensure(snapshot.status === "running" && Boolean(snapshot.pid)).orThrow(
+  ensure(snapshot.status !== "stopped").orThrow(
     () => new Error("web dev process is not running"),
   );
-  const supervisorPid = snapshot.pid as number;
 
-  await terminateProcess(supervisorPid);
+  if (snapshot.status === "running" && snapshot.pid) {
+    await terminateProcess(snapshot.pid);
+  }
 
   try {
     const listenerPid = await getWebPortPid();

@@ -25,6 +25,7 @@ import {
   getControllerDevLogPath,
 } from "../shared/paths.js";
 import { createDevMarkerArgs } from "../shared/trace.js";
+import { getCurrentOpenclawDevSnapshot } from "./openclaw.js";
 
 export type ControllerDevSnapshot = {
   service: "controller";
@@ -74,9 +75,22 @@ async function waitForControllerPortPid(): Promise<number> {
   );
 }
 
+async function ensureOpenclawReadyForController(): Promise<void> {
+  const openclawSnapshot = await getCurrentOpenclawDevSnapshot();
+
+  ensure(openclawSnapshot.status === "running").orThrow(
+    () =>
+      new Error(
+        "openclaw is not running; start it with `pnpm dev start openclaw` before starting controller",
+      ),
+  );
+}
+
 export async function startControllerDevProcess(options: {
   sessionId: string;
 }): Promise<ControllerDevSnapshot> {
+  await ensureOpenclawReadyForController();
+
   const existingSnapshot = await getCurrentControllerDevSnapshot();
 
   ensure(existingSnapshot.status !== "running").orThrow(
@@ -144,12 +158,13 @@ export async function startControllerDevProcess(options: {
 export async function stopControllerDevProcess(): Promise<ControllerDevSnapshot> {
   const snapshot = await getCurrentControllerDevSnapshot();
 
-  ensure(snapshot.status === "running" && Boolean(snapshot.pid)).orThrow(
+  ensure(snapshot.status !== "stopped").orThrow(
     () => new Error("controller dev process is not running"),
   );
-  const supervisorPid = snapshot.pid as number;
 
-  await terminateProcess(supervisorPid);
+  if (snapshot.status === "running" && snapshot.pid) {
+    await terminateProcess(snapshot.pid);
+  }
 
   try {
     const workerPid = await getControllerPortPid();

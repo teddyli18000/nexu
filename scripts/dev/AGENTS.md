@@ -25,17 +25,24 @@ This file captures local guidance for the `scripts/dev` CLI surface.
 ## Command surface
 
 - Keep the command surface small and intentional.
-- Preferred commands are explicit single-service commands: `pnpm dev start <desktop|openclaw|controller|web>`, `pnpm dev restart <service>`, `pnpm dev stop <service>`, `pnpm dev status <service>`, and `pnpm dev logs <service>`.
-- Do not reintroduce implicit aggregate defaults such as bare `pnpm dev start` or an `all` target.
+- Fresh-machine cold start is: `pnpm install` -> `pnpm --filter @nexu/shared build` -> optional `copy scripts/dev/.env.example scripts/dev/.env` (Windows) or `cp scripts/dev/.env.example scripts/dev/.env` (POSIX).
+- Daily full-stack flow is: `pnpm dev start` -> work -> `pnpm dev restart` when you need a clean full restart -> `pnpm dev stop` when done.
+- Bare `pnpm dev start` runs the lightweight full local stack in dependency order: `openclaw` -> `controller` -> `web` -> `desktop`.
+- Bare `pnpm dev restart` restarts that stack by stopping in reverse order and starting again in dependency order.
+- Bare `pnpm dev stop` stops that stack in reverse order: `desktop` -> `web` -> `controller` -> `openclaw`.
+- Explicit single-service control remains available: `pnpm dev start <desktop|openclaw|controller|web>`, `pnpm dev restart <service>`, `pnpm dev stop <service>`, `pnpm dev status <service>`, and `pnpm dev logs <service>`.
+- Do not reintroduce an `all` target or any other alias target name.
 - Validate behavior through the real command surface instead of temporary harness scripts.
 - Acceptance must be run from the repo root through `pnpm dev ...`, not by invoking `scripts/dev` internals directly.
-- The default end-to-end acceptance chain is: `pnpm dev start openclaw` -> `pnpm dev logs openclaw` -> `pnpm dev start controller` -> `pnpm dev logs controller` -> `pnpm dev start web` -> `pnpm dev logs web` -> `pnpm dev start desktop` -> `pnpm dev logs desktop` -> stop each service explicitly.
+- The focused acceptance chain is: `pnpm dev start` -> `pnpm dev status <service>` / `pnpm dev logs <service>` as needed -> `pnpm dev stop`.
 
 ## Runtime model
 
 - Root entrypoint stays `pnpm dev ...`.
 - The CLI executes through `pnpm --dir ./scripts/dev exec tsx ./src/index.ts`.
 - `scripts/dev` may use its own `tsconfig.json` features such as `paths`.
+- `scripts/dev/.env.example` is the source-of-truth template for dev-only overrides. Only create `scripts/dev/.env` when you need local overrides for ports, URLs, state paths, config path, log dir, or the shared OpenClaw gateway token.
+- Keep the repo-level pnpm build-script allowlist tight. Do not add Windows-only packaging tools such as `electron-winstaller` unless the team explicitly wants that behavior on every machine.
 - Logs should live under `.tmp/dev/logs/<run_id>/...`.
 - `pnpm dev logs <service>` should resolve the active session only, prepend a fixed metadata header, and tail at most 200 lines by default.
 - Lightweight state should use per-service pid locks under `.tmp/dev/*.pid`.
@@ -53,10 +60,11 @@ This file captures local guidance for the `scripts/dev` CLI surface.
 
 ## FAQ
 
-- Q: `pnpm dev stop <service>` fails because that side is already down. A: This is currently acceptable. Read the matching `.tmp/dev/*.pid`, kill the remaining supervisor manually if needed, remove stale pid locks, then rerun `pnpm dev start <service>` or `pnpm dev restart <service>`.
-- Q: `pnpm dev status <service>` shows `stale`. A: The pid lock still exists but the supervisor pid is no longer alive. Remove the stale `.tmp/dev/*.pid` file and start that service again.
+- Q: A service will not start. A: Start with `pnpm dev status <service>` and `pnpm dev logs <service>`. If the error says a dependency is missing, start that dependency first; if it says a port is busy, kill the listener and retry.
+- Q: `pnpm dev status <service>` shows `stale`. A: The supervisor pid is gone but the lock survived. Prefer `pnpm dev stop <service>` first; if the lock still remains, remove the matching `.tmp/dev/*.pid` file and start again.
 - Q: `pnpm dev logs web` shows `Port 5173 is already in use`. A: A stale Vite process from an earlier experiment is still listening. Kill the listener on `5173`, remove `web.pid` if present, and restart the dev flow.
 - Q: Which pid is stored in each `.tmp/dev/*.pid` file? A: The pid lock stores the supervisor pid, not the transient worker/listener pid. Worker/listener pids are resolved at runtime via snapshots.
-- Q: Where should logs be inspected first? A: Start with `pnpm dev logs <service>` for the active session. If that is not enough, inspect the backing file under `.tmp/dev/logs/<run_id>/...` or `.tmp/logs/desktop-dev.log` for desktop.
+- Q: Where should logs be inspected first? A: Start with `pnpm dev logs <service>` for the active session. If that is not enough, inspect the backing file under `.tmp/dev/logs/<run_id>/...`.
 - Q: How do I correlate a leaked or suspicious process to a specific dev run? A: Start with `sessionId` from `pnpm dev status <service>` or `.tmp/dev/*.pid`, then search process command lines for `--nexu-dev-session=<sessionId>` and `--nexu-dev-service=<service>`.
-- Q: What is the expected worst-case recovery path? A: Kill the known listener/supervisor pid for the affected service, remove the stale `.tmp/dev/*.pid` file, rerun `pnpm dev start <service>`, and if the local environment is still inconsistent, reboot the machine to clear any orphaned OS-level process state.
+- Q: `pnpm install` warns that `electron-winstaller` build scripts were ignored. A: Keep it out of the shared repo allowlist unless Windows packaging support is intentionally being enabled for the whole team. Use per-machine approval when only one Windows environment needs it.
+- Q: What is the expected worst-case recovery path? A: Run `pnpm dev stop`, kill any leftover listener/supervisor pid for the affected service, remove stale `.tmp/dev/*.pid` files, then run `pnpm dev start` again.

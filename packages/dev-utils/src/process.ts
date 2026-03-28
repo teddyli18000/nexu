@@ -13,6 +13,10 @@ export function createNodeOptions(): string {
 }
 
 export async function terminateProcess(pid: number): Promise<void> {
+  if (!isProcessRunning(pid)) {
+    return;
+  }
+
   if (process.platform === "win32") {
     await new Promise<void>((resolve, reject) => {
       const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
@@ -22,7 +26,7 @@ export async function terminateProcess(pid: number): Promise<void> {
 
       child.once("error", reject);
       child.once("exit", (code) => {
-        if (code === 0) {
+        if (code === 0 || !isProcessRunning(pid)) {
           resolve();
           return;
         }
@@ -39,6 +43,15 @@ export async function terminateProcess(pid: number): Promise<void> {
     return;
   } catch {
     process.kill(pid, "SIGTERM");
+  }
+}
+
+export function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -140,8 +153,41 @@ export async function getListeningPortPid(
 export async function waitForListeningPortPid(
   port: number,
   serviceName: string,
-  options: { attempts: number; delayMs?: number },
+  options: {
+    attempts: number;
+    delayMs?: number;
+    supervisorPid?: number;
+    supervisorName?: string;
+  },
 ): Promise<number> {
+  const supervisorLabel = options.supervisorName ?? `${serviceName} supervisor`;
+
+  if (options.supervisorPid) {
+    for (let index = 0; index < options.attempts; index += 1) {
+      try {
+        return await getListeningPortPid(port, serviceName);
+      } catch {}
+
+      if (!isProcessRunning(options.supervisorPid)) {
+        throw new Error(
+          `${supervisorLabel} exited before opening port ${port}`,
+        );
+      }
+
+      if (index < options.attempts - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, options.delayMs ?? 250),
+        );
+      }
+    }
+
+    if (!isProcessRunning(options.supervisorPid)) {
+      throw new Error(`${supervisorLabel} exited before opening port ${port}`);
+    }
+
+    throw new Error(`${serviceName} did not open port ${port}`);
+  }
+
   return waitFor(
     () => getListeningPortPid(port, serviceName),
     () => new Error(`${serviceName} did not open port ${port}`),
