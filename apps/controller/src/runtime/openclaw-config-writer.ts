@@ -1,7 +1,9 @@
+import { readdirSync, rmSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { OpenClawConfig } from "@nexu/shared";
 import type { ControllerEnv } from "../app/env.js";
+import { NEXU_INTERNAL_ACCOUNT_PREFIX } from "../lib/channel-binding-compiler.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -46,7 +48,7 @@ async function syncWeixinAccountIndex(
       ...existingIds.filter((id) => configIdSet.has(id)),
       ...accountIds,
     ]),
-  ].filter((id) => !id.startsWith("__nexu_internal_"));
+  ].filter((id) => !id.startsWith(NEXU_INTERNAL_ACCOUNT_PREFIX));
 
   // Only write if changed
   if (JSON.stringify(mergedIds) === JSON.stringify(existingIds)) {
@@ -55,6 +57,24 @@ async function syncWeixinAccountIndex(
 
   await mkdir(indexDir, { recursive: true });
   await writeFile(indexPath, JSON.stringify(mergedIds, null, 2), "utf8");
+
+  // Remove orphan credential/sync files for accounts no longer in the
+  // authoritative set.  This prevents listStoredWeixinAccountIds() from
+  // resurrecting stale accounts that were removed from config.
+  const accountsDir = path.join(indexDir, "accounts");
+  try {
+    const validIds = new Set(mergedIds);
+    for (const entry of readdirSync(accountsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const id = entry.name.replace(/\.sync\.json$|\.json$/, "");
+      if (!validIds.has(id)) {
+        rmSync(path.join(accountsDir, entry.name), { force: true });
+      }
+    }
+  } catch {
+    // accounts dir may not exist yet — that's fine
+  }
+
   logger.debug(
     { indexPath, accountIds: mergedIds },
     "weixin_account_index_synced",

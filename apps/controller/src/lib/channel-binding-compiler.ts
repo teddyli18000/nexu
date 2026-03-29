@@ -9,8 +9,11 @@ import type {
 } from "@nexu/shared";
 import type { BotResponse, ChannelResponse } from "@nexu/shared";
 
-const INTERNAL_FEISHU_PREWARM_ACCOUNT_ID = "__nexu_internal_feishu_prewarm__";
-const INTERNAL_WECHAT_PREWARM_ACCOUNT_ID = "__nexu_internal_wechat_prewarm__";
+/** Prefix for all internal placeholder account IDs that must never be persisted to runtime state. */
+export const NEXU_INTERNAL_ACCOUNT_PREFIX = "__nexu_internal_";
+
+const INTERNAL_FEISHU_PREWARM_ACCOUNT_ID = `${NEXU_INTERNAL_ACCOUNT_PREFIX}feishu_prewarm__`;
+const INTERNAL_WECHAT_PREWARM_ACCOUNT_ID = `${NEXU_INTERNAL_ACCOUNT_PREFIX}wechat_prewarm__`;
 
 function buildSecretLookup(secrets: Record<string, string>, channelId: string) {
   return (suffix: string): string =>

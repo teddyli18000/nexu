@@ -69,30 +69,13 @@ function makeChannel(
   };
 }
 
-function makeBot() {
-  return {
-    id: "bot-1",
-    name: "Test Bot",
-    slug: "test-bot",
-    poolId: null,
-    status: "active" as const,
-    modelId: "anthropic/claude-sonnet-4",
-    systemPrompt: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // WeChat prewarm config compilation
 // ---------------------------------------------------------------------------
 
 describe("WeChat prewarm config compilation", () => {
-  const bot = makeBot();
-
   it("includes openclaw-weixin with prewarm account when no WeChat channels exist", () => {
     const result = compileChannelsConfig({
-      bots: [bot],
       channels: [],
       secrets: {},
     });
@@ -106,7 +89,6 @@ describe("WeChat prewarm config compilation", () => {
 
   it("replaces prewarm with real account when WeChat channel is connected", () => {
     const result = compileChannelsConfig({
-      bots: [bot],
       channels: [makeChannel({ accountId: "real-account-id" })],
       secrets: {},
     });
@@ -121,7 +103,6 @@ describe("WeChat prewarm config compilation", () => {
 
   it("does not include prewarm when a real WeChat account exists", () => {
     const result = compileChannelsConfig({
-      bots: [bot],
       channels: [makeChannel()],
       secrets: {},
     });
@@ -133,7 +114,6 @@ describe("WeChat prewarm config compilation", () => {
 
   it("ignores disconnected WeChat channels and falls back to prewarm", () => {
     const result = compileChannelsConfig({
-      bots: [bot],
       channels: [makeChannel({ status: "disconnected" })],
       secrets: {},
     });
@@ -155,7 +135,6 @@ describe("WeChat connect/disconnect lifecycle", () => {
   let configStore: {
     connectWechat: ReturnType<typeof vi.fn>;
     disconnectChannel: ReturnType<typeof vi.fn>;
-    getChannel: ReturnType<typeof vi.fn>;
     [key: string]: unknown;
   };
   let syncService: {
@@ -174,7 +153,6 @@ describe("WeChat connect/disconnect lifecycle", () => {
     configStore = {
       connectWechat: vi.fn().mockResolvedValue(makeChannel()),
       disconnectChannel: vi.fn().mockResolvedValue(true),
-      getChannel: vi.fn().mockResolvedValue(makeChannel()),
     };
     syncService = {
       writePlatformTemplatesForBot: vi.fn().mockResolvedValue(undefined),
@@ -225,49 +203,18 @@ describe("WeChat connect/disconnect lifecycle", () => {
     expect(callCount).toBeGreaterThanOrEqual(3);
   });
 
-  it("disconnectChannel cleans up WeChat account state files", async () => {
-    const accountId = "abc123-im-bot";
-    const accountsDir = path.join(tmpDir, "openclaw-weixin", "accounts");
-    const indexPath = path.join(tmpDir, "openclaw-weixin", "accounts.json");
-    mkdirSync(accountsDir, { recursive: true });
-
-    // Seed stale state (simulates previous connect)
-    writeFileSync(
-      path.join(accountsDir, `${accountId}.json`),
-      JSON.stringify({ token: "tok", savedAt: now }),
-    );
-    writeFileSync(
-      path.join(accountsDir, `${accountId}.sync.json`),
-      JSON.stringify({ get_updates_buf: "buf" }),
-    );
-    writeFileSync(indexPath, JSON.stringify([accountId, "other-account"]));
-
-    configStore.getChannel.mockResolvedValue(
-      makeChannel({ id: "ch-1", accountId }),
-    );
-
+  it("disconnectChannel calls syncAll after unbinding", async () => {
     await service.disconnectChannel("ch-1");
 
-    // Credential and sync files should be removed
-    expect(existsSync(path.join(accountsDir, `${accountId}.json`))).toBe(false);
-    expect(existsSync(path.join(accountsDir, `${accountId}.sync.json`))).toBe(
-      false,
-    );
-
-    // Index should only contain the other account
-    const remainingIds = JSON.parse(readFileSync(indexPath, "utf-8"));
-    expect(remainingIds).toEqual(["other-account"]);
+    expect(configStore.disconnectChannel).toHaveBeenCalledWith("ch-1");
+    expect(syncService.syncAll).toHaveBeenCalled();
   });
 
-  it("disconnectChannel preserves other accounts in index", async () => {
+  it("disconnectChannel does not delete credential files directly", async () => {
+    // Disconnect is a pure unbind — credential cleanup is delegated to
+    // the config writer's authoritative index sync + orphan sweep.
     const accountsDir = path.join(tmpDir, "openclaw-weixin", "accounts");
-    const indexPath = path.join(tmpDir, "openclaw-weixin", "accounts.json");
     mkdirSync(accountsDir, { recursive: true });
-
-    writeFileSync(
-      indexPath,
-      JSON.stringify(["abc123-im-bot", "keep-me", "also-keep"]),
-    );
     writeFileSync(
       path.join(accountsDir, "abc123-im-bot.json"),
       JSON.stringify({ token: "tok" }),
@@ -275,77 +222,8 @@ describe("WeChat connect/disconnect lifecycle", () => {
 
     await service.disconnectChannel("ch-1");
 
-    const remaining = JSON.parse(readFileSync(indexPath, "utf-8"));
-    expect(remaining).toEqual(["keep-me", "also-keep"]);
-  });
-
-  it("disconnectChannel is a no-op for non-wechat channels", async () => {
-    const indexPath = path.join(tmpDir, "openclaw-weixin", "accounts.json");
-    mkdirSync(path.dirname(indexPath), { recursive: true });
-    writeFileSync(indexPath, JSON.stringify(["some-account"]));
-
-    configStore.getChannel.mockResolvedValue(
-      makeChannel({ id: "ch-1", channelType: "slack", accountId: "slack-id" }),
-    );
-
-    await service.disconnectChannel("ch-1");
-
-    // WeChat index should be untouched
-    const ids = JSON.parse(readFileSync(indexPath, "utf-8"));
-    expect(ids).toEqual(["some-account"]);
-  });
-
-  it("disconnectChannel handles missing state dir gracefully", async () => {
-    // No openclaw-weixin directory exists at all
-    await expect(service.disconnectChannel("ch-1")).resolves.toBe(true);
-  });
-
-  it("multiple connect/disconnect cycles don't accumulate accounts", async () => {
-    const accountsDir = path.join(tmpDir, "openclaw-weixin", "accounts");
-    const indexPath = path.join(tmpDir, "openclaw-weixin", "accounts.json");
-    mkdirSync(accountsDir, { recursive: true });
-
-    // Simulate 3 connect/disconnect cycles with different account IDs
-    const accountIds = ["acct-1-im-bot", "acct-2-im-bot", "acct-3-im-bot"];
-
-    for (const accountId of accountIds) {
-      // Seed state as if connectWechat wrote it
-      writeFileSync(
-        path.join(accountsDir, `${accountId}.json`),
-        JSON.stringify({ token: "tok" }),
-      );
-      writeFileSync(
-        path.join(accountsDir, `${accountId}.sync.json`),
-        JSON.stringify({ get_updates_buf: "buf" }),
-      );
-      // Append to index
-      const existing = existsSync(indexPath)
-        ? (JSON.parse(readFileSync(indexPath, "utf-8")) as string[])
-        : [];
-      writeFileSync(indexPath, JSON.stringify([...existing, accountId]));
-
-      // Disconnect
-      configStore.getChannel.mockResolvedValue(
-        makeChannel({ id: `ch-${accountId}`, accountId }),
-      );
-      configStore.disconnectChannel.mockResolvedValue(true);
-      await service.disconnectChannel(`ch-${accountId}`);
-    }
-
-    // All should be cleaned up
-    const remaining = existsSync(indexPath)
-      ? (JSON.parse(readFileSync(indexPath, "utf-8")) as string[])
-      : [];
-    expect(remaining).toEqual([]);
-
-    for (const accountId of accountIds) {
-      expect(existsSync(path.join(accountsDir, `${accountId}.json`))).toBe(
-        false,
-      );
-      expect(existsSync(path.join(accountsDir, `${accountId}.sync.json`))).toBe(
-        false,
-      );
-    }
+    // Files still exist — writer will clean them on next sync
+    expect(existsSync(path.join(accountsDir, "abc123-im-bot.json"))).toBe(true);
   });
 
   it("connectWechat rolls back on readiness timeout", async () => {
@@ -364,35 +242,29 @@ describe("WeChat connect/disconnect lifecycle", () => {
     expect(syncService.syncAll).toHaveBeenCalledTimes(2);
   }, 35_000);
 
-  it("disconnect cleanup runs before syncAll", async () => {
-    const callOrder: string[] = [];
-    const accountId = "abc123-im-bot";
+  it("connectWechat rollback cleans up credential files", async () => {
+    const accountId = "fail-account";
     const accountsDir = path.join(tmpDir, "openclaw-weixin", "accounts");
     const indexPath = path.join(tmpDir, "openclaw-weixin", "accounts.json");
     mkdirSync(accountsDir, { recursive: true });
+
+    // Seed credential as if wechatQrWait wrote it just before connectWechat
     writeFileSync(
       path.join(accountsDir, `${accountId}.json`),
       JSON.stringify({ token: "tok" }),
     );
     writeFileSync(indexPath, JSON.stringify([accountId]));
 
-    syncService.syncAll.mockImplementation(async () => {
-      // At the point syncAll is called, the stale files should already
-      // be removed so the config writer won't see them.
-      callOrder.push("syncAll");
-      const filesExist = existsSync(
-        path.join(accountsDir, `${accountId}.json`),
-      );
-      callOrder.push(filesExist ? "files-still-exist" : "files-cleaned");
+    gatewayService.getChannelReadiness.mockResolvedValue({
+      ready: false,
+      lastError: "timeout",
     });
 
-    configStore.getChannel.mockResolvedValue(
-      makeChannel({ id: "ch-1", accountId }),
-    );
-    await service.disconnectChannel("ch-1");
+    await expect(service.connectWechat(accountId)).rejects.toThrow("timeout");
 
-    expect(callOrder).toEqual(["syncAll", "files-cleaned"]);
-  });
+    // Rollback IS destructive — credentials for a failed connect are useless
+    expect(existsSync(path.join(accountsDir, `${accountId}.json`))).toBe(false);
+  }, 35_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -481,5 +353,44 @@ describe("syncWeixinAccountIndex via OpenClawConfigWriter", () => {
 
     const ids = JSON.parse(readFileSync(indexPath, "utf-8"));
     expect(ids).toEqual([]);
+  });
+
+  it("removes orphan credential files not in authoritative set", async () => {
+    const indexDir = path.join(tmpDir, "openclaw-weixin");
+    const accountsDir = path.join(indexDir, "accounts");
+    mkdirSync(accountsDir, { recursive: true });
+
+    // Seed orphan credential + sync files from a previously disconnected account
+    writeFileSync(
+      path.join(accountsDir, "orphan-acct.json"),
+      JSON.stringify({ token: "old" }),
+    );
+    writeFileSync(
+      path.join(accountsDir, "orphan-acct.sync.json"),
+      JSON.stringify({ get_updates_buf: "buf" }),
+    );
+    // Also seed a valid account's files
+    writeFileSync(
+      path.join(accountsDir, "current-acct.json"),
+      JSON.stringify({ token: "valid" }),
+    );
+
+    const writer = new OpenClawConfigWriter(env);
+    await writer.write({
+      channels: {
+        "openclaw-weixin": {
+          enabled: true,
+          accounts: { "current-acct": { enabled: true } },
+        },
+      },
+    } as never);
+
+    // Orphan files should be removed
+    expect(existsSync(path.join(accountsDir, "orphan-acct.json"))).toBe(false);
+    expect(existsSync(path.join(accountsDir, "orphan-acct.sync.json"))).toBe(
+      false,
+    );
+    // Current account files preserved
+    expect(existsSync(path.join(accountsDir, "current-acct.json"))).toBe(true);
   });
 });
