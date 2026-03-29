@@ -98,9 +98,9 @@ describe("WeChat prewarm config compilation", () => {
     });
 
     expect(result["openclaw-weixin"]).toBeDefined();
-    expect(result["openclaw-weixin"]!.enabled).toBe(true);
+    expect(result["openclaw-weixin"]?.enabled).toBe(true);
     expect(
-      result["openclaw-weixin"]!.accounts["__nexu_internal_wechat_prewarm__"],
+      result["openclaw-weixin"]?.accounts.__nexu_internal_wechat_prewarm__,
     ).toEqual({ enabled: false });
   });
 
@@ -111,11 +111,11 @@ describe("WeChat prewarm config compilation", () => {
       secrets: {},
     });
 
-    expect(result["openclaw-weixin"]!.accounts["real-account-id"]).toEqual({
+    expect(result["openclaw-weixin"]?.accounts["real-account-id"]).toEqual({
       enabled: true,
     });
     expect(
-      result["openclaw-weixin"]!.accounts["__nexu_internal_wechat_prewarm__"],
+      result["openclaw-weixin"]?.accounts.__nexu_internal_wechat_prewarm__,
     ).toBeUndefined();
   });
 
@@ -126,7 +126,7 @@ describe("WeChat prewarm config compilation", () => {
       secrets: {},
     });
 
-    const accountKeys = Object.keys(result["openclaw-weixin"]!.accounts);
+    const accountKeys = Object.keys(result["openclaw-weixin"]?.accounts);
     expect(accountKeys).not.toContain("__nexu_internal_wechat_prewarm__");
     expect(accountKeys).toHaveLength(1);
   });
@@ -139,7 +139,7 @@ describe("WeChat prewarm config compilation", () => {
     });
 
     expect(
-      result["openclaw-weixin"]!.accounts["__nexu_internal_wechat_prewarm__"],
+      result["openclaw-weixin"]?.accounts.__nexu_internal_wechat_prewarm__,
     ).toEqual({ enabled: false });
   });
 });
