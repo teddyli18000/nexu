@@ -292,6 +292,99 @@ on_failure() {
 # Resilience scenarios
 # -----------------------------------------------------------------------
 
+# -----------------------------------------------------------------------
+# Service status verification (called after every startup)
+# -----------------------------------------------------------------------
+verify_services() {
+  local label="$1"
+  local failed=0
+
+  log "[$label] Verifying service status..."
+
+  # 1. Controller API health
+  local controller_ready
+  controller_ready=$(curl -sf http://127.0.0.1:50800/api/internal/desktop/ready 2>/dev/null || echo "")
+  if echo "$controller_ready" | grep -q '"ready":true'; then
+    log "[$label]   controller API: ready"
+  else
+    # Try alternative port (port conflict scenario)
+    local alt_ready=false
+    for port in 50801 50802 50803; do
+      controller_ready=$(curl -sf "http://127.0.0.1:$port/api/internal/desktop/ready" 2>/dev/null || echo "")
+      if echo "$controller_ready" | grep -q '"ready":true'; then
+        log "[$label]   controller API: ready (alternative port $port)"
+        alt_ready=true
+        break
+      fi
+    done
+    if ! $alt_ready; then
+      log "[$label]   controller API: NOT READY"
+      failed=$((failed + 1))
+    fi
+  fi
+
+  # 2. Web server health
+  local web_ok=false
+  for port in 50810 50811 50812; do
+    if curl -sf "http://127.0.0.1:$port/" >/dev/null 2>&1; then
+      log "[$label]   web server: listening on $port"
+      web_ok=true
+      break
+    fi
+  done
+  if ! $web_ok; then
+    log "[$label]   web server: NOT LISTENING"
+    failed=$((failed + 1))
+  fi
+
+  # 3. OpenClaw gateway health
+  local openclaw_health
+  openclaw_health=$(curl -sf http://127.0.0.1:18789/health 2>/dev/null || echo "")
+  if [ -n "$openclaw_health" ]; then
+    log "[$label]   openclaw gateway: healthy"
+  else
+    log "[$label]   openclaw gateway: NOT HEALTHY (may still be starting)"
+  fi
+
+  # 4. Launchd service registration
+  local controller_launchd=false
+  local openclaw_launchd=false
+  launchctl list 2>/dev/null | grep -q "io.nexu.controller" && controller_launchd=true
+  launchctl list 2>/dev/null | grep -q "io.nexu.openclaw" && openclaw_launchd=true
+  log "[$label]   launchd: controller=$controller_launchd openclaw=$openclaw_launchd"
+
+  # 5. Port listeners (verify actual TCP LISTEN state)
+  local listeners
+  listeners=$(lsof -iTCP:50800 -iTCP:50810 -iTCP:18789 -sTCP:LISTEN -n -P 2>/dev/null | grep LISTEN | wc -l | tr -d ' ')
+  log "[$label]   TCP listeners on known ports: $listeners"
+
+  # 6. Electron process alive
+  local electron_pid
+  electron_pid=$(cat "$CAPTURE_DIR/packaged-app.pid" 2>/dev/null || echo "")
+  if [ -n "$electron_pid" ] && kill -0 "$electron_pid" 2>/dev/null; then
+    log "[$label]   electron process: alive (pid=$electron_pid)"
+  else
+    log "[$label]   electron process: NOT RUNNING"
+    failed=$((failed + 1))
+  fi
+
+  if [ "$failed" -gt 0 ]; then
+    log "[$label]   VERIFICATION FAILED ($failed checks)"
+    return 1
+  fi
+  log "[$label]   all services OK"
+  return 0
+}
+
+# Helper: reset home directory to clean state before each scenario
+resilience_reset() {
+  bash "$REPO_ROOT/scripts/kill-all.sh" > "$CAPTURE_DIR/kill-all-reset.log" 2>&1 || true
+  wait_ports_free
+  rm -rf "$PERSISTENT_HOME"
+  mkdir -p "$PERSISTENT_HOME"
+  log "Reset: home directory cleaned, ports freed"
+}
+
 # Helper: launch app in background and wait for health, return PID
 resilience_launch() {
   local app_path="$1"
@@ -315,8 +408,10 @@ resilience_launch() {
   while [ "$attempt" -lt 90 ]; do
     attempt=$((attempt + 1))
     if curl -sf http://127.0.0.1:50800/api/internal/desktop/ready >/dev/null 2>&1; then
-      log "Runtime healthy after $attempt attempts"
-      return 0
+      if curl -sf http://127.0.0.1:50810/api/internal/desktop/ready >/dev/null 2>&1; then
+        log "Runtime healthy after $attempt attempts"
+        return 0
+      fi
     fi
     sleep 2
   done
@@ -328,7 +423,9 @@ resilience_launch() {
 # 1. Crash recovery: kill -9 Electron → restart → verify healthy
 resilience_crash_recovery() {
   log "--- Resilience: crash recovery (Force Quit simulation) ---"
+  resilience_reset
   resilience_launch "$1"
+  verify_services "crash-recovery-initial" || true
 
   # Verify launchd services are running
   local controller_running=false
@@ -355,16 +452,8 @@ resilience_crash_recovery() {
   # Now restart the app — it should detect stale services and handle them
   log "Restarting app after crash..."
   resilience_launch "$1"
-
-  # Verify runtime is healthy
-  local ready
-  ready=$(curl -sf http://127.0.0.1:50800/api/internal/desktop/ready 2>/dev/null || echo "")
-  if echo "$ready" | grep -q '"ready":true'; then
-    log "PASSED: app recovered from crash successfully"
-  else
-    log "FAILED: app did not recover from crash"
-    return 1
-  fi
+  verify_services "crash-recovery" || { log "FAILED: services not healthy after crash recovery"; return 1; }
+  log "PASSED: app recovered from crash successfully"
 
   # Cleanup
   quit_app
@@ -375,6 +464,7 @@ resilience_crash_recovery() {
 # 2. Orphan process cleanup: kill Electron, leave controller/openclaw as orphans
 resilience_orphan_cleanup() {
   log "--- Resilience: orphan process cleanup ---"
+  resilience_reset
   resilience_launch "$1"
 
   local app_pid
@@ -399,15 +489,8 @@ resilience_orphan_cleanup() {
   # Restart app — it should clean up orphans and start fresh
   log "Restarting app (should clean up orphans)..."
   resilience_launch "$1"
-
-  local ready
-  ready=$(curl -sf http://127.0.0.1:50800/api/internal/desktop/ready 2>/dev/null || echo "")
-  if echo "$ready" | grep -q '"ready":true'; then
-    log "PASSED: app started fresh after orphan cleanup"
-  else
-    log "FAILED: app could not recover from orphan processes"
-    return 1
-  fi
+  verify_services "orphan-cleanup" || { log "FAILED: services not healthy after orphan cleanup"; return 1; }
+  log "PASSED: app started fresh after orphan cleanup"
 
   quit_app
   bash "$REPO_ROOT/scripts/kill-all.sh" > "$CAPTURE_DIR/kill-all-orphan.log" 2>&1 || true
@@ -417,6 +500,7 @@ resilience_orphan_cleanup() {
 # 3. Port conflict: occupy known port before app launch
 resilience_port_conflict() {
   log "--- Resilience: port conflict ---"
+  resilience_reset
 
   # Occupy port 50800 with a dummy listener
   python3 -c "
@@ -500,6 +584,7 @@ while True:
 # 4. Stale runtime-ports.json: write fake state, verify app recovers
 resilience_stale_state() {
   log "--- Resilience: stale runtime-ports.json ---"
+  resilience_reset
 
   local home_dir="$PERSISTENT_HOME"
   local user_data_dir="$home_dir/Library/Application Support/@nexu/desktop"
@@ -525,15 +610,8 @@ JSONEOF
 
   # Launch app — it should detect stale state and do a fresh start
   resilience_launch "$1"
-
-  local ready
-  ready=$(curl -sf http://127.0.0.1:50800/api/internal/desktop/ready 2>/dev/null || echo "")
-  if echo "$ready" | grep -q '"ready":true'; then
-    log "PASSED: app recovered from stale runtime-ports.json"
-  else
-    log "FAILED: app could not recover from stale state"
-    return 1
-  fi
+  verify_services "stale-state" || { log "FAILED: services not healthy after stale state recovery"; return 1; }
+  log "PASSED: app recovered from stale runtime-ports.json"
 
   quit_app
   bash "$REPO_ROOT/scripts/kill-all.sh" > "$CAPTURE_DIR/kill-all-stale.log" 2>&1 || true
@@ -543,6 +621,7 @@ JSONEOF
 # 5. Double launch: start app while another is already running
 resilience_double_launch() {
   log "--- Resilience: double launch (single-instance) ---"
+  resilience_reset
   resilience_launch "$1"
 
   local first_pid
@@ -597,6 +676,68 @@ resilience_double_launch() {
   wait_ports_free
 }
 
+# 6. Update with residual services: launchd services still running during update
+resilience_update_residual() {
+  log "--- Resilience: update with residual launchd services ---"
+  resilience_reset
+  resilience_launch "$1"
+  verify_services "update-residual-before" || true
+
+  local app_pid
+  app_pid="$(cat "$CAPTURE_DIR/packaged-app.pid")"
+
+  # Verify launchd services are registered
+  local controller_registered=false
+  local openclaw_registered=false
+  launchctl list 2>/dev/null | grep -q "io.nexu.controller" && controller_registered=true
+  launchctl list 2>/dev/null | grep -q "io.nexu.openclaw" && openclaw_registered=true
+  log "Services before update: controller=$controller_registered openclaw=$openclaw_registered"
+
+  # Kill Electron but leave launchd services running (simulate update scenario)
+  log "Killing Electron to simulate update install (leaving launchd services)"
+  kill -9 "$app_pid" 2>/dev/null || true
+  wait "$app_pid" 2>/dev/null || true
+  sleep 2
+
+  # Verify services are still running (they should be — launchd keeps them alive)
+  local controller_alive=false
+  local openclaw_alive=false
+  launchctl list 2>/dev/null | grep -q "io.nexu.controller" && controller_alive=true
+  launchctl list 2>/dev/null | grep -q "io.nexu.openclaw" && openclaw_alive=true
+  log "Services after Electron kill: controller=$controller_alive openclaw=$openclaw_alive"
+
+  # Check if ports are still held by residual services
+  local ports_held
+  ports_held=$(lsof -iTCP:50800 -iTCP:18789 -sTCP:LISTEN -n -P 2>/dev/null | grep -c LISTEN || echo 0)
+  log "Ports still held by residual services: $ports_held"
+
+  # Now simulate "updated app" starting — it should teardown old services and start fresh
+  log "Launching 'updated' app (should teardown residual services)..."
+  resilience_launch "$1"
+  verify_services "update-residual-after" || { log "FAILED: services not healthy after update with residual"; return 1; }
+
+  # Verify the runtime-ports.json was refreshed (not stale)
+  local ports_file
+  ports_file=$(find "$PERSISTENT_HOME" -name "runtime-ports.json" 2>/dev/null | head -1)
+  if [ -n "$ports_file" ]; then
+    local written_pid
+    written_pid=$(python3 -c "import json; d=json.load(open('$ports_file')); print(d.get('electronPid',''))" 2>/dev/null || echo "")
+    local current_pid
+    current_pid=$(cat "$CAPTURE_DIR/packaged-app.pid" 2>/dev/null || echo "")
+    if [ "$written_pid" = "$current_pid" ]; then
+      log "PASSED: runtime-ports.json updated to current Electron pid"
+    else
+      log "WARNING: runtime-ports.json pid=$written_pid, expected=$current_pid"
+    fi
+  fi
+
+  log "PASSED: app handled update with residual services"
+
+  quit_app
+  bash "$REPO_ROOT/scripts/kill-all.sh" > "$CAPTURE_DIR/kill-all-update-residual.log" 2>&1 || true
+  wait_ports_free
+}
+
 # Run all resilience scenarios
 run_resilience() {
   local app_path="$1"
@@ -607,6 +748,7 @@ run_resilience() {
   resilience_port_conflict "$app_path" || failed=$((failed + 1))
   resilience_stale_state "$app_path" || failed=$((failed + 1))
   resilience_double_launch "$app_path" || failed=$((failed + 1))
+  resilience_update_residual "$app_path" || failed=$((failed + 1))
 
   if [ "$failed" -gt 0 ]; then
     log "!!! $failed resilience scenario(s) FAILED"
@@ -635,9 +777,19 @@ dmg_path="$(resolve_artifact dmg)" || exit 1
 zip_path="$(resolve_artifact zip)" || exit 1
 export NEXU_DESKTOP_E2E_ZIP_PATH="$zip_path"
 
-# --- SMOKE ---
+# --- Clean state ---
 cleanup_machine
 wait_ports_free
+# Reset home for smoke/login/resilience (need clean welcome page)
+# Keep home for model/update (test with existing state from prior usage)
+if [ "$MODE" = "smoke" ] || [ "$MODE" = "login" ] || [ "$MODE" = "resilience" ]; then
+  rm -rf "$PERSISTENT_HOME"
+  mkdir -p "$PERSISTENT_HOME"
+  log "Home directory reset to clean state"
+else
+  mkdir -p "$PERSISTENT_HOME"
+  log "Home directory preserved (testing with existing state)"
+fi
 app_path="$(install_from_dmg "$dmg_path")"
 
 if [ "$MODE" = "resilience" ]; then
