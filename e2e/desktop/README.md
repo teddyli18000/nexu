@@ -1,37 +1,37 @@
 # Nexu Desktop E2E Automation
 
-Packaged desktop app 的端到端自动化测试。依赖独立安装，不影响主仓库 `pnpm install`。
+End-to-end test suite for the packaged desktop app. Dependencies are isolated and do not affect the main repo's `pnpm install`.
 
 ## Quick Start
 
 ```bash
 cd e2e/desktop
-npm install           # 安装 Playwright（一次性）
-npm run download      # 下载最新 nightly DMG + ZIP (~500MB)
-npm run test:smoke    # 跑 smoke 验证基本流程
+npm install           # Install Playwright (one-time)
+npm run download      # Download latest nightly DMG + ZIP (~500MB)
+npm run test:smoke    # Run smoke to verify the basics
 ```
 
-## 前置条件
+## Prerequisites
 
-- macOS（ARM64 或 x86_64）
-- Node.js >= 22（`nvm install 22`）
-- **辅助功能权限**：系统设置 → 隐私与安全性 → 辅助功能 → 给 Terminal / iTerm 开启权限（osascript 自动点击退出弹窗需要）
+- macOS (ARM64 or x86_64)
+- Node.js >= 22 (`nvm install 22`)
+- **Accessibility permission**: System Settings → Privacy & Security → Accessibility → enable for Terminal / iTerm (required for osascript to dismiss quit dialogs)
 
-## 测试模式
+## Test Modes
 
-| 命令 | 测试内容 |
-|------|---------|
-| `npm run test:smoke` | DMG 安装 → codesign 验证 → spctl Gatekeeper 检查 → cold start → runtime health |
-| `npm run test:login` | Smoke → 点击「使用 nexu 账号」→ 浏览器 OAuth → 等 connected → workspace 跳转 → Agent 运行中 |
-| `npm run test:model` | Smoke → fake provider 创建 → model A/B 切换 → 验证 runtime-model.json |
-| `npm run test:update` | Smoke → 版本降级 → 本地 update feed → check + download + install |
-| `npm run test:resilience` | Smoke → 5 个边界场景（见下方详情） |
-| `npm test` | 以上全部（full） |
-| `npm run cleanup` | 杀掉所有 Nexu 进程、bootout launchd 服务、释放端口 |
+| Command | What it tests |
+|---------|--------------|
+| `npm run test:smoke` | DMG install → codesign verify → spctl Gatekeeper check → cold start → runtime health |
+| `npm run test:login` | Smoke → click "Use Nexu Account" → browser OAuth → wait connected → workspace redirect → Agent running |
+| `npm run test:model` | Smoke → fake provider setup → model A/B switch → verify runtime-model.json |
+| `npm run test:update` | Smoke → version downgrade → local update feed → check + download + install |
+| `npm run test:resilience` | Smoke → 5 edge-case scenarios (see details below) |
+| `npm test` | All of the above (full) |
+| `npm run cleanup` | Kill all Nexu processes, bootout launchd services, free ports |
 
-## 测试不同的包
+## Testing Different Builds
 
-### Nightly（默认）
+### Nightly (default)
 
 ```bash
 npm run download && npm test
@@ -39,7 +39,7 @@ npm run download && npm test
 
 ### Beta / Stable
 
-通过环境变量指定下载 URL：
+Override download URLs via environment variables:
 
 ```bash
 # Beta
@@ -53,168 +53,168 @@ NEXU_DESKTOP_E2E_ZIP_URL=https://desktop-releases.nexu.io/stable/arm64/nexu-late
 npm run download && npm test
 ```
 
-### 本地打的包（unsigned）
+### Local Builds (unsigned)
 
-直接把 DMG 和 ZIP 复制到 `artifacts/` 目录，跳过签名检查：
+Copy DMG and ZIP into `artifacts/` and skip signature checks:
 
 ```bash
-# 在主仓库打包
+# Build in the main repo
 pnpm dist:mac:unsigned:arm64
 
-# 复制到 E2E artifacts
+# Copy to E2E artifacts
 cp apps/desktop/release/*.dmg apps/desktop/release/*.zip e2e/desktop/artifacts/
 
-# 跑测试（跳过 codesign/spctl）
+# Run tests (skip codesign/spctl)
 cd e2e/desktop
 NEXU_DESKTOP_E2E_SKIP_CODESIGN=true npm run test:model
 ```
 
-### Resilience 模式（边界场景）
+### Resilience Mode (Edge Cases)
 
-`test:resilience` 验证 app 在异常条件下的恢复能力：
+`test:resilience` verifies the app's ability to recover from abnormal conditions:
 
-| 场景 | 模拟什么 | 预期行为 |
-|------|---------|---------|
-| **Crash Recovery** | `kill -9` Electron 主进程（模拟 Force Quit） | launchd 服务存活，重启后 app 正确 attach 或重建 |
-| **Orphan Cleanup** | 杀 Electron 留下 controller/openclaw 孤儿进程 | 重启后 app 检测并清理孤儿，正常启动 |
-| **Port Conflict** | 在 50800 端口启动 dummy listener，然后启动 app | app 检测到端口占用，选择备用端口或报错退出 |
-| **Stale State** | 写入假的 `runtime-ports.json`（指向不存在的服务） | app 检测到 stale session，忽略假状态，fresh start |
-| **Double Launch** | app 运行中再启动第二个实例 | 第二个实例退出（single-instance lock），第一个不受影响 |
+| Scenario | What it simulates | Expected behavior |
+|----------|------------------|-------------------|
+| **Crash Recovery** | `kill -9` the Electron main process (Force Quit simulation) | launchd services survive; app attaches or rebuilds on restart |
+| **Orphan Cleanup** | Kill Electron, leave controller/openclaw as orphan processes | App detects and cleans up orphans on restart, starts fresh |
+| **Port Conflict** | Occupy port 50800 with a dummy listener before launching | App detects EADDRINUSE, picks an alternative port or exits gracefully |
+| **Stale State** | Write a fake `runtime-ports.json` pointing to non-existent services | App detects stale session, ignores fake state, performs fresh start |
+| **Double Launch** | Start a second instance while the app is already running | Second instance exits (single-instance lock), first instance unaffected |
 
-### Login 模式注意事项
+### Login Mode Notes
 
-`test:login` 需要在浏览器中完成 OAuth 登录：
+`test:login` requires completing OAuth login in a browser:
 
-1. 首次运行时，脚本会自动打开浏览器跳转到 nexu.io 登录页
-2. 在浏览器中登录你的 nexu 账号
-3. 登录成功后脚本会自动检测到并继续
-4. 登录状态保存在 `.tmp/home/`，后续运行会自动复用（不需要重新登录）
-5. 如需重新登录，删除 `.tmp/home/.nexu/` 即可
+1. On first run, the script opens a browser to the nexu.io login page
+2. Complete login in the browser
+3. The script detects login success automatically and continues
+4. Login state is persisted in `.tmp/home/` and reused across runs
+5. To force re-login, delete `.tmp/home/.nexu/`
 
 ## CI
 
 GitHub Actions workflow: `.github/workflows/desktop-e2e.yml`
 
-### 自动触发
+### Automatic Triggers
 
-E2E 在以下场景自动运行，**不阻塞** build/release 的状态：
+E2E runs automatically after builds, **without blocking** the build/release status:
 
-| 触发来源 | 何时触发 | 测什么 |
-|----------|---------|--------|
-| `desktop-nightly.yml` | Nightly build 完成后 | 下载 nightly 包 → `model` 模式 |
-| `desktop-release.yml` | Release 发布完成后 | 下载对应 channel (beta/stable) 包 → `model` 模式 |
-| 定时任务 | 每天 03:00 UTC (11:00 CST) | 下载 nightly 包 → `model` 模式 |
+| Trigger | When | What it tests |
+|---------|------|---------------|
+| `desktop-nightly.yml` | After nightly build completes | Downloads nightly → `model` mode |
+| `desktop-release.yml` | After release publishes | Downloads matching channel (beta/stable) → `model` mode |
+| Scheduled | Daily at 03:00 UTC (11:00 CST) | Downloads nightly → `model` mode |
 
-Build/Release workflow 完成后会**异步触发** E2E workflow，E2E 的成功/失败不影响 build/release 的绿灯状态。
+Build/Release workflows **asynchronously dispatch** the E2E workflow. E2E success/failure does not affect the build/release green status.
 
-### 手动触发
+### Manual Trigger
 
-在 GitHub Actions 页面手动触发时，可以选择三个参数：
+When triggering manually from the GitHub Actions page, three parameters are available:
 
-| 参数 | 选项 | 说明 |
-|------|------|------|
-| **Source** | `download`（默认）/ `build` | `download` 下载已发布的包；`build` 从当前分支本地打包 unsigned 后测试 |
-| **Channel** | `nightly`（默认）/ `beta` / `stable` | 仅 `download` 模式有效，决定下载哪个 channel 的包 |
-| **Mode** | `smoke` / `login` / `model`（默认）/ `update` / `full` | 选择跑哪些测试场景 |
+| Parameter | Options | Description |
+|-----------|---------|-------------|
+| **Source** | `download` (default) / `build` | `download` fetches a published build; `build` checks out the current branch and builds unsigned locally |
+| **Channel** | `nightly` (default) / `beta` / `stable` | Only applies to `download` source — selects which channel to fetch |
+| **Mode** | `smoke` / `login` / `model` (default) / `update` / `resilience` / `full` | Which test scenarios to run |
 
-#### Source = download（测试已发布的包）
-
-```
-手动触发 → 下载指定 channel 的签名包 → 跑 E2E
-```
-
-典型场景：验证刚发布的 nightly/beta/stable 包是否正常。
-
-#### Source = build（测试当前分支）
+#### Source = download (test published builds)
 
 ```
-手动触发 → checkout 当前分支 → pnpm install → 本地打 unsigned 包 → 跑 E2E（跳过签名验证）
+Trigger → download signed build for the selected channel → run E2E
 ```
 
-典型场景：在 feature 分支上验证改动是否影响打包后的行为，不需要先发布。
+Typical use case: verify a just-published nightly/beta/stable build works correctly.
 
-### 失败诊断
+#### Source = build (test current branch)
 
-CI 失败后自动上传 `captures/` 为 GitHub Actions artifact（保留 14 天），包含录屏、截图、日志、状态快照。在 Actions run 页面的 Artifacts 区域下载查看。
+```
+Trigger → checkout current branch → pnpm install → build unsigned → run E2E (skip codesign)
+```
 
-### Mac mini Self-hosted Runner 部署
+Typical use case: verify changes on a feature branch don't break the packaged app, without publishing first.
+
+### Failure Diagnostics
+
+On CI failure, `captures/` is automatically uploaded as a GitHub Actions artifact (retained for 14 days). Download from the Artifacts section of the Actions run page.
+
+### Mac mini Self-hosted Runner Setup
 
 ```bash
-# 首次设置
+# One-time setup
 cd e2e/desktop
 npm install
 
-# 确保辅助功能权限已开启（系统设置 → 隐私与安全性 → 辅助功能）
-# 需要给 GitHub Actions runner 进程或其父 shell 开启权限
+# Enable Accessibility permission (System Settings → Privacy & Security → Accessibility)
+# Grant permission to the GitHub Actions runner process or its parent shell
 
-# 日常使用（CI 自动触发，或手动）
+# Daily usage (CI triggers automatically, or run manually)
 npm run download && npm test
 ```
 
-## 诊断和排错
+## Diagnostics and Debugging
 
-测试运行时会自动采集诊断信息到 `captures/` 目录：
+The test runner automatically captures diagnostics into `captures/`:
 
-### 始终采集
+### Always Captured
 
-| 文件 | 内容 |
-|------|------|
-| `captures/screen-recording.mov` | 系统级全屏录制（OS 弹窗、浏览器登录、退出对话框全部可见） |
-| `captures/packaged-app.log` | Electron 主进程完整日志 |
-| `captures/packaged-logs/` | Desktop runtime 日志 |
-| `captures/runtime-unit-logs/` | Controller、OpenClaw 各 unit 日志 |
-| `captures/codesign-verify.log` | codesign 验证详情 |
-| `captures/spctl-assess.log` | Gatekeeper 评估结果 |
-| `captures/kill-all.log` | 进程清理日志 |
+| File | Content |
+|------|---------|
+| `captures/screen-recording.mov` | System-level full-screen recording (OS dialogs, browser login, quit prompts — all visible) |
+| `captures/packaged-app.log` | Electron main process full log |
+| `captures/packaged-logs/` | Desktop runtime logs |
+| `captures/runtime-unit-logs/` | Per-unit logs (controller, openclaw) |
+| `captures/codesign-verify.log` | codesign verification details |
+| `captures/spctl-assess.log` | Gatekeeper assessment result |
+| `captures/kill-all.log` | Process cleanup log |
 
-### 测试结束时采集
+### Captured at Test End
 
-| 文件 | 内容 |
-|------|------|
-| `captures/state-snapshot/dot-nexu/config.json` | nexu 配置（API key 已脱敏） |
-| `captures/state-snapshot/openclaw-state/openclaw.json` | OpenClaw 运行时配置 |
-| `captures/state-snapshot/openclaw-state/nexu-runtime-model.json` | 当前选中的模型 |
-| `captures/state-snapshot/runtime-snapshot.txt` | 进程列表、端口占用、launchd 状态、controller/openclaw health |
+| File | Content |
+|------|---------|
+| `captures/state-snapshot/dot-nexu/config.json` | Nexu config (API keys redacted) |
+| `captures/state-snapshot/openclaw-state/openclaw.json` | OpenClaw runtime config |
+| `captures/state-snapshot/openclaw-state/nexu-runtime-model.json` | Currently selected model |
+| `captures/state-snapshot/runtime-snapshot.txt` | Process list, port usage, launchd status, controller/openclaw health |
 
-### 失败时额外采集
+### Captured on Failure Only
 
-| 文件 | 内容 |
-|------|------|
-| `captures/failure-screenshot.png` | 失败瞬间的系统截图 |
-| `captures/{scenario}-failure-screenshot.png` | Playwright 对 webview 页面的截图 |
-| `captures/{scenario}-failure-page.html` | 失败时的页面 HTML |
+| File | Content |
+|------|---------|
+| `captures/failure-screenshot.png` | System screenshot at the moment of failure |
+| `captures/{scenario}-failure-screenshot.png` | Playwright screenshot of the webview page |
+| `captures/{scenario}-failure-page.html` | Page HTML at failure time |
 
-### 如何排错
+### How to Debug
 
-1. **看录屏** — `screen-recording.mov` 能看到整个测试过程，包括 OS 弹窗
-2. **看截图** — 失败截图能快速定位 UI 状态
-3. **看 packaged-app.log** — 搜 `error`、`fail`、`ERR_` 关键字
-4. **看状态快照** — `runtime-snapshot.txt` 能看到失败时谁占了什么端口
-5. **看 runtime-model.json** — model switch 失败时检查 `selectedModelRef` 值
+1. **Watch the recording** — `screen-recording.mov` shows the entire test, including OS dialogs
+2. **Check screenshots** — failure screenshots quickly reveal UI state
+3. **Read packaged-app.log** — search for `error`, `fail`, `ERR_`
+4. **Check state snapshot** — `runtime-snapshot.txt` shows who owns which port at failure time
+5. **Check runtime-model.json** — for model switch failures, inspect `selectedModelRef`
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `NEXU_DESKTOP_E2E_DMG_URL` | nightly arm64 DMG | 要测试的 DMG 下载地址 |
-| `NEXU_DESKTOP_E2E_ZIP_URL` | nightly arm64 ZIP | 要测试的 ZIP 下载地址 |
-| `NEXU_DESKTOP_E2E_SKIP_CODESIGN` | `false` | 设为 `true` 跳过签名验证（本地 unsigned 包） |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXU_DESKTOP_E2E_DMG_URL` | nightly arm64 DMG | DMG download URL |
+| `NEXU_DESKTOP_E2E_ZIP_URL` | nightly arm64 ZIP | ZIP download URL |
+| `NEXU_DESKTOP_E2E_SKIP_CODESIGN` | `false` | Set to `true` to skip signature verification (for unsigned local builds) |
 
-## 项目结构
+## Project Structure
 
 ```
 e2e/desktop/
-├── package.json              # 入口：npm install / npm test / npm run download
+├── package.json              # Entry point: npm install / npm test / npm run download
 ├── .gitignore                # node_modules, artifacts, captures, .tmp
 ├── README.md
 ├── scripts/
-│   ├── setup.sh              # 环境检查 + Playwright browser 安装
-│   ├── download-nightly.sh   # 下载签名构建产物
-│   ├── run-e2e.sh            # 主测试入口（bash）
-│   └── kill-all.sh           # 清场：launchd + 进程 + 端口
+│   ├── setup.sh              # Environment check + Playwright browser install
+│   ├── download-nightly.sh   # Download signed build artifacts
+│   ├── run-e2e.sh            # Main test runner (bash)
+│   └── kill-all.sh           # Cleanup: launchd + processes + ports
 ├── tests/
-│   └── packaged-e2e.mjs      # Playwright 场景（login、model switch、update）
-├── artifacts/                # 下载的 DMG/ZIP（gitignored）
-├── captures/                 # 测试日志和诊断（gitignored）
-└── .tmp/                     # 持久化 HOME 目录，保存登录状态（gitignored）
+│   └── packaged-e2e.mjs      # Playwright scenarios (login, model switch, update)
+├── artifacts/                # Downloaded DMG/ZIP (gitignored)
+├── captures/                 # Test logs and diagnostics (gitignored)
+└── .tmp/                     # Persistent HOME directory for login state (gitignored)
 ```
