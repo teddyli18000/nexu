@@ -53,12 +53,29 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (["full", "model", "update", "login"].includes(arg)) { args.mode = arg; continue; }
-    if (arg === "--app") { args.appPath = argv[++i]; continue; }
-    if (arg === "--exe") { args.executablePath = argv[++i]; continue; }
-    if (arg === "--zip") { args.zipPath = argv[++i]; continue; }
-    if (arg === "--user-data") { args.userDataDir = argv[++i]; continue; }
-    if (arg === "--capture-dir") { args.captureDir = argv[++i]; continue; }
+    if (["full", "model", "update", "login"].includes(arg)) {
+      args.mode = arg;
+      continue;
+    }
+    if (arg === "--app") {
+      args.appPath = argv[++i];
+      continue;
+    }
+    if (arg === "--exe") {
+      args.executablePath = argv[++i];
+      continue;
+    }
+    if (arg === "--zip") {
+      args.zipPath = argv[++i];
+      continue;
+    }
+    if (arg === "--user-data") {
+      args.userDataDir = argv[++i];
+      continue;
+    }
+    if (arg === "--capture-dir") {
+      args.captureDir = argv[++i];
+    }
   }
   return args;
 }
@@ -76,13 +93,15 @@ async function createFakeProviderServer() {
 
     if (req.method === "GET" && url.pathname === "/v1/models") {
       res.writeHead(200);
-      res.end(JSON.stringify({
-        object: "list",
-        data: [
-          { id: "test-a", object: "model", owned_by: "nexu-e2e" },
-          { id: "test-b", object: "model", owned_by: "nexu-e2e" },
-        ],
-      }));
+      res.end(
+        JSON.stringify({
+          object: "list",
+          data: [
+            { id: "test-a", object: "model", owned_by: "nexu-e2e" },
+            { id: "test-b", object: "model", owned_by: "nexu-e2e" },
+          ],
+        }),
+      );
       return;
     }
 
@@ -90,12 +109,23 @@ async function createFakeProviderServer() {
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const payload = raw ? JSON.parse(raw) : {};
-      const model = typeof payload.model === "string" ? payload.model : "unknown";
+      const model =
+        typeof payload.model === "string" ? payload.model : "unknown";
       res.writeHead(200);
-      res.end(JSON.stringify({
-        id: "chatcmpl-e2e", object: "chat.completion", model,
-        choices: [{ index: 0, message: { role: "assistant", content: `model=${model}` }, finish_reason: "stop" }],
-      }));
+      res.end(
+        JSON.stringify({
+          id: "chatcmpl-e2e",
+          object: "chat.completion",
+          model,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: `model=${model}` },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
       return;
     }
 
@@ -105,12 +135,17 @@ async function createFakeProviderServer() {
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  assert(address && typeof address === "object", "fake provider server failed to bind");
+  assert(
+    address && typeof address === "object",
+    "fake provider server failed to bind",
+  );
   return {
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     requests,
     async close() {
-      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
     },
   };
 }
@@ -147,7 +182,10 @@ async function buildUpdateFeedServer(zipPath, version) {
       return;
     }
     if (url.pathname === `/${zipName}`) {
-      res.writeHead(200, { "Content-Type": "application/zip", "Content-Length": String(zipSize) });
+      res.writeHead(200, {
+        "Content-Type": "application/zip",
+        "Content-Length": String(zipSize),
+      });
       res.end(zipBuffer);
       return;
     }
@@ -157,12 +195,17 @@ async function buildUpdateFeedServer(zipPath, version) {
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  assert(address && typeof address === "object", "update feed server failed to bind");
+  assert(
+    address && typeof address === "object",
+    "update feed server failed to bind",
+  );
   return {
     feedUrl: `http://127.0.0.1:${address.port}`,
     requests,
     async close() {
-      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
     },
   };
 }
@@ -172,8 +215,13 @@ async function buildUpdateFeedServer(zipPath, version) {
 // ---------------------------------------------------------------------------
 
 async function extractVersionFromInfoPlist(appPath) {
-  const plist = await readFile(path.join(appPath, "Contents", "Info.plist"), "utf8");
-  const match = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
+  const plist = await readFile(
+    path.join(appPath, "Contents", "Info.plist"),
+    "utf8",
+  );
+  const match = plist.match(
+    /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/,
+  );
   if (!match) throw new Error("Unable to read CFBundleShortVersionString");
   return match[1];
 }
@@ -182,8 +230,14 @@ async function patchInfoPlistVersion(appPath, nextVersion) {
   const plistPath = path.join(appPath, "Contents", "Info.plist");
   const plist = await readFile(plistPath, "utf8");
   const updated = plist
-    .replace(/(<key>CFBundleShortVersionString<\/key>\s*<string>)([^<]+)(<\/string>)/, `$1${nextVersion}$3`)
-    .replace(/(<key>CFBundleVersion<\/key>\s*<string>)([^<]+)(<\/string>)/, `$1${nextVersion}$3`);
+    .replace(
+      /(<key>CFBundleShortVersionString<\/key>\s*<string>)([^<]+)(<\/string>)/,
+      `$1${nextVersion}$3`,
+    )
+    .replace(
+      /(<key>CFBundleVersion<\/key>\s*<string>)([^<]+)(<\/string>)/,
+      `$1${nextVersion}$3`,
+    );
   await writeFile(plistPath, updated, "utf8");
 }
 
@@ -196,14 +250,21 @@ async function launchPackagedApp({ executablePath, env }) {
   const app = await electron.launch({ executablePath, env });
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await page.waitForFunction(() => Boolean(window.nexuHost?.invoke), undefined, { timeout: 60_000 });
+  await page.waitForFunction(
+    () => Boolean(window.nexuHost?.invoke),
+    undefined,
+    { timeout: 60_000 },
+  );
   return { app, page };
 }
 
 function execFileAsync(command, args) {
   return new Promise((resolve, reject) => {
     execFile(command, args, (error, stdout, stderr) => {
-      if (error) { reject(new Error(stderr || stdout || error.message)); return; }
+      if (error) {
+        reject(new Error(stderr || stdout || error.message));
+        return;
+      }
       resolve({ stdout, stderr });
     });
   });
@@ -225,7 +286,9 @@ async function clickQuitDialog() {
             ]);
             log(`Clicked "${label}" on window ${winIdx}`);
             return true;
-          } catch { /* try next window */ }
+          } catch {
+            /* try next window */
+          }
         }
         // Also try sheet (modal) on each window
         for (const winIdx of [1, 2]) {
@@ -236,9 +299,13 @@ async function clickQuitDialog() {
             ]);
             log(`Clicked "${label}" on sheet of window ${winIdx}`);
             return true;
-          } catch { /* try next */ }
+          } catch {
+            /* try next */
+          }
         }
-      } catch { /* try next label */ }
+      } catch {
+        /* try next label */
+      }
     }
     await sleep(500);
   }
@@ -304,7 +371,10 @@ async function waitForDesktopReady() {
 
 async function runModelSwitchScenario({ page, userDataDir, captureDir }) {
   const controllerBase = await page.evaluate(async () => {
-    const r = await window.nexuHost.invoke("env:get-controller-base-url", undefined);
+    const r = await window.nexuHost.invoke(
+      "env:get-controller-base-url",
+      undefined,
+    );
     return r.controllerBaseUrl;
   });
   log(`Controller: ${controllerBase}`);
@@ -315,12 +385,15 @@ async function runModelSwitchScenario({ page, userDataDir, captureDir }) {
 
   try {
     log("Verifying provider");
-    const verifyRes = await fetch(`${controllerBase}/api/v1/providers/openai/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({ apiKey: "sk-e2e", baseUrl: provider.baseUrl }),
-    });
+    const verifyRes = await fetch(
+      `${controllerBase}/api/v1/providers/openai/verify`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ apiKey: "sk-e2e", baseUrl: provider.baseUrl }),
+      },
+    );
     assert(verifyRes.ok, `verify failed: ${verifyRes.status}`);
     const verifyData = await verifyRes.json();
     assert(verifyData.valid === true, `invalid provider: ${verifyData.valid}`);
@@ -332,8 +405,11 @@ async function runModelSwitchScenario({ page, userDataDir, captureDir }) {
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        apiKey: "sk-e2e", baseUrl: provider.baseUrl, enabled: true,
-        displayName: "OpenAI E2E", authMode: "apiKey",
+        apiKey: "sk-e2e",
+        baseUrl: provider.baseUrl,
+        enabled: true,
+        displayName: "OpenAI E2E",
+        authMode: "apiKey",
         modelsJson: JSON.stringify(["test-a", "test-b"]),
       }),
     });
@@ -351,23 +427,32 @@ async function runModelSwitchScenario({ page, userDataDir, captureDir }) {
     assert(modelB, "model test-b missing");
     log(`Models: ${modelA}, ${modelB}`);
 
-    const runtimeModelPath = path.join(userDataDir, "runtime", "openclaw", "state", "nexu-runtime-model.json");
+    const runtimeModelPath = path.join(
+      userDataDir,
+      "runtime",
+      "openclaw",
+      "state",
+      "nexu-runtime-model.json",
+    );
 
     const switchModel = async (modelId) => {
       log(`Switching to ${modelId}`);
-      const r = await fetch(`${controllerBase}/api/internal/desktop/default-model`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(15_000),
-        body: JSON.stringify({ modelId }),
-      });
+      const r = await fetch(
+        `${controllerBase}/api/internal/desktop/default-model`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15_000),
+          body: JSON.stringify({ modelId }),
+        },
+      );
       assert(r.ok, `switch failed: ${r.status}`);
       await waitFor(async () => {
         const raw = await readFile(runtimeModelPath, "utf8");
         const parsed = JSON.parse(raw);
         // selectedModelRef may have a provider prefix (e.g. "byok_openai/openai/test-a")
         const ref = parsed.selectedModelRef ?? "";
-        return (ref === modelId || ref.endsWith(`/${modelId}`)) ? parsed : false;
+        return ref === modelId || ref.endsWith(`/${modelId}`) ? parsed : false;
       }, `runtime model -> ${modelId}`);
       log(`Switched to ${modelId}`);
     };
@@ -375,7 +460,11 @@ async function runModelSwitchScenario({ page, userDataDir, captureDir }) {
     await switchModel(modelA);
     await switchModel(modelB);
 
-    await writeFile(path.join(captureDir, "fake-provider-requests.json"), JSON.stringify(provider.requests, null, 2) + "\n", "utf8");
+    await writeFile(
+      path.join(captureDir, "fake-provider-requests.json"),
+      `${JSON.stringify(provider.requests, null, 2)}\n`,
+      "utf8",
+    );
     log("Model switch scenario PASSED");
   } finally {
     await provider.close();
@@ -401,7 +490,8 @@ async function runUpdateScenario({ appPath, zipPath, captureDir }) {
   const userDataDir = path.join(runRoot, "user-data");
   const homeDir = path.join(runRoot, "home");
 
-  let app, page;
+  let app;
+  let page;
   try {
     ({ app, page } = await launchPackagedApp({
       executablePath: path.join(appPath, "Contents", "MacOS", "Nexu"),
@@ -417,10 +507,16 @@ async function runUpdateScenario({ appPath, zipPath, captureDir }) {
     log("Update app ready");
 
     const initialVersion = await page.evaluate(async () => {
-      const r = await window.nexuHost.invoke("update:get-current-version", undefined);
+      const r = await window.nexuHost.invoke(
+        "update:get-current-version",
+        undefined,
+      );
       return r.version;
     });
-    assert(initialVersion === downgradedVersion, `expected ${downgradedVersion}, got ${initialVersion}`);
+    assert(
+      initialVersion === downgradedVersion,
+      `expected ${downgradedVersion}, got ${initialVersion}`,
+    );
 
     const updateAvailable = await page.evaluate(async () => {
       const r = await window.nexuHost.invoke("update:check", undefined);
@@ -453,7 +549,11 @@ async function runUpdateScenario({ appPath, zipPath, captureDir }) {
       1_000,
     );
 
-    await writeFile(path.join(captureDir, "update-feed-requests.json"), JSON.stringify(updateFeed.requests, null, 2) + "\n", "utf8");
+    await writeFile(
+      path.join(captureDir, "update-feed-requests.json"),
+      `${JSON.stringify(updateFeed.requests, null, 2)}\n`,
+      "utf8",
+    );
     log("Update scenario PASSED");
   } finally {
     if (app) await app.close().catch(() => {});
@@ -473,12 +573,18 @@ async function getWebviewPage(app, timeout = 30_000) {
     const windows = app.windows();
     for (const w of windows) {
       const url = w.url();
-      if (url.includes("50810") || url.includes("workspace") || url.includes("welcome")) {
+      if (
+        url.includes("50810") ||
+        url.includes("workspace") ||
+        url.includes("welcome")
+      ) {
         log(`Found webview page: ${url}`);
         return w;
       }
     }
-    log(`Waiting for webview... (${windows.length} windows: ${windows.map(w => w.url()).join(", ")})`);
+    log(
+      `Waiting for webview... (${windows.length} windows: ${windows.map((w) => w.url()).join(", ")})`,
+    );
     await sleep(2000);
   }
   throw new Error("Webview page not found");
@@ -486,12 +592,17 @@ async function getWebviewPage(app, timeout = 30_000) {
 
 async function runLoginScenario({ app, page, captureDir }) {
   const controllerBase = await page.evaluate(async () => {
-    const r = await window.nexuHost.invoke("env:get-controller-base-url", undefined);
+    const r = await window.nexuHost.invoke(
+      "env:get-controller-base-url",
+      undefined,
+    );
     return r.controllerBaseUrl;
   });
 
   // Check if already logged in
-  const statusRes = await fetch(`${controllerBase}/api/internal/desktop/cloud-status`);
+  const statusRes = await fetch(
+    `${controllerBase}/api/internal/desktop/cloud-status`,
+  );
   if (statusRes.ok) {
     const status = await statusRes.json();
     if (status?.connected) {
@@ -512,7 +623,10 @@ async function runLoginScenario({ app, page, captureDir }) {
 
   // Step 2: Click "使用 nexu 账号" button on welcome page
   log("Looking for login button in webview...");
-  const loginButton = webPage.locator("button").filter({ hasText: /nexu/i }).first();
+  const loginButton = webPage
+    .locator("button")
+    .filter({ hasText: /nexu/i })
+    .first();
   await loginButton.waitFor({ state: "visible", timeout: 30_000 });
   log("Found login button, clicking...");
   log("Found login button, clicking...");
@@ -542,7 +656,11 @@ async function runLoginScenario({ app, page, captureDir }) {
 
   if (authBrowserUrl) {
     log(`Browser auth URL: ${authBrowserUrl}`);
-    await writeFile(path.join(captureDir, "auth-browser-url.txt"), authBrowserUrl + "\n", "utf8");
+    await writeFile(
+      path.join(captureDir, "auth-browser-url.txt"),
+      `${authBrowserUrl}\n`,
+      "utf8",
+    );
   } else {
     // Fallback: check via the controller API
     log("Could not capture browser URL via IPC hook, checking controller...");
@@ -555,11 +673,15 @@ async function runLoginScenario({ app, page, captureDir }) {
 
   await waitFor(
     async () => {
-      const r = await fetch(`${controllerBase}/api/internal/desktop/cloud-status`);
+      const r = await fetch(
+        `${controllerBase}/api/internal/desktop/cloud-status`,
+      );
       if (!r.ok) return false;
       const data = await r.json();
       if (data?.connected) {
-        log(`Logged in as: ${data.userName ?? "unknown"} (${data.userEmail ?? ""})`);
+        log(
+          `Logged in as: ${data.userName ?? "unknown"} (${data.userEmail ?? ""})`,
+        );
         return data;
       }
       if (data?.polling) {
@@ -581,7 +703,10 @@ async function runLoginScenario({ app, page, captureDir }) {
 
   const currentUrl = webPage.url();
   log(`Current URL: ${currentUrl}`);
-  assert(currentUrl.includes("workspace") || currentUrl.includes("home"), `Expected workspace page, got: ${currentUrl}`);
+  assert(
+    currentUrl.includes("workspace") || currentUrl.includes("home"),
+    `Expected workspace page, got: ${currentUrl}`,
+  );
   log("On workspace/home page");
 
   // Step 5: Wait for agent status to become "运行中" (alive)
@@ -592,10 +717,14 @@ async function runLoginScenario({ app, page, captureDir }) {
       if (!r.ok) return false;
       const data = await r.json();
       if (data?.agent?.alive) {
-        log(`Agent alive with model: ${data.agent.modelName ?? data.agent.modelId ?? "unknown"}`);
+        log(
+          `Agent alive with model: ${data.agent.modelName ?? data.agent.modelId ?? "unknown"}`,
+        );
         return data;
       }
-      log(`Agent status: alive=${data?.agent?.alive}, gatewayConnected=${data?.gatewayConnected}`);
+      log(
+        `Agent status: alive=${data?.agent?.alive}, gatewayConnected=${data?.gatewayConnected}`,
+      );
       return false;
     },
     "agent to become alive (运行中)",
@@ -605,7 +734,11 @@ async function runLoginScenario({ app, page, captureDir }) {
 
   await writeFile(
     path.join(captureDir, "login-scenario-result.json"),
-    JSON.stringify({ status: "passed", timestamp: new Date().toISOString() }, null, 2) + "\n",
+    `${JSON.stringify(
+      { status: "passed", timestamp: new Date().toISOString() },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
   log("Login + Agent Ready scenario PASSED");
@@ -620,7 +753,10 @@ async function main() {
   assert(args.appPath, "Missing --app or PACKAGED_APP");
   assert(args.executablePath, "Missing --exe or PACKAGED_EXECUTABLE");
   assert(args.userDataDir, "Missing --user-data or PACKAGED_USER_DATA_DIR");
-  assert(args.captureDir, "Missing --capture-dir or NEXU_DESKTOP_E2E_CAPTURE_DIR");
+  assert(
+    args.captureDir,
+    "Missing --capture-dir or NEXU_DESKTOP_E2E_CAPTURE_DIR",
+  );
 
   await stat(args.executablePath);
   await stat(args.appPath);
@@ -633,10 +769,14 @@ async function main() {
     HOME: homeDir,
   };
 
-  let app, page;
+  let app;
+  let page;
   try {
     if (args.mode === "login") {
-      ({ app, page } = await launchPackagedApp({ executablePath: args.executablePath, env: launchEnv }));
+      ({ app, page } = await launchPackagedApp({
+        executablePath: args.executablePath,
+        env: launchEnv,
+      }));
       await waitForDesktopReady();
       await runLoginScenario({ app, page, captureDir: args.captureDir });
       await quitPackagedApp(page, app);
@@ -644,15 +784,26 @@ async function main() {
     }
 
     if (args.mode === "model" || args.mode === "full") {
-      ({ app, page } = await launchPackagedApp({ executablePath: args.executablePath, env: launchEnv }));
+      ({ app, page } = await launchPackagedApp({
+        executablePath: args.executablePath,
+        env: launchEnv,
+      }));
       await waitForDesktopReady();
-      await runModelSwitchScenario({ page, userDataDir: args.userDataDir, captureDir: args.captureDir });
+      await runModelSwitchScenario({
+        page,
+        userDataDir: args.userDataDir,
+        captureDir: args.captureDir,
+      });
       await quitPackagedApp(page, app);
       app = null;
     }
 
     if (args.mode === "update" || args.mode === "full") {
-      await runUpdateScenario({ appPath: args.appPath, zipPath: args.zipPath, captureDir: args.captureDir });
+      await runUpdateScenario({
+        appPath: args.appPath,
+        zipPath: args.zipPath,
+        captureDir: args.captureDir,
+      });
     }
   } finally {
     if (app) await app.close().catch(() => {});
