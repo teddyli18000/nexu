@@ -7,6 +7,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -124,6 +128,8 @@ function makeBootstrapEnv(
   };
 }
 
+const originalPlatform = process.platform;
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -226,7 +232,7 @@ describe("getDefaultPlistDir", () => {
       "../../apps/desktop/main/services/launchd-bootstrap"
     );
     const dir = getDefaultPlistDir(true);
-    expect(dir).toContain(".tmp/launchd");
+    expect(normalizePath(dir)).toContain(".tmp/launchd");
   });
 
   it("returns ~/Library/LaunchAgents for prod", async () => {
@@ -234,7 +240,7 @@ describe("getDefaultPlistDir", () => {
       "../../apps/desktop/main/services/launchd-bootstrap"
     );
     const dir = getDefaultPlistDir(false);
-    expect(dir).toBe("/Users/testuser/Library/LaunchAgents");
+    expect(normalizePath(dir)).toBe("/Users/testuser/Library/LaunchAgents");
   });
 });
 
@@ -243,14 +249,14 @@ describe("getLogDir", () => {
     const { getLogDir } = await import(
       "../../apps/desktop/main/services/launchd-bootstrap"
     );
-    expect(getLogDir("/custom/home")).toBe("/custom/home/logs");
+    expect(normalizePath(getLogDir("/custom/home"))).toBe("/custom/home/logs");
   });
 
   it("returns ~/.nexu/logs when nexuHome is not provided", async () => {
     const { getLogDir } = await import(
       "../../apps/desktop/main/services/launchd-bootstrap"
     );
-    expect(getLogDir()).toBe("/Users/testuser/.nexu/logs");
+    expect(normalizePath(getLogDir())).toBe("/Users/testuser/.nexu/logs");
   });
 });
 
@@ -261,13 +267,13 @@ describe("resolveLaunchdPaths", () => {
     );
     const paths = await resolveLaunchdPaths(false, "/ignored");
 
-    expect(paths.controllerEntryPath).toContain(
+    expect(normalizePath(paths.controllerEntryPath)).toContain(
       "apps/controller/dist/index.js",
     );
-    expect(paths.openclawPath).toContain(
+    expect(normalizePath(paths.openclawPath)).toContain(
       "openclaw-runtime/node_modules/openclaw/openclaw.mjs",
     );
-    expect(paths.controllerCwd).toContain("apps/controller");
+    expect(normalizePath(paths.controllerCwd)).toContain("apps/controller");
   });
 
   it("resolves packaged paths to external locations outside .app", async () => {
@@ -277,19 +283,27 @@ describe("resolveLaunchdPaths", () => {
     const paths = await resolveLaunchdPaths(true, "/Resources", "1.0.0");
 
     // Node runner should be outside .app (in ~/.nexu/runtime/nexu-runner.app/)
-    expect(paths.nodePath).toContain(".nexu/runtime/nexu-runner.app");
-    expect(paths.nodePath).not.toContain("/Resources");
+    expect(normalizePath(paths.nodePath)).toContain(
+      ".nexu/runtime/nexu-runner.app",
+    );
+    expect(normalizePath(paths.nodePath)).not.toContain("/Resources");
     // Controller should be outside .app (in ~/.nexu/runtime/controller-sidecar/)
-    expect(paths.controllerEntryPath).toContain(
+    expect(normalizePath(paths.controllerEntryPath)).toContain(
       ".nexu/runtime/controller-sidecar/dist/index.js",
     );
-    expect(paths.controllerCwd).toContain(".nexu/runtime/controller-sidecar");
+    expect(normalizePath(paths.controllerCwd)).toContain(
+      ".nexu/runtime/controller-sidecar",
+    );
   });
 });
 
 describe("bootstrapWithLaunchd", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(process, "platform", {
+      value: "darwin",
+      configurable: true,
+    });
 
     // Default: no services running, not installed
     mockLaunchdManager.getServiceStatus.mockResolvedValue({
@@ -309,6 +323,10 @@ describe("bootstrapWithLaunchd", () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(process, "platform", {
+      value: originalPlatform,
+      configurable: true,
+    });
     vi.unstubAllGlobals();
   });
 

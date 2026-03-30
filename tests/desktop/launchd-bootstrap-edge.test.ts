@@ -6,6 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
 // ---------------------------------------------------------------------------
 // Mocks (same shape as launchd-bootstrap.test.ts)
 // ---------------------------------------------------------------------------
@@ -37,6 +41,20 @@ const mockExecFile = vi.fn(
     return { stdout: "", stderr: "" };
   },
 );
+
+function resetExecFileMock(): void {
+  mockExecFile.mockReset();
+  mockExecFile.mockImplementation(
+    (
+      _cmd: string,
+      _args: string[],
+      cb?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      if (cb) cb(null, "", "");
+      return { stdout: "", stderr: "" };
+    },
+  );
+}
 vi.mock("node:child_process", () => ({
   execFile: mockExecFile,
 }));
@@ -203,6 +221,7 @@ describe("isLaunchdBootstrapEnabled — packaged app detection", () => {
 describe("resolveLaunchdPaths — packaged mode details", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetExecFileMock();
 
     const fsMock = await import("node:fs");
     const existsSync = fsMock.existsSync as unknown as ReturnType<typeof vi.fn>;
@@ -225,13 +244,17 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     );
 
     // Node runner extracted to ~/.nexu/runtime/nexu-runner.app/
-    expect(paths.nodePath).toContain(".nexu/runtime/nexu-runner.app");
-    expect(paths.nodePath).not.toContain("/App.app/Contents");
+    expect(normalizePath(paths.nodePath)).toContain(
+      ".nexu/runtime/nexu-runner.app",
+    );
+    expect(normalizePath(paths.nodePath)).not.toContain("/App.app/Contents");
     // Controller extracted to ~/.nexu/runtime/controller-sidecar/
-    expect(paths.controllerEntryPath).toContain(
+    expect(normalizePath(paths.controllerEntryPath)).toContain(
       ".nexu/runtime/controller-sidecar/dist/index.js",
     );
-    expect(paths.controllerCwd).toContain(".nexu/runtime/controller-sidecar");
+    expect(normalizePath(paths.controllerCwd)).toContain(
+      ".nexu/runtime/controller-sidecar",
+    );
   });
 
   it("resolves openclaw path from sidecar extraction", async () => {
@@ -243,10 +266,12 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
 
     // ensurePackagedOpenclawSidecar returns `${nexuHome}/openclaw-sidecar`
     // where nexuHome = /Users/testuser/.nexu
-    expect(paths.openclawPath).toBe(
+    expect(normalizePath(paths.openclawPath)).toBe(
       "/Users/testuser/.nexu/openclaw-sidecar/node_modules/openclaw/openclaw.mjs",
     );
-    expect(paths.openclawCwd).toBe("/Users/testuser/.nexu/openclaw-sidecar");
+    expect(normalizePath(paths.openclawCwd)).toBe(
+      "/Users/testuser/.nexu/openclaw-sidecar",
+    );
   });
 
   it("uses external node runner (not process.execPath) in packaged mode", async () => {
@@ -258,7 +283,9 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
 
     // Should NOT be process.execPath (which points inside .app)
     expect(paths.nodePath).not.toBe(process.execPath);
-    expect(paths.nodePath).toContain("nexu-runner.app/Contents/MacOS/Nexu");
+    expect(normalizePath(paths.nodePath)).toContain(
+      "nexu-runner.app/Contents/MacOS/Nexu",
+    );
   });
 
   it("falls back to in-bundle runner/controller paths when external extraction fails", async () => {
@@ -295,13 +322,15 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     );
 
     expect(paths.nodePath).toBe(process.execPath);
-    expect(paths.controllerEntryPath).toBe(
+    expect(normalizePath(paths.controllerEntryPath)).toBe(
       "/App.app/Contents/Resources/runtime/controller/dist/index.js",
     );
-    expect(paths.controllerCwd).toBe(
+    expect(normalizePath(paths.controllerCwd)).toBe(
       "/App.app/Contents/Resources/runtime/controller",
     );
-    expect(paths.openclawCwd).toBe("/Users/testuser/.nexu/openclaw-sidecar");
+    expect(normalizePath(paths.openclawCwd)).toBe(
+      "/Users/testuser/.nexu/openclaw-sidecar",
+    );
   });
 
   it("reuses an existing version-stamped external node runner without recloning", async () => {
@@ -313,12 +342,15 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     >;
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return true;
-      if (target.includes("nexu-runner.app/Contents/MacOS/Nexu")) return true;
-      return target.endsWith("Info.plist");
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return true;
+      if (normalizedTarget.includes("nexu-runner.app/Contents/MacOS/Nexu"))
+        return true;
+      return normalizedTarget.endsWith("Info.plist");
     });
     readFileSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return "1.2.3";
+      if (normalizePath(target).endsWith(".nexu-runner-version"))
+        return "1.2.3";
       return "";
     });
 
@@ -332,7 +364,7 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
       "1.2.3",
     );
 
-    expect(runnerPath).toBe(
+    expect(normalizePath(runnerPath)).toBe(
       "/Users/testuser/.nexu/runtime/nexu-runner.app/Contents/MacOS/Nexu",
     );
     expect(mockExecFile).not.toHaveBeenCalled();
@@ -362,15 +394,16 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     );
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith("nexu-runner.app.staging")) return true;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith("nexu-runner.app.staging")) return true;
       if (
-        target.endsWith(
+        normalizedTarget.endsWith(
           "/Users/testuser/.nexu/runtime/nexu-runner.app.staging/Contents/MacOS/Nexu",
         )
       ) {
         return true;
       }
-      if (target.endsWith("Info.plist")) return true;
+      if (normalizedTarget.endsWith("Info.plist")) return true;
       return false;
     });
     readFileSync.mockReturnValue("");
@@ -387,12 +420,12 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "rm",
-      ["-rf", "/Users/testuser/.nexu/runtime/nexu-runner.app.staging"],
+      ["-rf", expect.stringMatching(/nexu-runner\.app\.staging$/)],
       expect.any(Function),
     );
     expect(rename).toHaveBeenCalledWith(
-      "/Users/testuser/.nexu/runtime/nexu-runner.app.staging",
-      "/Users/testuser/.nexu/runtime/nexu-runner.app",
+      expect.stringMatching(/nexu-runner\.app\.staging$/),
+      expect.stringMatching(/nexu-runner\.app$/),
     );
   });
 
@@ -405,15 +438,16 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     >;
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return false;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return false;
       if (
-        target.endsWith(
+        normalizedTarget.endsWith(
           "/Users/testuser/.nexu/runtime/nexu-runner.app.staging/Contents/MacOS/Nexu",
         )
       ) {
         return true;
       }
-      if (target.endsWith("Info.plist")) return true;
+      if (normalizedTarget.endsWith("Info.plist")) return true;
       return false;
     });
     readFileSync.mockReturnValue("");
@@ -428,15 +462,13 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
       "1.0.0",
     );
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "cp",
-      [
-        "-Rc",
-        "/Applications/Nexu.app",
-        "/Users/testuser/.nexu/runtime/nexu-runner.app.staging",
-      ],
-      expect.any(Function),
-    );
+    const cloneCall = mockExecFile.mock.calls.find((call) => call[0] === "cp");
+    expect(cloneCall).toBeDefined();
+    expect(cloneCall?.[1]).toEqual([
+      "-Rc",
+      "/Applications/Nexu.app",
+      expect.stringMatching(/nexu-runner\.app\.staging$/),
+    ]);
     expect(mockExecFile).not.toHaveBeenCalledWith(
       "cp",
       ["-c", "/Applications/Nexu.app/Contents/MacOS/Nexu", expect.any(String)],
@@ -456,9 +488,10 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     >;
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return false;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return false;
       if (
-        target.endsWith(
+        normalizedTarget.endsWith(
           "/Users/testuser/.nexu/runtime/nexu-runner.app.staging/Contents/MacOS/Nexu",
         )
       ) {
@@ -487,7 +520,7 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     );
     expect(stampCalls).toHaveLength(1);
     const stampPath = stampCalls[0][0] as string;
-    expect(stampPath).toBe(
+    expect(normalizePath(stampPath)).toBe(
       "/Users/testuser/.nexu/runtime/.nexu-runner-version",
     );
     // Must NOT be inside the .app bundle
@@ -509,9 +542,10 @@ describe("resolveLaunchdPaths — packaged mode details", () => {
     const rename = fspMock.rename as unknown as ReturnType<typeof vi.fn>;
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return false;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return false;
       if (
-        target.endsWith(
+        normalizedTarget.endsWith(
           "/Users/testuser/.nexu/runtime/nexu-runner.app.staging/Contents/MacOS/Nexu",
         )
       ) {
@@ -597,7 +631,7 @@ describe("checkCriticalPathsLocked", () => {
     const result = await checkCriticalPathsLocked();
 
     expect(result.locked).toBe(true);
-    expect(result.lockedPaths).toContain(
+    expect(result.lockedPaths.map(normalizePath)).toContain(
       "/Users/testuser/.nexu/runtime/controller-sidecar",
     );
   });
@@ -660,13 +694,15 @@ describe("external runner — path stability and edge cases", () => {
 
     // Mock: stamp exists with old version, binary exists, Info.plist exists
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return true;
-      if (target.includes("MacOS/Nexu")) return true;
-      if (target.endsWith("Info.plist")) return true;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return true;
+      if (normalizedTarget.includes("MacOS/Nexu")) return true;
+      if (normalizedTarget.endsWith("Info.plist")) return true;
       return false;
     });
     readFileSync.mockImplementation((target: string) => {
-      if (target.endsWith(".nexu-runner-version")) return "0.1.6"; // old version
+      if (normalizePath(target).endsWith(".nexu-runner-version"))
+        return "0.1.6"; // old version
       return "";
     });
 
@@ -709,10 +745,12 @@ describe("external runner — path stability and edge cases", () => {
     expect(paths.nodePath).toBe(process.execPath);
     expect(paths.nodePath).not.toContain("nexu-runner.app");
     // Controller path should be in repo, not ~/.nexu
-    expect(paths.controllerEntryPath).toContain(
+    expect(normalizePath(paths.controllerEntryPath)).toContain(
       "apps/controller/dist/index.js",
     );
-    expect(paths.controllerEntryPath).not.toContain("controller-sidecar");
+    expect(normalizePath(paths.controllerEntryPath)).not.toContain(
+      "controller-sidecar",
+    );
   });
 
   it("readBundleExecutableName reads CFBundleExecutable from Info.plist", async () => {
@@ -723,19 +761,20 @@ describe("external runner — path stability and edge cases", () => {
     >;
 
     existsSync.mockImplementation((target: string) => {
-      if (target.endsWith("Info.plist")) return true;
+      const normalizedTarget = normalizePath(target);
+      if (normalizedTarget.endsWith("Info.plist")) return true;
       if (
-        target.endsWith(
+        normalizedTarget.endsWith(
           "/Users/testuser/.nexu/runtime/nexu-runner.app.staging/Contents/MacOS/MyCustomApp",
         )
       ) {
         return true;
       }
-      if (target.endsWith(".nexu-runner-version")) return false;
+      if (normalizedTarget.endsWith(".nexu-runner-version")) return false;
       return false;
     });
     readFileSync.mockImplementation((target: string) => {
-      if (target.endsWith("Info.plist")) {
+      if (normalizePath(target).endsWith("Info.plist")) {
         return "<dict><key>CFBundleExecutable</key><string>MyCustomApp</string></dict>";
       }
       return "";
@@ -762,8 +801,8 @@ describe("external runner — path stability and edge cases", () => {
     );
 
     // Should use the name from Info.plist, not hardcoded "Nexu"
-    expect(result).toContain("MacOS/MyCustomApp");
-    expect(result).not.toContain("MacOS/Nexu");
+    expect(normalizePath(result)).toContain("MacOS/MyCustomApp");
+    expect(normalizePath(result)).not.toContain("MacOS/Nexu");
   });
 
   it("assertSafeRmTarget rejects shallow paths", async () => {
