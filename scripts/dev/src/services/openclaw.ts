@@ -14,7 +14,6 @@ import {
   spawnHiddenProcess,
   terminateProcess,
   waitForProcessStart,
-  writeDevLock,
 } from "@nexu/dev-utils";
 import { ensure } from "@nexu/shared";
 
@@ -229,18 +228,15 @@ export async function startOpenclawDevProcess(options: {
 
   logOpenclawTiming(`listener-pid=${listenerPid}`, startedAt);
 
-  await writeDevLock(openclawDevLockPath, {
-    pid: supervisorPid,
-    runId,
-    sessionId,
-  });
+  const recordedLock = await readDevLock(openclawDevLockPath).catch(() => null);
+  const recordedPid = recordedLock?.pid ?? supervisorPid;
 
   logOpenclawTiming("lock-written", startedAt);
 
   return {
     service: "openclaw",
     status: "running",
-    pid: supervisorPid,
+    pid: recordedPid,
     listenerPid,
     runId,
     sessionId,
