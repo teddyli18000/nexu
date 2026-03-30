@@ -122,9 +122,7 @@ function configurePackagedPaths(): void {
     : runtimePlatform === "win"
       ? standardWindowsUserDataPath
       : join(appDataPath, "@nexu", "desktop");
-  const sessionDataPath = join(userDataPath, "session");
-  const logsPath = join(userDataPath, "logs");
-  const nexuHomePath = getDesktopNexuHomeDir(userDataPath);
+  let effectiveUserDataPath = userDataPath;
 
   if (
     runtimePlatform === "win" &&
@@ -133,23 +131,35 @@ function configurePackagedPaths(): void {
     !existsSync(userDataPath) &&
     existsSync(legacyWindowsUserDataPath)
   ) {
-    renameSync(legacyWindowsUserDataPath, userDataPath);
+    try {
+      renameSync(legacyWindowsUserDataPath, userDataPath);
+    } catch (error) {
+      effectiveUserDataPath = legacyWindowsUserDataPath;
+      safeWrite(
+        process.stdout,
+        `[desktop:paths] legacy userData migration failed; reusing legacy path error=${error instanceof Error ? error.message : String(error)} from=${legacyWindowsUserDataPath} to=${userDataPath}\n`,
+      );
+    }
   }
 
-  mkdirSync(userDataPath, { recursive: true });
+  const sessionDataPath = join(effectiveUserDataPath, "session");
+  const logsPath = join(effectiveUserDataPath, "logs");
+  const nexuHomePath = getDesktopNexuHomeDir(effectiveUserDataPath);
+
+  mkdirSync(effectiveUserDataPath, { recursive: true });
   mkdirSync(sessionDataPath, { recursive: true });
   mkdirSync(logsPath, { recursive: true });
   mkdirSync(nexuHomePath, { recursive: true });
 
   process.env.NEXU_HOME = nexuHomePath;
 
-  app.setPath("userData", userDataPath);
+  app.setPath("userData", effectiveUserDataPath);
   app.setPath("sessionData", sessionDataPath);
   app.setAppLogsPath(logsPath);
 
   safeWrite(
     process.stdout,
-    `[desktop:paths] appData=${appDataPath} defaultUserData=${defaultUserDataPath} overrideUserData=${overrideUserDataPath ?? "<unset>"} userData=${userDataPath} sessionData=${sessionDataPath} logs=${logsPath} nexuHome=${nexuHomePath}\n`,
+    `[desktop:paths] appData=${appDataPath} defaultUserData=${defaultUserDataPath} overrideUserData=${overrideUserDataPath ?? "<unset>"} userData=${effectiveUserDataPath} sessionData=${sessionDataPath} logs=${logsPath} nexuHome=${nexuHomePath}\n`,
   );
 }
 

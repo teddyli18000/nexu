@@ -77,6 +77,14 @@ function parseArgs(argv) {
     domain: process.env.FEISHU_DOMAIN ?? defaultDomain,
   };
 
+  function readNextValue(flag, index) {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`Missing value for ${flag}`);
+    }
+    return value;
+  }
+
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--reply") {
@@ -84,27 +92,27 @@ function parseArgs(argv) {
       continue;
     }
     if (arg === "--account") {
-      options.accountId = argv[index + 1];
+      options.accountId = readNextValue(arg, index);
       index += 1;
       continue;
     }
     if (arg === "--config") {
-      options.configPath = argv[index + 1];
+      options.configPath = readNextValue(arg, index);
       index += 1;
       continue;
     }
     if (arg === "--app-id") {
-      options.appId = argv[index + 1];
+      options.appId = readNextValue(arg, index);
       index += 1;
       continue;
     }
     if (arg === "--app-secret") {
-      options.appSecret = argv[index + 1];
+      options.appSecret = readNextValue(arg, index);
       index += 1;
       continue;
     }
     if (arg === "--domain") {
-      options.domain = argv[index + 1];
+      options.domain = readNextValue(arg, index);
       index += 1;
     }
   }

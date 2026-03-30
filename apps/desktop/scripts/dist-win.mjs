@@ -46,16 +46,6 @@ const shouldReuseExistingSidecars =
   process.env.NEXU_DESKTOP_USE_EXISTING_SIDECARS?.toLowerCase() === "true";
 
 function createCommandSpec(command, args) {
-  if (
-    buildTargetPlatform === "win" &&
-    (command === "pnpm" || command === "pnpm.cmd")
-  ) {
-    return {
-      command: "cmd.exe",
-      args: ["/d", "/s", "/c", ["pnpm", ...args].join(" ")],
-    };
-  }
-
   return { command, args };
 }
 
@@ -154,41 +144,54 @@ async function dereferencePnpmSymlinks() {
   const imgPath = resolve(electronRoot, "node_modules/@img");
   let pnpmImgPath = null;
 
-  try {
-    const sharpStat = await lstat(sharpPath);
-    if (sharpStat.isSymbolicLink()) {
-      const realSharpPath = await realpath(sharpPath);
-      pnpmImgPath = resolve(dirname(realSharpPath), "@img");
-      console.log(
-        `[dist:win] dereferencing pnpm symlink: ${sharpPath} -> ${realSharpPath}`,
-      );
-      await rm(sharpPath, rmWithRetriesOptions);
-      await cp(realSharpPath, sharpPath, {
-        recursive: true,
-        dereference: true,
-      });
-    }
-  } catch (error) {
-    console.log(
-      `[dist:win] skipping sharp: ${error instanceof Error ? error.message : String(error)}`,
+  const sharpStat = await lstat(sharpPath).catch((error) => {
+    throw new Error(
+      `[dist:win] Missing required sharp dependency at ${sharpPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  });
+
+  if (sharpStat.isSymbolicLink()) {
+    const realSharpPath = await realpath(sharpPath);
+    pnpmImgPath = resolve(dirname(realSharpPath), "@img");
+    console.log(
+      `[dist:win] dereferencing pnpm symlink: ${sharpPath} -> ${realSharpPath}`,
+    );
+    await rm(sharpPath, rmWithRetriesOptions);
+    await cp(realSharpPath, sharpPath, {
+      recursive: true,
+      dereference: true,
+    });
   }
 
-  try {
-    const sharpImgPath = pnpmImgPath ?? resolve(sharpPath, "node_modules/@img");
-    const sharpImgStat = await lstat(sharpImgPath).catch(() => null);
-    if (sharpImgStat) {
-      console.log(
-        `[dist:win] copying @img from sharp's node_modules: ${sharpImgPath} -> ${imgPath}`,
-      );
-      await rm(imgPath, rmWithRetriesOptions);
-      await cp(sharpImgPath, imgPath, { recursive: true, dereference: true });
-    }
-  } catch (error) {
-    console.log(
-      `[dist:win] skipping @img: ${error instanceof Error ? error.message : String(error)}`,
+  const sharpImgPath = pnpmImgPath ?? resolve(sharpPath, "node_modules/@img");
+  const sharpImgStat = await lstat(sharpImgPath).catch((error) => {
+    throw new Error(
+      `[dist:win] Missing required @img dependency at ${sharpImgPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  });
+
+  if (sharpImgStat) {
+    console.log(
+      `[dist:win] copying @img from sharp's node_modules: ${sharpImgPath} -> ${imgPath}`,
+    );
+    await rm(imgPath, rmWithRetriesOptions);
+    await cp(sharpImgPath, imgPath, { recursive: true, dereference: true });
   }
+}
+
+function redactBuildConfigForLog(config) {
+  return {
+    NEXU_CLOUD_URL: config.NEXU_CLOUD_URL,
+    NEXU_LINK_URL: config.NEXU_LINK_URL,
+    NEXU_DESKTOP_APP_VERSION: config.NEXU_DESKTOP_APP_VERSION,
+    NEXU_DESKTOP_AUTO_UPDATE_ENABLED: config.NEXU_DESKTOP_AUTO_UPDATE_ENABLED,
+    NEXU_DESKTOP_BUILD_SOURCE: config.NEXU_DESKTOP_BUILD_SOURCE,
+    NEXU_DESKTOP_BUILD_BRANCH: config.NEXU_DESKTOP_BUILD_BRANCH,
+    NEXU_DESKTOP_BUILD_COMMIT: config.NEXU_DESKTOP_BUILD_COMMIT,
+    NEXU_DESKTOP_BUILD_TIME: config.NEXU_DESKTOP_BUILD_TIME,
+    hasSentryDsn: typeof config.NEXU_DESKTOP_SENTRY_DSN === "string",
+    hasUpdateFeedUrl: typeof config.NEXU_UPDATE_FEED_URL === "string",
+  };
 }
 
 function parseEnvFile(content) {
@@ -327,7 +330,7 @@ async function ensureBuildConfig() {
   await writeFile(configPath, JSON.stringify(config, null, 2));
   console.log(
     "[dist:win] generated build-config.json from env:",
-    JSON.stringify(config),
+    JSON.stringify(redactBuildConfigForLog(config)),
   );
 }
 

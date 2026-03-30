@@ -57,6 +57,10 @@ function ensureDir(targetPath: string): string {
   return targetPath;
 }
 
+function sleepSync(durationMs: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, durationMs);
+}
+
 function resolveArchiveStamp(
   archivePath: string,
   archiveMetadata: PackagedArchiveMetadata | null,
@@ -224,10 +228,13 @@ export function createSyncTarSidecarMaterializer(): DesktopSidecarMaterializer {
     for (let attempt = 0; attempt < maxRetries; attempt += 1) {
       try {
         if (existsSync(resolved.extractedSidecarRoot)) {
-          execFileSync("rm", ["-rf", resolved.extractedSidecarRoot]);
+          rmSync(resolved.extractedSidecarRoot, {
+            recursive: true,
+            force: true,
+          });
         }
         mkdirSync(resolved.extractedSidecarRoot, { recursive: true });
-        execFileSync("tar", [
+        execFileSync("/usr/bin/tar", [
           "-xzf",
           resolved.archivePath,
           "-C",
@@ -239,7 +246,7 @@ export function createSyncTarSidecarMaterializer(): DesktopSidecarMaterializer {
         if (attempt === maxRetries - 1) {
           throw error;
         }
-        execFileSync("sleep", ["1"]);
+        sleepSync(1000);
       }
     }
 
@@ -281,7 +288,7 @@ export function createAsyncArchiveSidecarMaterializer(): DesktopSidecarMateriali
         !resolved.archiveMetadata ||
         resolved.archiveMetadata.format === "tar.gz"
       ) {
-        execFileSync("tar", [
+        execFileSync("/usr/bin/tar", [
           "-xzf",
           resolved.archivePath,
           "-C",

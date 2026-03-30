@@ -6,7 +6,6 @@
 !define NEXU_RUNONCE_KEY "Software\Microsoft\Windows\CurrentVersion\RunOnce"
 !define NEXU_RUNONCE_VALUE_PREFIX "NexuDesktopCleanup-"
 !define NEXU_WSHELL "$SYSDIR\wscript.exe"
-!define NEXU_CLEANUP_SCRIPT "$TEMP\nexu-desktop-cleanup.vbs"
 !define NEXU_INSTALLER_LOG "$TEMP\nexu-installer-debug.log"
 
 !macro preInit
@@ -70,22 +69,24 @@
   FunctionEnd
 
   Function WriteNexuCleanupScript
-    Push $0
+    Exch $0
+    Push $1
 
     ClearErrors
-    FileOpen $0 "${NEXU_CLEANUP_SCRIPT}" w
+    FileOpen $1 "$0" w
     IfErrors done
-    FileWrite $0 "On Error Resume Next$\r$\n"
-    FileWrite $0 "WScript.Sleep 2000$\r$\n"
-    FileWrite $0 "Dim fso$\r$\n"
-    FileWrite $0 "Dim targetPath$\r$\n"
-    FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
-    FileWrite $0 "targetPath = WScript.Arguments(0)$\r$\n"
-    FileWrite $0 "If fso.FolderExists(targetPath) Then fso.DeleteFolder targetPath, True$\r$\n"
-    FileWrite $0 "If fso.FileExists(targetPath) Then fso.DeleteFile targetPath, True$\r$\n"
-    FileClose $0
+    FileWrite $1 "On Error Resume Next$\r$\n"
+    FileWrite $1 "WScript.Sleep 2000$\r$\n"
+    FileWrite $1 "Dim fso$\r$\n"
+    FileWrite $1 "Dim targetPath$\r$\n"
+    FileWrite $1 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
+    FileWrite $1 "targetPath = WScript.Arguments(0)$\r$\n"
+    FileWrite $1 "If fso.FolderExists(targetPath) Then fso.DeleteFolder targetPath, True$\r$\n"
+    FileWrite $1 "If fso.FileExists(targetPath) Then fso.DeleteFile targetPath, True$\r$\n"
+    FileClose $1
 
   done:
+    Pop $1
     Pop $0
   FunctionEnd
 
@@ -93,13 +94,20 @@
     Exch $0
     Push $1
     Push $2
+    Push $3
+    Push $4
 
+    System::Call 'kernel32::GetTempFileNameW(w "$TEMP", w "nxd", i 0, w .r3) i .r4'
+    Push $3
     Call WriteNexuCleanupScript
     System::Call 'kernel32::GetTickCount() i .r1'
-    StrCpy $2 '"${NEXU_WSHELL}" //B //NoLogo "${NEXU_CLEANUP_SCRIPT}" "$0"'
+    StrCpy $2 '"${NEXU_WSHELL}" //B //NoLogo "$3" "$0"'
     Exec $2
-    WriteRegStr HKCU "${NEXU_RUNONCE_KEY}" "${NEXU_RUNONCE_VALUE_PREFIX}$1" $2
+    ${WordFind} "$3" "\" "-1" $4
+    WriteRegStr HKCU "${NEXU_RUNONCE_KEY}" "${NEXU_RUNONCE_VALUE_PREFIX}$1-$4" $2
 
+    Pop $4
+    Pop $3
     Pop $2
     Pop $1
     Pop $0
@@ -192,22 +200,24 @@
 
 !ifdef BUILD_UNINSTALLER
   Function un.WriteNexuCleanupScript
-    Push $0
+    Exch $0
+    Push $1
 
     ClearErrors
-    FileOpen $0 "${NEXU_CLEANUP_SCRIPT}" w
+    FileOpen $1 "$0" w
     IfErrors done
-    FileWrite $0 "On Error Resume Next$\r$\n"
-    FileWrite $0 "WScript.Sleep 2000$\r$\n"
-    FileWrite $0 "Dim fso$\r$\n"
-    FileWrite $0 "Dim targetPath$\r$\n"
-    FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
-    FileWrite $0 "targetPath = WScript.Arguments(0)$\r$\n"
-    FileWrite $0 "If fso.FolderExists(targetPath) Then fso.DeleteFolder targetPath, True$\r$\n"
-    FileWrite $0 "If fso.FileExists(targetPath) Then fso.DeleteFile targetPath, True$\r$\n"
-    FileClose $0
+    FileWrite $1 "On Error Resume Next$\r$\n"
+    FileWrite $1 "WScript.Sleep 2000$\r$\n"
+    FileWrite $1 "Dim fso$\r$\n"
+    FileWrite $1 "Dim targetPath$\r$\n"
+    FileWrite $1 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
+    FileWrite $1 "targetPath = WScript.Arguments(0)$\r$\n"
+    FileWrite $1 "If fso.FolderExists(targetPath) Then fso.DeleteFolder targetPath, True$\r$\n"
+    FileWrite $1 "If fso.FileExists(targetPath) Then fso.DeleteFile targetPath, True$\r$\n"
+    FileClose $1
 
   done:
+    Pop $1
     Pop $0
   FunctionEnd
 
@@ -215,13 +225,20 @@
     Exch $0
     Push $1
     Push $2
+    Push $3
+    Push $4
 
+    System::Call 'kernel32::GetTempFileNameW(w "$TEMP", w "nxd", i 0, w .r3) i .r4'
+    Push $3
     Call un.WriteNexuCleanupScript
     System::Call 'kernel32::GetTickCount() i .r1'
-    StrCpy $2 '"${NEXU_WSHELL}" //B //NoLogo "${NEXU_CLEANUP_SCRIPT}" "$0"'
+    StrCpy $2 '"${NEXU_WSHELL}" //B //NoLogo "$3" "$0"'
     Exec $2
-    WriteRegStr HKCU "${NEXU_RUNONCE_KEY}" "${NEXU_RUNONCE_VALUE_PREFIX}$1" $2
+    ${WordFind} "$3" "\" "-1" $4
+    WriteRegStr HKCU "${NEXU_RUNONCE_KEY}" "${NEXU_RUNONCE_VALUE_PREFIX}$1-$4" $2
 
+    Pop $4
+    Pop $3
     Pop $2
     Pop $1
     Pop $0
