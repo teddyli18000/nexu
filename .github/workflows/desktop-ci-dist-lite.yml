@@ -19,6 +19,7 @@ on:
       - "pnpm-workspace.yaml"
       - ".github/workflows/desktop-ci-dist-lite.yml"
       - ".github/workflows/desktop-ci-dist-full.yml"
+  workflow_dispatch:
   push:
     branches:
       - main

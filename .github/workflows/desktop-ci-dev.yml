@@ -24,6 +24,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/desktop-ci-dev.yml'
+  workflow_dispatch:
   push:
     branches:
       - main
