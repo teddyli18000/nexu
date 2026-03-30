@@ -16,3 +16,4 @@ export {
 } from "./schemas/skill-filesystem.js";
 export * from "./schemas/composio.js";
 export * from "./schemas/provider.js";
+export * from "./schemas/rewards.js";

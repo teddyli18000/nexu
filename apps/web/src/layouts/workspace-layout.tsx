@@ -11,6 +11,7 @@ import {
   BookOpen,
   ChevronUp,
   CircleHelp,
+  Gift,
   Globe,
   Home,
   LogOut,
@@ -484,6 +485,7 @@ function WorkspaceLayoutInner() {
   const isHomePage =
     location.pathname === "/workspace" ||
     location.pathname === "/workspace/home";
+  const isRewardsPage = location.pathname.includes("/rewards");
   const isSkillsPage = location.pathname.includes("/skills");
   const isModelsPage =
     location.pathname.includes("/models") ||
@@ -504,6 +506,7 @@ function WorkspaceLayoutInner() {
   const showEmptyState =
     sessions.length === 0 &&
     !isHomePage &&
+    !isRewardsPage &&
     !isSkillsPage &&
     !isModelsPage &&
     !selectedSessionId;
@@ -513,20 +516,24 @@ function WorkspaceLayoutInner() {
     : null;
   const mobileTitle = isHomePage
     ? t("layout.mobile.home")
-    : isSkillsPage
-      ? t("layout.mobile.skills")
-      : isModelsPage
-        ? t("layout.mobile.settings")
-        : selectedSession?.title || t("layout.mobile.conversations");
+    : isRewardsPage
+      ? t("layout.mobile.rewards")
+      : isSkillsPage
+        ? t("layout.mobile.skills")
+        : isModelsPage
+          ? t("layout.mobile.settings")
+          : selectedSession?.title || t("layout.mobile.conversations");
   const mobileSubtitle = isHomePage
     ? t("layout.mobile.homeSubtitle")
-    : isSkillsPage
-      ? t("layout.mobile.skillsSubtitle")
-      : isModelsPage
-        ? t("layout.mobile.settingsSubtitle")
-        : selectedSession
-          ? `${getPlatformLabel(selectedSession.channelType)} · ${formatTime(selectedSession.lastTime)}`
-          : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
+    : isRewardsPage
+      ? t("layout.mobile.rewardsSubtitle")
+      : isSkillsPage
+        ? t("layout.mobile.skillsSubtitle")
+        : isModelsPage
+          ? t("layout.mobile.settingsSubtitle")
+          : selectedSession
+            ? `${getPlatformLabel(selectedSession.channelType)} · ${formatTime(selectedSession.lastTime)}`
+            : `${sessions.length} conversation${sessions.length === 1 ? "" : "s"}`;
   const desktopGlassTint = "rgba(255, 255, 255, 0.08)";
   const updateFloatWidth = Math.max(140, sidebarWidth - 20);
   const updateFloatLeft = 10;
@@ -651,6 +658,20 @@ function WorkspaceLayoutInner() {
             >
               <Home size={16} className="shrink-0" />
               {t("layout.nav.home")}
+            </Link>
+            <Link
+              to="/workspace/rewards"
+              onClick={() => {
+                track("workspace_rewards_click");
+                track("workspace_sidebar_click", { target: "rewards" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isRewardsPage && "nav-item-active",
+              )}
+            >
+              <Gift size={16} className="shrink-0" />
+              {t("layout.nav.rewards")}
             </Link>
             <Link
               to="/workspace/skills"
@@ -1008,6 +1029,23 @@ function WorkspaceLayoutInner() {
                   >
                     <Home size={14} />
                     {t("layout.nav.home")}
+                  </Link>
+                  <Link
+                    to="/workspace/rewards"
+                    onClick={() => {
+                      track("workspace_rewards_click");
+                      track("workspace_sidebar_click", { target: "rewards" });
+                      setMobileDrawerOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-0.5 px-3 py-2",
+                      isRewardsPage
+                        ? "bg-accent/10 text-accent"
+                        : "text-text-muted hover:text-text-primary hover:bg-surface-3",
+                    )}
+                  >
+                    <Gift size={14} />
+                    {t("layout.mobile.rewards")}
                   </Link>
                   <Link
                     to="/workspace/skills"

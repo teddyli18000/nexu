@@ -424,4 +424,57 @@ describe("controller route compatibility", () => {
       path.join(rootDir, ".openclaw", "agents", bot.id),
     );
   });
+
+  it("serves desktop rewards status and idempotent claim routes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-30T09:00:00.000Z"));
+
+    const app = createApp(container);
+
+    const statusResponse = await app.request("/api/internal/desktop/rewards");
+    expect(statusResponse.status).toBe(200);
+    const statusPayload = (await statusResponse.json()) as {
+      tasks: Array<{ id: string; isClaimed: boolean }>;
+      viewer: { cloudConnected: boolean; usingManagedModel: boolean };
+    };
+    expect(statusPayload.tasks).toHaveLength(11);
+    expect(statusPayload.viewer.cloudConnected).toBe(false);
+    expect(statusPayload.viewer.usingManagedModel).toBe(false);
+
+    const firstClaim = await app.request(
+      "/api/internal/desktop/rewards/claim",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskId: "daily_checkin" }),
+      },
+    );
+    expect(firstClaim.status).toBe(200);
+    const firstClaimPayload = (await firstClaim.json()) as {
+      ok: boolean;
+      alreadyClaimed: boolean;
+    };
+    expect(firstClaimPayload.ok).toBe(true);
+    expect(firstClaimPayload.alreadyClaimed).toBe(false);
+
+    const secondClaim = await app.request(
+      "/api/internal/desktop/rewards/claim",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskId: "daily_checkin" }),
+      },
+    );
+    expect(secondClaim.status).toBe(200);
+    const secondClaimPayload = (await secondClaim.json()) as {
+      alreadyClaimed: boolean;
+      status: { tasks: Array<{ id: string; isClaimed: boolean }> };
+    };
+    expect(secondClaimPayload.alreadyClaimed).toBe(true);
+    expect(
+      secondClaimPayload.status.tasks.find(
+        (task) => task.id === "daily_checkin",
+      )?.isClaimed,
+    ).toBe(true);
+  });
 });

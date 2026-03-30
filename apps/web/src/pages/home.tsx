@@ -10,6 +10,7 @@ import {
   WechatIcon,
   WhatsAppIcon,
 } from "@/components/platform-icons";
+import { HomeRewardsTeaser } from "@/components/rewards/home-rewards-teaser";
 import { useGitHubStars } from "@/hooks/use-github-stars";
 import { getChannelChatUrl } from "@/lib/channel-links";
 import { normalizeChannel, track } from "@/lib/tracking";
@@ -690,6 +691,8 @@ export function HomePage() {
               </div>
             </div>
           </div>
+
+          <HomeRewardsTeaser />
         </div>
 
         {modalChannel && (
@@ -991,6 +994,8 @@ export function HomePage() {
             )}
           </div>
         </div>
+
+        <HomeRewardsTeaser />
 
         {/* Activity Feed */}
         <ActivityFeed />

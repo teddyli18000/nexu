@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ControllerEnv } from "../src/app/env.js";
 import { NexuConfigStore } from "../src/store/nexu-config-store.js";
 
@@ -268,5 +268,43 @@ describe("NexuConfigStore", () => {
       "Default",
       "Staging",
     ]);
+  });
+
+  it("persists reward claims and enforces repeat cadence", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-30T09:00:00.000Z"));
+
+    const store = new NexuConfigStore(env);
+
+    const firstDaily = await store.claimDesktopReward("daily_checkin");
+    expect(firstDaily.ok).toBe(true);
+    expect(firstDaily.alreadyClaimed).toBe(false);
+
+    const secondDaily = await store.claimDesktopReward("daily_checkin");
+    expect(secondDaily.ok).toBe(true);
+    expect(secondDaily.alreadyClaimed).toBe(true);
+
+    const firstWeekly = await store.claimDesktopReward("x_share");
+    expect(firstWeekly.alreadyClaimed).toBe(false);
+
+    const secondWeekly = await store.claimDesktopReward("x_share");
+    expect(secondWeekly.alreadyClaimed).toBe(true);
+
+    vi.setSystemTime(new Date("2026-04-06T09:00:00.000Z"));
+
+    const nextWeekWeekly = await store.claimDesktopReward("x_share");
+    expect(nextWeekWeekly.alreadyClaimed).toBe(false);
+
+    const reloadedStore = new NexuConfigStore(env);
+    const rewardsStatus = await reloadedStore.getDesktopRewardsStatus();
+    const shareTask = rewardsStatus.tasks.find((task) => task.id === "x_share");
+    const dailyTask = rewardsStatus.tasks.find(
+      (task) => task.id === "daily_checkin",
+    );
+
+    expect(shareTask?.claimCount).toBe(2);
+    expect(shareTask?.isClaimed).toBe(true);
+    expect(dailyTask?.claimCount).toBe(1);
+    expect(rewardsStatus.progress.earnedCredits).toBe(5);
   });
 });

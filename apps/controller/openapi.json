@@ -2812,6 +2812,384 @@
         }
       }
     },
+    "/api/internal/desktop/rewards": {
+      "get": {
+        "tags": [
+          "Desktop"
+        ],
+        "responses": {
+          "200": {
+            "description": "Desktop rewards status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "viewer": {
+                      "type": "object",
+                      "properties": {
+                        "cloudConnected": {
+                          "type": "boolean"
+                        },
+                        "activeModelId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "activeModelProviderId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "usingManagedModel": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "cloudConnected",
+                        "activeModelId",
+                        "activeModelProviderId",
+                        "usingManagedModel"
+                      ]
+                    },
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "claimedCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "totalCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "earnedCredits": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "availableCredits": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "claimedCount",
+                        "totalCount",
+                        "earnedCredits",
+                        "availableCredits"
+                      ]
+                    },
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "daily_checkin",
+                              "github_star",
+                              "x_share",
+                              "reddit",
+                              "xiaohongshu",
+                              "lingying",
+                              "jike",
+                              "wechat",
+                              "feishu",
+                              "facebook",
+                              "whatsapp"
+                            ]
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "daily",
+                              "opensource",
+                              "social"
+                            ]
+                          },
+                          "icon": {
+                            "type": "string"
+                          },
+                          "reward": {
+                            "type": "number",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
+                          },
+                          "shareMode": {
+                            "type": "string",
+                            "enum": [
+                              "link",
+                              "tweet",
+                              "image"
+                            ]
+                          },
+                          "repeatMode": {
+                            "type": "string",
+                            "enum": [
+                              "once",
+                              "daily",
+                              "weekly"
+                            ]
+                          },
+                          "requiresScreenshot": {
+                            "type": "boolean"
+                          },
+                          "actionUrl": {
+                            "type": "string",
+                            "nullable": true,
+                            "format": "uri",
+                            "default": null
+                          },
+                          "isClaimed": {
+                            "type": "boolean"
+                          },
+                          "lastClaimedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "claimCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "group",
+                          "icon",
+                          "reward",
+                          "shareMode",
+                          "repeatMode",
+                          "requiresScreenshot",
+                          "isClaimed",
+                          "lastClaimedAt",
+                          "claimCount"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "viewer",
+                    "progress",
+                    "tasks"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/desktop/rewards/claim": {
+      "post": {
+        "tags": [
+          "Desktop"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "enum": [
+                      "daily_checkin",
+                      "github_star",
+                      "x_share",
+                      "reddit",
+                      "xiaohongshu",
+                      "lingying",
+                      "jike",
+                      "wechat",
+                      "feishu",
+                      "facebook",
+                      "whatsapp"
+                    ]
+                  }
+                },
+                "required": [
+                  "taskId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim a desktop reward",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "alreadyClaimed": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "viewer": {
+                          "type": "object",
+                          "properties": {
+                            "cloudConnected": {
+                              "type": "boolean"
+                            },
+                            "activeModelId": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "activeModelProviderId": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "usingManagedModel": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "cloudConnected",
+                            "activeModelId",
+                            "activeModelProviderId",
+                            "usingManagedModel"
+                          ]
+                        },
+                        "progress": {
+                          "type": "object",
+                          "properties": {
+                            "claimedCount": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "totalCount": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "earnedCredits": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "availableCredits": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "claimedCount",
+                            "totalCount",
+                            "earnedCredits",
+                            "availableCredits"
+                          ]
+                        },
+                        "tasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "daily_checkin",
+                                  "github_star",
+                                  "x_share",
+                                  "reddit",
+                                  "xiaohongshu",
+                                  "lingying",
+                                  "jike",
+                                  "wechat",
+                                  "feishu",
+                                  "facebook",
+                                  "whatsapp"
+                                ]
+                              },
+                              "group": {
+                                "type": "string",
+                                "enum": [
+                                  "daily",
+                                  "opensource",
+                                  "social"
+                                ]
+                              },
+                              "icon": {
+                                "type": "string"
+                              },
+                              "reward": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "shareMode": {
+                                "type": "string",
+                                "enum": [
+                                  "link",
+                                  "tweet",
+                                  "image"
+                                ]
+                              },
+                              "repeatMode": {
+                                "type": "string",
+                                "enum": [
+                                  "once",
+                                  "daily",
+                                  "weekly"
+                                ]
+                              },
+                              "requiresScreenshot": {
+                                "type": "boolean"
+                              },
+                              "actionUrl": {
+                                "type": "string",
+                                "nullable": true,
+                                "format": "uri",
+                                "default": null
+                              },
+                              "isClaimed": {
+                                "type": "boolean"
+                              },
+                              "lastClaimedAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "claimCount": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "group",
+                              "icon",
+                              "reward",
+                              "shareMode",
+                              "repeatMode",
+                              "requiresScreenshot",
+                              "isClaimed",
+                              "lastClaimedAt",
+                              "claimCount"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "viewer",
+                        "progress",
+                        "tasks"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "alreadyClaimed",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/channels": {
       "get": {
         "tags": [

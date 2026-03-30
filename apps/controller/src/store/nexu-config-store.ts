@@ -6,14 +6,20 @@ import type {
   ConnectDiscordInput,
   ConnectFeishuInput,
   ConnectSlackInput,
+  DesktopRewardsLedger,
+  DesktopRewardsStatus,
+  RewardTaskId,
 } from "@nexu/shared";
 import {
+  type claimDesktopRewardResponseSchema,
   type cloudProfileSchema,
   type connectIntegrationResponseSchema,
   type connectIntegrationSchema,
+  desktopRewardsLedgerSchema,
   type integrationResponseSchema,
   type providerResponseSchema,
   type refreshIntegrationSchema,
+  rewardTasks,
   type updateAuthSourceSchema,
   type updateUserProfileSchema,
   type upsertProviderBodySchema,
@@ -65,6 +71,10 @@ type CloudPollingState = {
   deviceSecret: string;
   abortController: AbortController;
 };
+
+type DesktopRewardClaimResponse = z.infer<
+  typeof claimDesktopRewardResponseSchema
+>;
 
 const defaultCloudProfile: CloudProfileEntry = {
   name: "Default",
@@ -231,6 +241,67 @@ function isDefaultCloudProfileName(name: string): boolean {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function utcDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function isoWeekKey(date: Date): string {
+  const utcDate = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  const day = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const weekNumber = Math.ceil(
+    ((utcDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${utcDate.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
+}
+
+function defaultDesktopRewardsLedger(): DesktopRewardsLedger {
+  return {
+    schemaVersion: 1,
+    claimsByTaskId: {},
+  };
+}
+
+function readDesktopRewardsLedger(config: NexuConfig): DesktopRewardsLedger {
+  const desktop = config.desktop as Record<string, unknown>;
+  const parsed = desktopRewardsLedgerSchema.safeParse(desktop.rewards);
+  return parsed.success ? parsed.data : defaultDesktopRewardsLedger();
+}
+
+function rewardPeriodKey(taskId: RewardTaskId, date: Date): string | null {
+  const task = rewardTasks.find((candidate) => candidate.id === taskId);
+  if (!task) {
+    return null;
+  }
+  if (task.repeatMode === "daily") {
+    return utcDateKey(date);
+  }
+  if (task.repeatMode === "weekly") {
+    return isoWeekKey(date);
+  }
+  return null;
+}
+
+function isRewardCurrentlyClaimed(
+  taskId: RewardTaskId,
+  ledger: DesktopRewardsLedger,
+  date: Date,
+): boolean {
+  const task = rewardTasks.find((candidate) => candidate.id === taskId);
+  const claim = ledger.claimsByTaskId[taskId];
+  if (!task || !claim) {
+    return false;
+  }
+  if (task.repeatMode === "once") {
+    return claim.claimCount > 0;
+  }
+
+  return claim.lastClaimPeriodKey === rewardPeriodKey(taskId, date);
 }
 
 function parseModelsJson(modelsJson: string | undefined): string[] {
@@ -1287,6 +1358,96 @@ export class NexuConfigStore {
           modelCount: session?.models?.length ?? 0,
         };
       }),
+    };
+  }
+
+  async getDesktopRewardsStatus(): Promise<DesktopRewardsStatus> {
+    const config = await this.getConfig();
+    const cloud = readDesktopCloud(config);
+    const ledger = readDesktopRewardsLedger(config);
+    const activeModelId = config.runtime.defaultModelId || null;
+    const activeManagedModel =
+      activeModelId !== null
+        ? ((cloud.models ?? []).find((model) => model.id === activeModelId) ??
+          null)
+        : null;
+    const tasks = rewardTasks.map((task) => {
+      const claim = ledger.claimsByTaskId[task.id];
+      return {
+        ...task,
+        isClaimed: isRewardCurrentlyClaimed(task.id, ledger, new Date()),
+        lastClaimedAt: claim?.lastClaimedAt ?? null,
+        claimCount: claim?.claimCount ?? 0,
+      };
+    });
+
+    return {
+      viewer: {
+        cloudConnected: cloud.connected,
+        activeModelId,
+        activeModelProviderId:
+          activeManagedModel?.provider ??
+          (activeManagedModel
+            ? "nexu"
+            : (activeModelId?.split("/")[0] ?? null)),
+        usingManagedModel: activeManagedModel !== null,
+      },
+      progress: {
+        claimedCount: tasks.filter((task) => task.isClaimed).length,
+        totalCount: tasks.length,
+        earnedCredits: tasks.reduce(
+          (total, task) => total + task.reward * task.claimCount,
+          0,
+        ),
+        availableCredits: rewardTasks.reduce(
+          (total, task) => total + task.reward,
+          0,
+        ),
+      },
+      tasks,
+    };
+  }
+
+  async claimDesktopReward(
+    taskId: RewardTaskId,
+  ): Promise<DesktopRewardClaimResponse> {
+    let alreadyClaimed = false;
+    const claimedAt = now();
+
+    await this.store.update((config) => {
+      const ledger = readDesktopRewardsLedger(config);
+      if (isRewardCurrentlyClaimed(taskId, ledger, new Date(claimedAt))) {
+        alreadyClaimed = true;
+        return config;
+      }
+
+      const current = ledger.claimsByTaskId[taskId];
+      const nextLedger: DesktopRewardsLedger = {
+        schemaVersion: 1,
+        claimsByTaskId: {
+          ...ledger.claimsByTaskId,
+          [taskId]: {
+            firstClaimedAt: current?.firstClaimedAt ?? claimedAt,
+            lastClaimedAt: claimedAt,
+            claimCount: (current?.claimCount ?? 0) + 1,
+            lastClaimPeriodKey: rewardPeriodKey(taskId, new Date(claimedAt)),
+          },
+        },
+      };
+
+      return {
+        ...config,
+        desktop: {
+          ...config.desktop,
+          rewards: nextLedger,
+        },
+      };
+    });
+
+    return {
+      ok: true,
+      alreadyClaimed,
+      status: await this.getDesktopRewardsStatus(),
     };
   }
 

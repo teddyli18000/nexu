@@ -93,7 +93,9 @@ function installBrowserStubs() {
   });
 }
 
-function renderWorkspaceLayout(): string {
+function renderWorkspaceLayout(
+  initialEntry = "/workspace/sessions/sess-1",
+): string {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -121,12 +123,16 @@ function renderWorkspaceLayout(): string {
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/workspace/sessions/sess-1"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route element={<WorkspaceLayout />}>
             <Route
               path="/workspace/sessions/:id"
               element={<div>Session body</div>}
+            />
+            <Route
+              path="/workspace/rewards"
+              element={<div>Rewards body</div>}
             />
           </Route>
         </Routes>
@@ -150,5 +156,14 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain('data-session-state="active"');
     expect(markup).toContain("<title>Slack</title>");
     expect(markup).toContain("Design sync thread");
+  });
+
+  it("renders a rewards navigation entry and marks it active on the rewards route", () => {
+    const markup = renderWorkspaceLayout("/workspace/rewards");
+
+    expect(markup).toContain('href="/workspace/rewards"');
+    expect(markup).toContain("layout.nav.rewards");
+    expect(markup).toContain("layout.mobile.rewards");
+    expect(markup).toContain("Rewards body");
   });
 });
