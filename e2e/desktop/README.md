@@ -15,7 +15,51 @@ npm run test:smoke    # Run smoke to verify the basics
 
 - macOS (ARM64 or x86_64)
 - Node.js >= 22 (`nvm install 22`)
-- **Accessibility permission**: System Settings → Privacy & Security → Accessibility → enable for Terminal / iTerm (required for osascript to dismiss quit dialogs)
+
+### macOS Permissions Setup
+
+The test suite uses `osascript` to automatically dismiss quit dialogs and `screencapture` for screenshots. These require explicit macOS permissions.
+
+**Accessibility** (System Settings → Privacy & Security → Accessibility):
+
+| App to add | Why | How to add |
+|------------|-----|------------|
+| Terminal.app (or iTerm2) | Needed when running tests locally from Terminal | Should appear automatically on first run; toggle ON |
+| `/usr/bin/osascript` | Needed for automated UI interaction (clicking quit dialog buttons) | Click `+`, press `Cmd+Shift+G`, type `/usr/bin/osascript`, add and toggle ON |
+| GitHub Actions Runner | Needed for CI — the runner process must be able to interact with UI | Add the runner binary or its parent shell |
+
+> **Note on SSH sessions**: macOS does not grant Accessibility permissions to processes spawned via SSH, even if `/usr/bin/osascript` is added. This is an OS-level limitation. Tests run via SSH will fall back to `kill -9` for app shutdown (functional but not graceful). Tests triggered via GitHub Actions runner (which runs in a GUI login session via LaunchAgent) do not have this limitation.
+
+**Screen Recording** (System Settings → Privacy & Security → Screen Recording):
+
+| App to add | Why |
+|------------|-----|
+| Terminal.app (or iTerm2) | For `screencapture -v` system recording and `screencapture -x` failure screenshots |
+| GitHub Actions Runner | Same, for CI runs |
+
+> If Screen Recording permission is not granted, tests will still pass — recording will silently fail and screenshots may be blank, but no test will break because of it.
+
+### First-time Setup Checklist
+
+```bash
+# 1. Install Node.js
+nvm install 22
+
+# 2. Install E2E dependencies
+cd e2e/desktop
+npm install
+
+# 3. Grant macOS permissions (manual, one-time)
+#    - System Settings → Privacy & Security → Accessibility → add Terminal + /usr/bin/osascript
+#    - System Settings → Privacy & Security → Screen Recording → add Terminal
+#    (See tables above for details)
+
+# 4. Download nightly artifacts
+npm run download
+
+# 5. Verify everything works
+npm run test:smoke
+```
 
 ## Test Modes
 
@@ -140,15 +184,45 @@ On CI failure, `captures/` is automatically uploaded as a GitHub Actions artifac
 ### Mac mini Self-hosted Runner Setup
 
 ```bash
-# One-time setup
-cd e2e/desktop
+# 1. Clone the repo
+git clone git@github.com:nexu-io/nexu.git ~/nexu
+cd ~/nexu/e2e/desktop
 npm install
 
-# Enable Accessibility permission (System Settings → Privacy & Security → Accessibility)
-# Grant permission to the GitHub Actions runner process or its parent shell
+# 2. Install GitHub Actions runner
+mkdir -p ~/actions-runner && cd ~/actions-runner
+# Download from: https://github.com/actions/runner/releases (macOS ARM64)
+curl -fL -o actions-runner.tar.gz https://github.com/actions/runner/releases/download/v2.324.0/actions-runner-osx-arm64-2.324.0.tar.gz
+tar xzf actions-runner.tar.gz && rm actions-runner.tar.gz
 
-# Daily usage (CI triggers automatically, or run manually)
-npm run download && npm test
+# 3. Register runner (get token from repo Settings → Actions → Runners → New)
+./config.sh --url https://github.com/nexu-io/nexu \
+  --token <YOUR_TOKEN> \
+  --name mac-mini-e2e \
+  --labels self-hosted,macOS,ARM64 \
+  --unattended
+
+# 4. Install as user-level LaunchAgent (runs in GUI session, no sudo needed)
+#    Create ~/Library/LaunchAgents/com.github.actions-runner.plist with:
+#      ProgramArguments: ~/actions-runner/run.sh
+#      RunAtLoad: true
+#      KeepAlive: true
+#      PATH must include Node.js bin dir
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.github.actions-runner.plist
+
+# 5. Grant macOS permissions (CRITICAL for CI)
+#    System Settings → Privacy & Security → Accessibility:
+#      - /usr/bin/osascript (for quit dialog automation)
+#      - The runner process or its parent shell
+#    System Settings → Privacy & Security → Screen Recording:
+#      - The runner process (for screencapture)
+#
+#    NOTE: The runner MUST run in a GUI login session (LaunchAgent, not LaunchDaemon)
+#    for Accessibility permissions to work. SSH-spawned processes cannot use
+#    Accessibility — this is a macOS security limitation.
+
+# 6. Verify runner is online
+gh api repos/nexu-io/nexu/actions/runners --jq '.runners[] | {name, status}'
 ```
 
 ## Diagnostics and Debugging
