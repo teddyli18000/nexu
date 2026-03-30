@@ -1227,4 +1227,63 @@ describe("SessionsRuntime", () => {
     // C05ABCD1234 is a Slack channel ID — should be filtered, fall back to senderName
     expect(session?.title).toBe("Dave · slack");
   });
+
+  it("filters Slack group/DM IDs with G and D prefixes", async () => {
+    rootDir = await mkdtemp(path.join(tmpdir(), "nexu-sessions-runtime-"));
+    const runtime = new SessionsRuntime(
+      createEnv({
+        openclawStateDir: rootDir,
+        openclawConfigPath: path.join(rootDir, "openclaw.json"),
+        openclawSkillsDir: path.join(rootDir, "skills"),
+        openclawWorkspaceTemplatesDir: path.join(rootDir, "workspace-templates"),
+      }),
+    );
+
+    const sessionsDir = path.join(rootDir, "agents", "bot-slack", "sessions");
+    await mkdir(sessionsDir, { recursive: true });
+    const sessionPath = path.join(sessionsDir, "slack-group-id.jsonl");
+
+    await writeFile(
+      sessionPath,
+      `${JSON.stringify({
+        type: "message",
+        id: "msg-slack-gid-1",
+        timestamp: "2026-03-25T10:04:00.000Z",
+        message: {
+          role: "user",
+          timestamp: Date.parse("2026-03-25T10:04:00.000Z"),
+          content: [
+            {
+              type: "text",
+              text: [
+                "Conversation info (untrusted metadata):",
+                "```json",
+                JSON.stringify({
+                  message_id: "slack-msg-3",
+                  conversation_label: "G01ABC2DEF3",
+                  sender: "Eve",
+                }, null, 2),
+                "```",
+                "",
+                "Sender (untrusted metadata):",
+                "```json",
+                JSON.stringify({
+                  label: "Eve",
+                  name: "Eve",
+                }, null, 2),
+                "```",
+              ].join("\n"),
+            },
+          ],
+        },
+      })}\n`,
+      "utf8",
+    );
+
+    const sessions = await runtime.listSessions();
+    const session = sessions.find((s) => s.sessionKey === "slack-group-id");
+
+    // G01ABC2DEF3 is a Slack group ID — should be filtered, fall back to senderName
+    expect(session?.title).toBe("Eve · slack");
+  });
 });

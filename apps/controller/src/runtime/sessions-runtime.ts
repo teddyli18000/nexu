@@ -868,10 +868,10 @@ export class SessionsRuntime {
     // Filter out platform-internal IDs that look like identifiers rather than
     // human-readable group names:
     //   oc_ / ou_  — OpenClaw / Feishu internal IDs (hex suffix)
-    //   C[A-Z0-9]{8,} — Slack channel IDs (e.g. C05ABCD1234), uppercase only
+    //   C/G/D + [A-Z0-9]{8,} — Slack IDs: channels (C), groups (G), DMs (D)
     const isIdLike =
       rawGroupName !== undefined &&
-      /^(?:oc_|ou_)[a-f0-9]+$|^C[A-Z0-9]{8,}$/.test(rawGroupName);
+      /^(?:oc_|ou_)[a-f0-9]+$|^[CGD][A-Z0-9]{8,}$/.test(rawGroupName);
     const groupName = isIdLike ? undefined : rawGroupName;
 
     let channelType: string | undefined;
