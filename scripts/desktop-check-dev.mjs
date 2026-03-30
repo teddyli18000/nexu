@@ -23,7 +23,10 @@ function run(command, args) {
     const commandSpec = createCommandSpec(command, args);
     const child = spawn(commandSpec.command, commandSpec.args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: {
+        ...process.env,
+        OPENCLAW_DISABLE_BONJOUR: process.env.OPENCLAW_DISABLE_BONJOUR ?? "1",
+      },
       stdio: "inherit",
     });
 
