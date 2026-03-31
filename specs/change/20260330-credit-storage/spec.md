@@ -178,6 +178,94 @@ created: '2026-03-30'
   - `PostUsage(userId, apiKeyId?, requestId, amountCredits, usageType, dimensions)`
   - `GetAvailableCredits(userId)` 仅作为 link 的读模型，不在本轮设计外部接口。
 
+### Why Service Call + DB Write Are Split
+
+这部分容易混淆，v1 设计里要明确区分 **“谁感知到一次消耗”** 和 **“谁真正把消耗记到账本里”**：
+
+- **`nexu-link` 感知消耗发生**
+  - 因为所有模型请求先到 link，link 最清楚“哪个用户发起了哪次模型调用”。
+  - 所以 link 负责生成 `request_id`、判断这次请求要扣多少积分、发起内部扣费调用。
+
+- **`nexu-cloud` 真正执行记账**
+  - 因为设计原则是“写入在 cloud 做”。
+  - 所以正式的余额扣减、usage 流水写入，都必须由 cloud 在本地 DB transaction 中完成。
+
+- **因此会同时存在两层记录**
+  - `public.credit_usages`：权威积分账本，由 cloud 写。
+  - `link.usage_events`：网关运行事件，由 link 写。
+
+一句话：
+
+```text
+link 负责“发起扣费”
+cloud 负责“正式记账”
+```
+
+### Sequence: Precharge Before Model Call
+
+```text
+User/API client
+  -> nexu-link: 发起模型请求 + API key
+
+nexu-link
+  -> public.credit_accounts: 读取余额（仅预检查）
+  -> nexu-cloud/internal/credits/precharge: 发起内部扣费请求
+
+nexu-cloud
+  -> DB transaction:
+       1. 条件扣减 credit_accounts.available_credits
+       2. 插入 credit_usages
+  -> nexu-link: 返回 success / insufficient_credits
+
+If success:
+  nexu-link -> model provider: 发起模型调用
+  nexu-link -> link.usage_events: 记录运行态事件
+
+If model call fails after precharge:
+  nexu-link -> nexu-cloud/internal/credits/refund: 发起补偿请求
+  nexu-cloud -> credit_recharges: 写 compensation_refund
+```
+
+### What Is And Is Not A Transaction
+
+- **是事务的部分**
+  - `nexu-cloud` 内部对 Postgres 的一次本地事务。
+  - 例如：扣减 `credit_accounts` + 插入 `credit_usages`。
+
+- **不是事务的部分**
+  - `nexu-link -> nexu-cloud` 的 HTTP / internal service call。
+  - `nexu-link -> model provider` 的外部模型调用。
+
+- **所以这不是跨服务分布式事务**
+  - 没有 2PC。
+  - 没有要求 link 和 cloud 同时 commit。
+  - 真正的强一致只发生在 cloud 自己那次 DB transaction 里。
+
+### Responsibility Matrix
+
+| 动作 | 发起者 | 真正执行者 | 落库位置 |
+|---|---|---|---|
+| 读取余额预检查 | link | link | `public.credit_accounts` 只读 |
+| 预扣积分 | link | cloud | `public.credit_accounts` + `public.credit_usages` |
+| 调模型 | link | link | 不写主账本 |
+| 运行态 usage 记录 | link | link | `link.usage_events` |
+| 失败补偿 | link | cloud | `public.credit_recharges` |
+
+### Why Link Still Writes `usage_events`
+
+虽然 link 不写积分主账本，但仍然要写 `link.usage_events`，原因是：
+
+- 它是模型网关，天然拥有请求耗时、provider、model、状态码等运行态信息。
+- 这些信息适合做排障、监控、对账。
+- 但它们**不等于**权威余额账本；真正的余额语义仍以 cloud 写入的 `credit_usages` / `credit_recharges` 为准。
+
+可以把它理解成：
+
+```text
+credit_usages = 财务账
+usage_events   = 运营日志
+```
+
 ### Implementation Steps
 
 1. **定义 shared schema**
