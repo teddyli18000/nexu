@@ -115,50 +115,60 @@ export function startHealthLoop(params: {
         // During boot, gateway not responding is expected ("starting").
         // After boot, check if process is alive to distinguish starting vs dead.
         //
-        // In launchd mode (manageOpenclawProcess=false), we don't own the
-        // child process so isAlive() always returns false. Treat the process
-        // as "assumed alive" because launchd manages it — the HTTP probe is
-        // the authoritative liveness signal, not PID checks.
+        // In unmanaged mode (launchd), we can't check process liveness
+        // directly. Use a grace period: allow up to WEDGE_REPORT_THRESHOLD
+        // consecutive failures before escalating to unhealthy. This covers:
+        // - Wedged process (alive but unresponsive) — detected and logged
+        // - Real crash — escalates to unhealthy after the grace period
         const stillBooting = params.state.bootPhase === "booting";
         const managedProcessAlive = params.processManager?.isAlive() ?? false;
-        const externallyManaged = !params.env.manageOpenclawProcess;
-        const processAlive = managedProcessAlive || externallyManaged;
+        const inUnmanagedGracePeriod =
+          !params.env.manageOpenclawProcess &&
+          consecutiveUnreachableWhileAlive < WEDGE_REPORT_THRESHOLD;
+        const processAlive = managedProcessAlive || inUnmanagedGracePeriod;
+
+        // Always increment the counter when not booting (even if processAlive
+        // is false in managed mode — the counter is harmless and resets on
+        // recovery or when the unhealthy path runs).
+        if (!stillBooting) {
+          consecutiveUnreachableWhileAlive += 1;
+          if (wedgeFirstSeenAt === null) {
+            wedgeFirstSeenAt = checkedAt;
+          }
+        }
+
         if (stillBooting || processAlive) {
           newStatus = "starting";
           params.state.gatewayStatus = "starting";
           params.state.lastGatewayError = "gateway_starting";
 
-          // Track consecutive unreachable probes while process is alive
-          // (exclude boot phase — gateway is expected to be unreachable then).
-          if (!stillBooting && processAlive) {
-            consecutiveUnreachableWhileAlive += 1;
-            if (wedgeFirstSeenAt === null) {
-              wedgeFirstSeenAt = checkedAt;
-            }
-
-            if (
-              consecutiveUnreachableWhileAlive >= WEDGE_REPORT_THRESHOLD &&
-              !wedgeReported
-            ) {
-              logger.warn(
-                {
-                  event: "gateway_wedge_detected",
-                  consecutiveFailures: consecutiveUnreachableWhileAlive,
-                  firstSeenAt: wedgeFirstSeenAt,
-                  lastSuccessfulProbeAt,
-                  lastProbeErrorCode: result.errorCode,
-                  processAlive: true,
-                  pid: params.processManager?.getPid() ?? null,
-                  intervalMs: params.env.runtimeHealthIntervalMs,
-                  bootPhase: params.state.bootPhase,
-                  gatewayStatusBefore: prevGateway,
-                },
-                "gateway wedge detected: process alive but port unreachable",
-              );
-              wedgeReported = true;
-            }
+          // Emit wedge log once when threshold is reached.
+          if (
+            !stillBooting &&
+            consecutiveUnreachableWhileAlive >= WEDGE_REPORT_THRESHOLD &&
+            !wedgeReported
+          ) {
+            logger.warn(
+              {
+                event: "gateway_wedge_detected",
+                consecutiveFailures: consecutiveUnreachableWhileAlive,
+                firstSeenAt: wedgeFirstSeenAt,
+                lastSuccessfulProbeAt,
+                lastProbeErrorCode: result.errorCode,
+                processAlive: managedProcessAlive,
+                pid: params.processManager?.getPid() ?? null,
+                intervalMs: params.env.runtimeHealthIntervalMs,
+                bootPhase: params.state.bootPhase,
+                gatewayStatusBefore: prevGateway,
+                managedProcess: params.env.manageOpenclawProcess,
+              },
+              "gateway wedge detected: process alive but port unreachable",
+            );
+            wedgeReported = true;
           }
         } else {
+          // Managed mode: process is confirmed dead.
+          // Unmanaged mode: grace period expired — real outage or wedge.
           newStatus = "unhealthy";
           params.state.gatewayStatus = "unhealthy";
           params.state.lastGatewayError = "gateway_unreachable";
