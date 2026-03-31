@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resetDir } from "./lib/sidecar-paths.mjs";
 import { resolvePnpmCommand } from "./platforms/filesystem-compat.mjs";
+import { createPlatformCommandSpec } from "./platforms/process-compat.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const electronRoot = resolve(scriptDir, "..");
@@ -14,20 +15,6 @@ const pnpmCommand = resolvePnpmCommand({
   env: process.env,
   platform: process.platform,
 });
-
-function createCommandSpec(command, args) {
-  if (
-    process.platform === "win32" &&
-    (command === "pnpm" || command === "pnpm.cmd")
-  ) {
-    return {
-      command: "cmd.exe",
-      args: ["/d", "/s", "/c", ["pnpm", ...args].join(" ")],
-    };
-  }
-
-  return { command, args };
-}
 
 function formatDurationMs(durationMs) {
   return `${(durationMs / 1000).toFixed(3)}s`;
@@ -48,7 +35,12 @@ async function timedStep(stepName, fn) {
 
 function run(command, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const commandSpec = createCommandSpec(command, args);
+    const commandSpec = createPlatformCommandSpec({
+      command,
+      args,
+      env: options.env ?? process.env,
+      platform: process.platform,
+    });
     const child = spawn(commandSpec.command, commandSpec.args, {
       cwd: options.cwd ?? repoRoot,
       env: options.env ?? process.env,

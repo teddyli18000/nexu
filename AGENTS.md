@@ -40,6 +40,7 @@ pnpm dist:mac:x64                     # Build signed Intel macOS desktop distrib
 pnpm dist:mac:unsigned                # Build unsigned macOS desktop distributables
 pnpm dist:mac:unsigned:arm64          # Build unsigned Apple Silicon macOS desktop distributables
 pnpm dist:mac:unsigned:x64            # Build unsigned Intel macOS desktop distributables
+pnpm dist:win:local                   # Fast local Windows packaging check: reuse existing builds/runtime/sidecars when available and validate dir-only output
 pnpm probe:slack prepare              # Launch Chrome Canary with the dedicated Slack probe profile
 pnpm probe:slack run                  # Run the local Slack reply smoke probe against an authenticated DM
 pnpm --filter @nexu/web dev           # Web only
@@ -184,6 +185,7 @@ The desktop test suite includes real launchd integration tests that run on macOS
 - Do not modify OpenClaw source code.
 - Never commit code changes until explicitly told to do so.
 - Desktop packaged app: never use `npx`, `npm`, `pnpm`, or any shell command that relies on the user's PATH. The packaged Electron app has no shell profile — resolve bin paths programmatically via `require.resolve()` and execute with `process.execPath`. The app must be fully self-contained.
+- Windows packaging split: use `pnpm dist:win` for the full installer/release path and keep it close to CI semantics. Use `pnpm dist:win:local` for local Windows validation when you need fast iteration; it is intentionally dir-only and reuse-first, so it is not a substitute for the full release build.
 - Controller sidecar packaging: every dependency in `apps/controller/package.json` is recursively deep-copied into the desktop distributable via `prepare-controller-sidecar` → `copyRuntimeDependencyClosure`. **Never add heavy transitive-dependency packages (e.g. `npm`, `yarn`) to the controller.** If the controller needs to shell out to a CLI tool, use PATH-based `execFile("npm", ...)` instead of bundling it as a dependency. Each MB added to controller deps adds ~1 MB to the final DMG/ZIP.
 - Native Node.js addons (e.g. `better-sqlite3`) must live in the controller, NOT in the desktop Electron main process. Electron's built-in Node.js has a different ABI version (NODE_MODULE_VERSION) from system Node.js, requiring `electron-rebuild` to recompile native modules. The controller runs as a regular Node.js process (`ELECTRON_RUN_AS_NODE=1`), so native addons work without recompilation.
 

@@ -14,6 +14,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePnpmCommand } from "./platforms/filesystem-compat.mjs";
 import { resolveBuildTargetPlatform } from "./platforms/platform-resolver.mjs";
+import { createPlatformCommandSpec } from "./platforms/process-compat.mjs";
 import {
   createDesktopBuildContext,
   getSharedBuildSteps,
@@ -34,20 +35,16 @@ const pnpmCommand = resolvePnpmCommand({
   env: process.env,
   platform: process.platform,
 });
-const shouldReuseExistingBuildArtifacts =
+const preferExistingBuildArtifacts =
   process.env.NEXU_DESKTOP_USE_EXISTING_BUILDS === "1" ||
   process.env.NEXU_DESKTOP_USE_EXISTING_BUILDS?.toLowerCase() === "true";
-const shouldReuseExistingRuntimeInstall =
+const preferExistingRuntimeInstall =
   process.env.NEXU_DESKTOP_USE_EXISTING_RUNTIME_INSTALL === "1" ||
   process.env.NEXU_DESKTOP_USE_EXISTING_RUNTIME_INSTALL?.toLowerCase() ===
     "true";
-const shouldReuseExistingSidecars =
+const preferExistingSidecars =
   process.env.NEXU_DESKTOP_USE_EXISTING_SIDECARS === "1" ||
   process.env.NEXU_DESKTOP_USE_EXISTING_SIDECARS?.toLowerCase() === "true";
-
-function createCommandSpec(command, args) {
-  return { command, args };
-}
 
 const rmWithRetriesOptions = {
   recursive: true,
@@ -122,21 +119,59 @@ async function ensureExistingRuntimeInstall() {
   ]);
 }
 
-async function ensureExistingSidecars(runtimeDistRoot) {
+async function ensureExistingOpenclawSidecar(runtimeDistRoot, options = {}) {
+  const openclawSidecarRoot = resolve(runtimeDistRoot, "openclaw");
+
+  try {
+    await ensureExistingPath(
+      resolve(openclawSidecarRoot, "archive.json"),
+      "openclaw sidecar archive metadata",
+    );
+    return;
+  } catch (error) {
+    if (!options.allowUnarchived) {
+      throw error;
+    }
+  }
+
+  await Promise.all([
+    ensureExistingPath(
+      resolve(openclawSidecarRoot, "package.json"),
+      "openclaw sidecar package",
+    ),
+    ensureExistingPath(
+      resolve(openclawSidecarRoot, "node_modules", "openclaw", "openclaw.mjs"),
+      "openclaw sidecar entry",
+    ),
+  ]);
+}
+
+async function ensureExistingSidecars(runtimeDistRoot, options = {}) {
   await Promise.all([
     ensureExistingPath(
       resolve(runtimeDistRoot, "controller", "package.json"),
       "controller sidecar",
     ),
-    ensureExistingPath(
-      resolve(runtimeDistRoot, "openclaw", "archive.json"),
-      "openclaw sidecar archive metadata",
-    ),
+    ensureExistingOpenclawSidecar(runtimeDistRoot, {
+      allowUnarchived: options.allowUnarchivedOpenclaw,
+    }),
     ensureExistingPath(
       resolve(runtimeDistRoot, "web", "package.json"),
       "web sidecar",
     ),
   ]);
+}
+
+async function canReuseExistingArtifacts(ensureFn, label) {
+  try {
+    await ensureFn();
+    return true;
+  } catch (error) {
+    console.log(
+      `[dist:win] ${label} unavailable, rebuilding: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  }
 }
 
 async function dereferencePnpmSymlinks() {
@@ -164,11 +199,22 @@ async function dereferencePnpmSymlinks() {
   }
 
   const sharpImgPath = pnpmImgPath ?? resolve(sharpPath, "node_modules/@img");
-  const sharpImgStat = await lstat(sharpImgPath).catch((error) => {
+  const sharpImgStat = await lstat(sharpImgPath).catch(() => null);
+
+  if (!sharpImgStat) {
+    const existingImgStat = await lstat(imgPath).catch(() => null);
+
+    if (existingImgStat) {
+      console.log(
+        `[dist:win] reusing existing top-level @img dependency at ${imgPath}`,
+      );
+      return;
+    }
+
     throw new Error(
-      `[dist:win] Missing required @img dependency at ${sharpImgPath}: ${error instanceof Error ? error.message : String(error)}`,
+      `[dist:win] Missing required @img dependency at ${sharpImgPath} and top-level fallback ${imgPath}`,
     );
-  });
+  }
 
   if (sharpImgStat) {
     console.log(
@@ -232,7 +278,12 @@ function getGitValue(args) {
 
 function run(command, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const commandSpec = createCommandSpec(command, args);
+    const commandSpec = createPlatformCommandSpec({
+      command,
+      args,
+      env: options.env ?? process.env,
+      platform: buildTargetPlatform === "win" ? "win32" : process.platform,
+    });
     const child = spawn(commandSpec.command, commandSpec.args, {
       cwd: options.cwd ?? repoRoot,
       env: options.env ?? process.env,
@@ -247,7 +298,7 @@ function run(command, args, options = {}) {
       }
       rejectRun(
         new Error(
-          `${command} ${args.join(" ")} exited with code ${code ?? "null"}.`,
+          `${commandSpec.command} ${commandSpec.args.join(" ")} exited with code ${code ?? "null"}.`,
         ),
       );
     });
@@ -405,7 +456,9 @@ async function cleanupReleaseIntermediates(releaseRoot) {
 
 async function main() {
   const rawArgs = new Set(process.argv.slice(2));
-  const dirOnly = rawArgs.has("--dir-only") || rawArgs.has("--target=dir");
+  const localMode = rawArgs.has("--local");
+  const dirOnly =
+    localMode || rawArgs.has("--dir-only") || rawArgs.has("--target=dir");
   const timings = [];
   if (buildTargetPlatform !== "win") {
     throw new Error(
@@ -427,6 +480,37 @@ async function main() {
   const runtimeDistRoot = buildContext.resolveRuntimeDistRoot();
   const electronBuilderEnv = buildCapabilities.createElectronBuilderEnv();
   const windowsPwdShimDir = await ensureWindowsPwdShim();
+  const allowUnarchivedOpenclawSidecar = localMode;
+  const shouldReuseExistingBuildArtifacts =
+    preferExistingBuildArtifacts ||
+    (localMode &&
+      (await canReuseExistingArtifacts(
+        ensureExistingBuildArtifacts,
+        "workspace build artifacts",
+      )));
+  const shouldReuseExistingRuntimeInstall =
+    preferExistingRuntimeInstall ||
+    (localMode &&
+      (await canReuseExistingArtifacts(
+        ensureExistingRuntimeInstall,
+        "openclaw runtime install",
+      )));
+  const shouldReuseExistingSidecars =
+    preferExistingSidecars ||
+    (localMode &&
+      (await canReuseExistingArtifacts(
+        () =>
+          ensureExistingSidecars(runtimeDistRoot, {
+            allowUnarchivedOpenclaw: allowUnarchivedOpenclawSidecar,
+          }),
+        "prepared runtime sidecars",
+      )));
+
+  if (localMode) {
+    console.log(
+      `[dist:win] local mode enabled dirOnly=${dirOnly} reuseBuilds=${shouldReuseExistingBuildArtifacts} reuseRuntimeInstall=${shouldReuseExistingRuntimeInstall} reuseSidecars=${shouldReuseExistingSidecars}`,
+    );
+  }
 
   await timedStep(
     "clean release directories",
@@ -528,7 +612,9 @@ async function main() {
     "prepare runtime sidecars",
     async () => {
       if (shouldReuseExistingSidecars) {
-        await ensureExistingSidecars(runtimeDistRoot);
+        await ensureExistingSidecars(runtimeDistRoot, {
+          allowUnarchivedOpenclaw: allowUnarchivedOpenclawSidecar,
+        });
         console.log("[dist:win] reusing existing prepared runtime sidecars");
         return;
       }
@@ -538,7 +624,14 @@ async function main() {
         [resolve(scriptDir, "prepare-runtime-sidecars.mjs"), "--release"],
         {
           cwd: electronRoot,
-          env: buildCapabilities.sidecarReleaseEnv,
+          env: {
+            ...buildCapabilities.sidecarReleaseEnv,
+            ...(localMode
+              ? {
+                  NEXU_DESKTOP_ARCHIVE_OPENCLAW_SIDECAR: "false",
+                }
+              : {}),
+          },
         },
       );
     },
@@ -573,26 +666,29 @@ async function main() {
   await timedStep(
     "run electron-builder",
     async () => {
-      await runElectronBuilder(
-        buildCapabilities.createElectronBuilderArgs({
+      const electronBuilderArgs = [
+        ...buildCapabilities.createElectronBuilderArgs({
           electronVersion,
           buildVersion,
           dirOnly,
         }),
-        {
-          cwd: electronRoot,
-          env: {
-            ...electronBuilderEnv,
-            DEBUG:
-              electronBuilderEnv.DEBUG ?? "electron-builder,electron-builder:*",
-            ...(windowsPwdShimDir
-              ? {
-                  PATH: `${windowsPwdShimDir};${electronBuilderEnv.PATH ?? process.env.PATH ?? ""}`,
-                }
-              : {}),
-          },
+        ...(localMode
+          ? ["--config.npmRebuild=false", "--config.nodeGypRebuild=false"]
+          : []),
+      ];
+      await runElectronBuilder(electronBuilderArgs, {
+        cwd: electronRoot,
+        env: {
+          ...electronBuilderEnv,
+          DEBUG:
+            electronBuilderEnv.DEBUG ?? "electron-builder,electron-builder:*",
+          ...(windowsPwdShimDir
+            ? {
+                PATH: `${windowsPwdShimDir};${electronBuilderEnv.PATH ?? process.env.PATH ?? ""}`,
+              }
+            : {}),
         },
-      );
+      });
     },
     timings,
   );

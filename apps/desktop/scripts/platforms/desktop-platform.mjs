@@ -36,3 +36,37 @@ export function shouldRetryDesktopLinkFailureWithCopy(platformId) {
 export function resolveDesktopPnpmCommand(platformId) {
   return platformId === "win" ? "pnpm.cmd" : "pnpm";
 }
+
+function needsWindowsCmdShell(command) {
+  return /\.(cmd|bat)$/iu.test(command) || command === "pnpm";
+}
+
+function quoteWindowsCmdArg(value) {
+  const stringValue = String(value);
+
+  if (stringValue.length === 0) {
+    return '""';
+  }
+
+  if (!/[\s"&()<>|^]/u.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replaceAll('"', '""')}"`;
+}
+
+export function createDesktopCommandSpec(platformId, command, args) {
+  if (platformId !== "win" || !needsWindowsCmdShell(command)) {
+    return { command, args };
+  }
+
+  return {
+    command: "cmd.exe",
+    args: [
+      "/d",
+      "/s",
+      "/c",
+      [command, ...args].map(quoteWindowsCmdArg).join(" "),
+    ],
+  };
+}
