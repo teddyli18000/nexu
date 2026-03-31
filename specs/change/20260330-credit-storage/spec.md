@@ -99,10 +99,10 @@ created: '2026-03-30'
 模型请求
   -> nexu-link 鉴权(api_key -> user_id)
   -> 读取 public.credit_accounts.available_credits (fast-path precheck)
-  -> 调用 nexu-cloud 执行权威扣费事务
-  -> 扣费成功才放行模型请求
+  -> 进入“LLM 结算策略”分支（待拍板）
+       A. reservation / hold：先冻结，再按实际 usage 结算
+       B. platform absorb：不冻结，由平台吞掉超额差值
   -> 记录 link.usage_events
-  -> 若模型调用失败，nexu-cloud 写补偿 recharge
 ```
 
 ### Data Model
@@ -161,6 +161,17 @@ created: '2026-03-30'
   - 积分包、奖励兑换、邀请奖励、后台赠送都先映射为 `credit_recharges` 的不同 `source`。
   - 套餐编码、支付单号、活动信息放入 `external_ref` / `metadata`。
 
+- **LLM token 结算策略待拍板**
+  - 因为 LLM 的最终成本通常要等 provider 返回 usage 后才能精确知道，当前设计保留两条候选路线，后续再定。
+  - **路线 A：Reservation / Hold**
+    - 给 `credit_accounts` 增加 `reserved_credits bigint not null default 0`。
+    - 新增 `public.credit_reservations`：`id`、`user_id`、`api_key_id`、`request_id unique`、`reserved_credits`、`status`、`expires_at`、`metadata`、`created_at`、`updated_at`。
+    - 语义：请求前先冻结上界额度，请求完成后再把真实消耗写入 `credit_usages`，并释放未使用部分。
+  - **路线 B：Platform absorb overrun**
+    - 不新增 reservation 表，保留当前 3 张核心表。
+    - 但 `credit_usages` 需要能表达“实际成本”和“用户实际被扣金额”的差异；若采用该路线，需补充如 `actual_credits`、`charged_credits`、`platform_absorbed_credits` 三类字段，或等价字段组合。
+    - 语义：请求前只做轻量准入检查，不冻结额度；请求结束后按实际 usage 结算，若最终超出可扣范围，差额由平台吸收。
+
 ### Read / Write Boundaries
 
 - **Cloud 写入职责**
@@ -170,12 +181,13 @@ created: '2026-03-30'
 
 - **Link 读取职责**
   - 基于 `api_key -> user_id` 读取 `public.credit_accounts.available_credits`。
-  - 作为 fast-path 预检查；最终是否余额足够由 cloud 的扣费事务决定。
+  - 作为 fast-path 预检查；最终如何控制 spend 取决于后续选定的 LLM 结算策略。
   - v1 不再依赖现有时间窗 / usage limit。
 
 - **内部接口约定（非用户侧 API）**
   - `PostRecharge(userId, amountCredits, source, externalRef?)`
-  - `PostUsage(userId, apiKeyId?, requestId, amountCredits, usageType, dimensions)`
+  - `CreateReservation(userId, apiKeyId?, requestId, reserveAmount, pricingContext)`（仅方案 A）
+  - `FinalizeUsage(userId, apiKeyId?, requestId, actualAmountCredits, usageType, dimensions)`
   - `GetAvailableCredits(userId)` 仅作为 link 的读模型，不在本轮设计外部接口。
 
 ### Why Service Call + DB Write Are Split
@@ -184,11 +196,11 @@ created: '2026-03-30'
 
 - **`nexu-link` 感知消耗发生**
   - 因为所有模型请求先到 link，link 最清楚“哪个用户发起了哪次模型调用”。
-  - 所以 link 负责生成 `request_id`、判断这次请求要扣多少积分、发起内部扣费调用。
+  - 所以 link 负责生成 `request_id`、构造 pricing context / admission guard、发起内部结算控制调用。
 
 - **`nexu-cloud` 真正执行记账**
   - 因为设计原则是“写入在 cloud 做”。
-  - 所以正式的余额扣减、usage 流水写入，都必须由 cloud 在本地 DB transaction 中完成。
+  - 所以 reservation 创建、最终余额扣减、usage 流水写入，都必须由 cloud 在本地 DB transaction 中完成。
 
 - **因此会同时存在两层记录**
   - `public.credit_usages`：权威积分账本，由 cloud 写。
@@ -197,11 +209,11 @@ created: '2026-03-30'
 一句话：
 
 ```text
-link 负责“发起扣费”
+link 负责“发起结算控制”
 cloud 负责“正式记账”
 ```
 
-### Sequence: Precharge Before Model Call
+### Sequence: LLM Settlement Flow (Pending Decision)
 
 ```text
 User/API client
@@ -209,28 +221,36 @@ User/API client
 
 nexu-link
   -> public.credit_accounts: 读取余额（仅预检查）
-  -> nexu-cloud/internal/credits/precharge: 发起内部扣费请求
+  -> 根据拍板结果进入 A / B 分支
 
-nexu-cloud
-  -> DB transaction:
-       1. 条件扣减 credit_accounts.available_credits
-       2. 插入 credit_usages
-  -> nexu-link: 返回 success / insufficient_credits
+A. reservation / hold
+  nexu-link
+    -> nexu-cloud/internal/credits/reservations: 创建 hold
+  nexu-cloud
+    -> DB transaction:
+         1. 增加 credit_accounts.reserved_credits
+         2. 插入 credit_reservations
+    -> nexu-link: 返回 success / insufficient_credits
 
-If success:
+  If success:
+    nexu-link -> model provider: 发起模型调用
+    provider -> nexu-link: 返回最终 usage
+    nexu-link -> nexu-cloud/internal/credits/finalize: 按实际金额结算
+
+B. platform absorb overrun
   nexu-link -> model provider: 发起模型调用
-  nexu-link -> link.usage_events: 记录运行态事件
+  provider -> nexu-link: 返回最终 usage
+  nexu-link -> nexu-cloud/internal/credits/finalize: 结算用户可扣金额 + 平台吸收差额
 
-If model call fails after precharge:
-  nexu-link -> nexu-cloud/internal/credits/refund: 发起补偿请求
-  nexu-cloud -> credit_recharges: 写 compensation_refund
+Both A/B:
+  nexu-link -> link.usage_events: 记录运行态事件
 ```
 
 ### What Is And Is Not A Transaction
 
 - **是事务的部分**
   - `nexu-cloud` 内部对 Postgres 的一次本地事务。
-  - 例如：扣减 `credit_accounts` + 插入 `credit_usages`。
+  - 例如：创建 reservation，或结算 `credit_usages` + 更新 `credit_accounts`。
 
 - **不是事务的部分**
   - `nexu-link -> nexu-cloud` 的 HTTP / internal service call。
@@ -246,10 +266,11 @@ If model call fails after precharge:
 | 动作 | 发起者 | 真正执行者 | 落库位置 |
 |---|---|---|---|
 | 读取余额预检查 | link | link | `public.credit_accounts` 只读 |
-| 预扣积分 | link | cloud | `public.credit_accounts` + `public.credit_usages` |
+| 创建 reservation（仅方案 A） | link | cloud | `public.credit_accounts` + `public.credit_reservations` |
 | 调模型 | link | link | 不写主账本 |
+| 最终 usage 结算 | link | cloud | `public.credit_accounts` + `public.credit_usages` |
+| 平台 absorb 差额记账（仅方案 B） | link | cloud | `public.credit_usages` |
 | 运行态 usage 记录 | link | link | `link.usage_events` |
-| 失败补偿 | link | cloud | `public.credit_recharges` |
 
 ### Why Link Still Writes `usage_events`
 
@@ -274,12 +295,12 @@ usage_events   = 运营日志
 
 2. **实现 cloud 写路径**
    - 充值写入：新增 recharge 流水，并原子增加 `credit_accounts`。
-   - 消耗写入：基于 `request_id` 幂等插入 usage，并在同一事务里原子扣减余额。
-   - 对模型失败等异常场景，允许写入 `compensation_refund` 类型 recharge 做补偿。
+   - 消耗写入：基于 `request_id` 幂等写 usage；具体是“reservation finalize”还是“平台吸收差额”，待结算策略拍板后实现。
+   - 如走 platform absorb 路线，需要同时记录用户扣减金额与平台补贴金额。
 
 3. **切换 link 准入读取**
    - `nexu-link` 在鉴权后按 `user_id` 读取 `credit_accounts.available_credits`。
-   - 余额不足直接拒绝；预检查通过后仍需 cloud 扣费事务成功才允许进入模型请求。
+   - 余额不足时直接拒绝；其余请求再按最终拍板的结算策略进入 reservation 或 post-settlement 路径。
 
 4. **保留运行态记录与对账能力**
    - `link.usage_events` 继续记录请求结果与成本维度。
@@ -298,19 +319,15 @@ usage_events   = 运营日志
 Authenticate apiKey
 Resolve userId from apiKey
 Load creditAccount by userId
+Compute admission_guard_amount from pricing context
 
 If creditAccount missing:
   Reject as insufficient credits
 
-If available_credits < required_credits:
+If available_credits < admission_guard_amount:
   Reject as insufficient credits
 
-Call cloud precharge with request_id and required_credits
-If precharge fails:
-  Reject as insufficient credits
-
-Allow request
-Record link.usage_events for telemetry
+Proceed to option A or B settlement path
 ```
 
 #### Recharge Posting in Cloud
@@ -327,24 +344,20 @@ Commit transaction
 #### Usage Posting in Cloud
 
 ```text
-Begin transaction
+Choose settlement strategy
 
-If request_id already exists in credit_usages:
-  Return existing result
+If option A (reservation/hold):
+  Create reservation before provider call
+  After provider returns final usage:
+    Capture actual amount into credit_usages
+    Release unused reserved amount
 
-Update credit_accounts
-  set available_credits = available_credits - amount_credits,
-      total_used_credits = total_used_credits + amount_credits,
-      version = version + 1,
-      updated_at = now()
-  where user_id = ? and available_credits >= amount_credits
-
-If no row updated:
-  Fail with insufficient credits
-
-Insert credit_usages row
-
-Commit transaction
+If option B (platform absorb):
+  Run provider call after light precheck
+  After provider returns final usage:
+    Deduct user-chargeable credits
+    Record remaining delta as platform_absorbed_credits
+    Write credit_usages
 ```
 
 ### Lifecycle Flows
@@ -402,22 +415,62 @@ Commit transaction
 Link authenticates api_key and resolves user_id
 Link reads credit_accounts for fast-path precheck
 Link generates request_id
-Link asks cloud to precharge amount_credits
 
-Cloud transaction:
-  Conditionally decrement credit_accounts where balance is sufficient
-  Insert credit_usages(request_id, user_id, amount_credits, ...)
+Option A: reservation / hold
+  Cloud creates reservation with bounded reserve amount
+  If reservation succeeds:
+    Link dispatches model request
+    Provider returns final usage
+    Cloud captures actual amount and releases the unused reserved amount
 
-If precharge succeeds:
+Option B: platform absorb overrun
+  Link/cloud perform a light balance check without reservation
   Link dispatches model request
-  Link records link.usage_events
-
-If provider/model request fails after precharge:
-  Cloud writes compensation_refund recharge with unique idempotency key
+  Provider returns final usage
+  Cloud deducts the user-chargeable portion
+  Any overrun delta is recorded as platform-absorbed cost
 ```
 
-- v1 的 **严格拒绝** 依赖一个前提：`amount_credits` 在请求发出前就能确定。
-- 如果未来改成“按最终 token 精确扣费”，则需要 reservation / hold 设计，明确不在本轮范围内。
+- 当前未拍板点：在真实 LLM token 结算场景下，是采用 reservation / hold，还是允许平台吞掉最终超额差值。
+- 两条路线都默认 **不引入 debt 表**；若后续要支持 overdraft / postpaid，再单独设计 debt ledger。
+
+### Open Design Decision: LLM Settlement Strategy
+
+#### Option A: Reservation / Hold
+
+- **核心思路**
+  - 请求前先冻结一个“可接受的上界额度”，请求后按真实 usage 结算。
+- **数据库变化**
+  - `credit_accounts` 增加 `reserved_credits`
+  - 新增 `credit_reservations`
+- **优点**
+  - prepaid 语义最清晰
+  - 不需要 debt
+  - 并发、重试、超时释放更容易做对
+- **缺点**
+  - 多一张表
+  - 需要 expiration / release / finalize 生命周期管理
+
+#### Option B: Platform Absorb Overrun
+
+- **核心思路**
+  - 不冻结额度，请求先执行；结算时若最终成本超过用户可扣范围，差值由平台承担。
+- **数据库变化**
+  - 不新增 reservation 表
+  - `credit_usages` 需要表达 `actual` / `charged` / `platform_absorbed` 三种金额语义
+- **优点**
+  - 结构更简单
+  - 请求生命周期更短，不需要 hold 清理任务
+- **缺点**
+  - 平台承担成本波动风险
+  - prepaid 边界更弱
+  - 并发场景下更容易出现不可预期的平台补贴
+
+#### Pending Decision
+
+- 当前 design 同时保留上述两条路线，等待后续讨论拍板。
+- 在拍板前，shared 主账本仍以 `credit_accounts + credit_recharges + credit_usages` 为基础模型。
+- `credit_debts` 明确不纳入 v1。
 
 ### Files / Repos Likely Affected
 
@@ -438,13 +491,13 @@ If provider/model request fails after precharge:
 
 - **重复结算**：`credit_usages.request_id` 唯一，重试只会命中同一笔 usage。
 - **重复支付通知 / 重复奖励发放**：`credit_recharges.idempotency_key` 唯一，防止重复入账。
-- **并发扣减**：cloud 扣费事务必须以“余额足够”作为更新条件，防止写成负数。
+- **并发扣减 / 并发 reservation**：任何冻结、释放、结算都必须在 cloud 条件更新事务中完成，防止余额或 reserved 状态错乱。
 - **用户尚未开户**：正常新注册流程应创建 `credit_accounts`；仅在历史回填/异常场景下把缺失账户视为 0 余额。
 - **api key 轮换**：余额归属 `user_id`，不归属单个 key，避免 key 更换导致余额碎片化。
 - **数值精度**：积分统一使用整数最小单位，不使用浮点。
-- **扣费后模型调用失败**：写一笔 `compensation_refund` recharge 做补偿，保持账本 append-only。
-- **link 预检查通过但 cloud 扣费失败**：以 cloud 事务结果为准，最终拒绝请求。
-- **本轮明确不做**：debt、过期余额 lot 分摊、订阅/礼包策略、按最终 token 精确结算、对外余额读取 API。
+- **reservation 路线的超时请求**：需要后台任务释放过期 hold，避免 `reserved_credits` 长期占用。
+- **platform absorb 路线的超额成本**：需要把平台承担的差额显式记账，否则无法做财务归因与毛利分析。
+- **本轮明确不做**：debt、过期余额 lot 分摊、订阅/礼包策略、对外余额读取 API。
 
 ## Plan
 
