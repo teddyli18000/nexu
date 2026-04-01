@@ -463,36 +463,13 @@ def cmd_spawn_task(args):
     # Persist task
     _save_task(task_id, status="composing", text=args.text)
 
-    # Collect env vars to pass through to the sub-agent
-    passthrough_env = {}
-    for var in [
-        "OPENCLAW_CHANNEL_TYPE", "OPENCLAW_CHAT_ID",
-        "OPENCLAW_CONFIG", "OPENCLAW_STATE_DIR",
-        "FEISHU_APP_ID", "FEISHU_APP_SECRET",
-        "NEXU_HOME",
-    ]:
-        val = os.environ.get(var, "")
-        if val:
-            passthrough_env[var] = val
-
-    # Output sessions_spawn payload (stdout -> OpenClaw parses)
-    spawn_payload = {
-        "sessions_spawn": {
-            "instruction": (
-                f"Wait for video task {task_id} to complete, then send the video to the user. "
-                f"Use command: python3 scripts/medeo_video.py wait-and-deliver --task-id {task_id}"
-            ),
-            "runTimeoutSeconds": 5400,
-            **({"env": passthrough_env} if passthrough_env else {}),
-        }
-    }
-    print(json.dumps(spawn_payload))
-
-    # Info output to stderr (main agent can read, does not interfere with OpenClaw)
-    print(f"✅ Video generation submitted (task ID: {task_id})", file=sys.stderr)
-    print(f"⏳ Expected to take 5-15 minutes. Will be sent automatically when complete.", file=sys.stderr)
+    # Output task info to stderr for the agent to read
+    print(f"✅ Video generation submitted (task_id: {task_id})", file=sys.stderr)
+    print(f"⏳ Typically takes 5-15 minutes.", file=sys.stderr)
+    print(f"📋 Set up a cron monitor with: cron add schedule.kind=every schedule.everyMs=180000 sessionTarget=main payload.kind=systemEvent payload.text=\"[medeo-progress] task_id={task_id}\"", file=sys.stderr)
 
 def cmd_wait_and_deliver(args):
+    """Legacy blocking wait — kept for backward compatibility and manual use."""
     task_id = args.task_id
     if not task_id:
         pending = _get_pending_tasks()
@@ -503,8 +480,8 @@ def cmd_wait_and_deliver(args):
             print("❌ No pending video tasks found")
             return
 
-    poll_interval = 180  # 3 minutes per poll
-    max_polls = 30       # Up to 90 minutes (30 x 3min)
+    poll_interval = 60
+    max_polls = 90
 
     for i in range(max_polls):
         result = call_gateway("GET", f"/api/v1/tasks/{task_id}")
@@ -516,7 +493,6 @@ def cmd_wait_and_deliver(args):
             thumbnail_url = result.get("thumbnail_url", "")
             print(f"✅ Video generation complete!")
             print(f"🎬 Video URL: {video_url}")
-            # Deliver to chat platform
             deliver_video(video_url, thumbnail_url, task_id)
             return
         if status == "failed":
@@ -532,8 +508,8 @@ def cmd_wait_and_deliver(args):
             "rendered": "Rendered, transferring", "storing": "Transferring video",
         }
         label = status_labels.get(status, status)
-        elapsed = (i + 1) * 3
-        print(f"⏳ [{elapsed}min/{max_polls * 3}min] {label}, waiting 3 minutes...")
+        elapsed = i + 1
+        print(f"⏳ [{elapsed}min/{max_polls}min] {label}...")
         time.sleep(poll_interval)
 
     print("❌ Video generation timed out (exceeded 90 minutes)")
@@ -554,8 +530,10 @@ def cmd_task_status(args):
     print(f"Task status: {status_labels.get(status, status)}")
     if status == "completed":
         print(f"🎬 Video URL: {result.get('video_url', 'N/A')}")
+        print(f"⚠️ Task finished. Remove the cron monitor if one is active.")
     elif status == "failed":
         print(f"❌ Error: {result.get('error_message', 'N/A')}")
+        print(f"⚠️ Task finished. Remove the cron monitor if one is active.")
 
 def cmd_recover(args):
     pending = _get_pending_tasks()

@@ -60,18 +60,36 @@ python3 scripts/medeo_video.py spawn-task --text "make a video from this image" 
 
 ### After Submission
 
-1. spawn-task returns immediately without blocking
-2. **Reply to the user immediately**: "Your video is being generated. It typically takes 5-15 minutes and will be sent to you automatically when ready."
-3. **Do not wait** — resume normal conversation
-4. A sub-agent will automatically wait in the background and deliver the video
+1. `spawn-task` returns immediately. Read `task_id` from the stderr output (line starting with `✅`)
+2. **Tell the user** their video is being generated (typically 5-15 minutes) and you'll keep them updated
+3. **Set up a progress monitor** — use the `cron` tool to check progress every 3 minutes:
+   ```
+   cron add {
+     "schedule": { "kind": "every", "everyMs": 120000 },
+     "sessionTarget": "main",
+     "payload": {
+       "kind": "systemEvent",
+       "text": "[medeo-progress] task_id=<TASK_ID> — Run: python3 scripts/medeo_video.py task-status --task-id <TASK_ID> and act on the result."
+     }
+   }
+   ```
+4. **Do not wait** — resume normal conversation immediately
+5. When the cron fires, you will receive a system event. Handle it:
+   - Run `task-status --task-id <id>` to get the current state
+   - If status changed → casually mention it to the user, like a friend giving a quick update (e.g. "your video is rendering now, almost there!")
+   - If completed → you MUST send the video URL to the user immediately. Never just say "completed" without the link. Then `cron remove <job_id>`
+   - If failed → let the user know, then `cron remove <job_id>`
+   - If no change → use your judgement based on how long since your last update. Don't repeat the same status.
+   - **Keep it brief and conversational** — no task IDs, no technical jargon, no system-notification style
+6. **Important**: Remember the cron `job_id` so you can remove it when done. The script will also remind you.
 
 ## When the User Asks "Is my video ready?"
 
 1. Run `python3 scripts/medeo_video.py task-status --task-id <id>`
    - If you don't remember the task_id, run `python3 scripts/medeo_video.py recover` to see all tasks
 2. Reply based on the output:
-   - "AI composing" → "Your video is still being generated, please wait a few minutes"
-   - "Rendering" → "The video has been composed and is now rendering, almost done"
+   - "AI composing" → still working on it, the AI is composing the scene
+   - "Rendering" → scene is ready, rendering the video now — almost there
    - "Completed" → send the video link directly to the user
    - "Failed" → relay the error message and suggest retrying
 
@@ -81,12 +99,12 @@ If you don't remember whether a video was previously generated:
 1. Run `python3 scripts/medeo_video.py recover`
 2. It reads historical tasks from the local persistence file and queries the gateway for latest status
 3. Completed tasks → send the video_url to the user directly
-4. Still in progress → inform the user it's still generating
+4. Still in progress → inform the user it's still generating, and set up a new cron monitor
 
 ## Duration Limit
 
 - Default **15 seconds**, maximum **20 seconds**. If the user requests more than 20 seconds, reject upfront — do not call the API
-- Tell the user: "The current video duration limit is 20 seconds. Please shorten the duration and try again."
+- Tell the user the video duration limit is 20 seconds and ask them to shorten it.
 
 ## Error Handling
 
