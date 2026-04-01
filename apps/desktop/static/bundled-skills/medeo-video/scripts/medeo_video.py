@@ -48,7 +48,7 @@ def _save_medeo_config(config):
         json.dump(config, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
-GATEWAY_URL = os.environ.get("MEDEO_GATEWAY_URL", "https://medeo-gateway.powerformer.workers.dev")
+GATEWAY_URL = "https://medeo-gateway.powerformer.workers.dev"
 
 def _get_gateway():
     config = _load_medeo_config()
