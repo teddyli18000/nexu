@@ -2,7 +2,7 @@
 """Medeo Video Skill - AI video generation via Medeo Gateway
 
 Usage:
-  medeo_video.py setup --api-key mgk_xxx --gateway-url https://...
+  medeo_video.py setup --api-key mgk_xxx
   medeo_video.py check
   medeo_video.py update-key --api-key mgk_xxx
   medeo_video.py remove-key
@@ -48,11 +48,12 @@ def _save_medeo_config(config):
         json.dump(config, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
+GATEWAY_URL = "https://medeo-gateway.powerformer.workers.dev"
+
 def _get_gateway():
     config = _load_medeo_config()
     api_key = config.get("apiKey", "")
-    gateway_url = config.get("gatewayUrl", "")
-    return api_key, gateway_url
+    return api_key, GATEWAY_URL
 
 # ── Task persistence ──
 
@@ -163,8 +164,8 @@ def call_gateway(method, path, **kwargs):
     import urllib.error
 
     api_key, gateway_url = _get_gateway()
-    if not gateway_url:
-        print("❌ Gateway URL not configured. Please run: medeo_video.py setup --gateway-url https://...")
+    if not api_key:
+        print("❌ API Key not configured. Please run: medeo_video.py setup --api-key mgk_yourkey")
         sys.exit(1)
 
     url = f"{gateway_url}{path}"
@@ -330,9 +331,6 @@ def cmd_setup(args):
             sys.exit(1)
         config["apiKey"] = args.api_key
         print(f"✅ API Key saved (****{args.api_key[-4:]})")
-    if args.gateway_url:
-        config["gatewayUrl"] = args.gateway_url.rstrip("/")
-        print(f"✅ Gateway URL saved: {config['gatewayUrl']}")
     _save_medeo_config(config)
     print(f"📁 Config written to: {_medeo_config_path()}")
 
@@ -341,18 +339,13 @@ def cmd_check(args):
     if not config.get("apiKey"):
         print("❌ API Key not configured.")
         print("📋 Please obtain a Key from the admin, then run:")
-        print("   python3 medeo_video.py setup --api-key mgk_yourkey --gateway-url https://...")
+        print("   python3 medeo_video.py setup --api-key mgk_yourkey")
         sys.exit(1)
 
     key = config["apiKey"]
-    gateway = config.get("gatewayUrl", "")
     print(f"🔑 API Key: ****{key[-4:]}")
-    print(f"🌐 Gateway URL: {gateway or 'not set'}")
-    print(f"📁 Config file: {_medeo_config_path()}")
-
-    if not gateway:
-        print("⚠️ Gateway URL not set")
-        sys.exit(1)
+    print(f"🌐 Gateway: {GATEWAY_URL}")
+    print(f"📁 Config: {_medeo_config_path()}")
 
     result = call_gateway("GET", "/api/v1/key/status")
     print(f"✅ Key valid")
@@ -449,8 +442,8 @@ def cmd_spawn_task(args):
 
     # Duration validation
     duration = args.duration or 5000
-    if duration > 15000:
-        print("❌ Video duration cannot exceed 15 seconds. Please shorten the duration and try again.")
+    if duration > 20000:
+        print("❌ Video duration cannot exceed 20 seconds. Please shorten the duration and try again.")
         sys.exit(1)
 
     body = {
@@ -582,7 +575,6 @@ def main():
     # setup
     p = sub.add_parser("setup", help="Configure API Key and gateway URL")
     p.add_argument("--api-key", help="API Key starting with mgk_")
-    p.add_argument("--gateway-url", help="Gateway URL")
 
     # check
     sub.add_parser("check", help="Check configuration and Key status")
@@ -605,7 +597,7 @@ def main():
     # spawn-task
     p = sub.add_parser("spawn-task", help="Submit video generation (async)")
     p.add_argument("--text", required=True, help="Video description")
-    p.add_argument("--duration", type=int, default=5000, help="Duration in ms (max 15000)")
+    p.add_argument("--duration", type=int, default=15000, help="Duration in ms (min 15000, max 20000)")
     p.add_argument("--aspect-ratio", default="16:9", choices=["16:9", "9:16"])
     p.add_argument("--media-ids", help="Media IDs (comma-separated)")
 

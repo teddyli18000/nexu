@@ -1,6 +1,6 @@
 ---
 name: Medeo Video
-description: AI video generation via Medeo Gateway - generate short videos (up to 15 seconds). Supports text-only and image+text generation. Trigger phrases: "generate video", "make a video", "medeo".
+description: AI video generation via Medeo Gateway - generate short videos (15-20 seconds). Supports text-only and image+text generation. Trigger phrases: "generate video", "make a video", "medeo".
 homepage: https://www.medeo.app/
 metadata:
   {
@@ -14,19 +14,19 @@ metadata:
 
 # Medeo Video Generation
 
-Generate AI short videos (up to 15 seconds) for users via Medeo Gateway. Supports text-only and image+text generation.
+Generate AI short videos (15-20 seconds) for users via Medeo Gateway. Supports text-only and image+text generation.
 
 ## Requirements
 
 - Python 3.8+
-- `apiKey` and `gatewayUrl` configured in `~/.nexu/medeo.json`
+- `apiKey` configured in `~/.nexu/medeo.json`
 - Optional: `ffmpeg` or `sips` (for image compression)
 
 ## First-Time Setup
 
 If the user has not configured an API Key, guide them to:
 1. Contact the admin to obtain an API Key starting with `mgk_`
-2. Run: `python3 scripts/medeo_video.py setup --api-key mgk_yourkey --gateway-url https://medeo-gateway.powerformer.workers.dev`
+2. Run: `python3 scripts/medeo_video.py setup --api-key mgk_yourkey`
 3. Run: `python3 scripts/medeo_video.py check` to confirm the configuration is correct
 
 ## Pre-Generation Check (must run before each generation)
@@ -85,8 +85,8 @@ If you don't remember whether a video was previously generated:
 
 ## Duration Limit
 
-- Maximum **15 seconds**. If the user requests more than 15 seconds, reject upfront — do not call the API
-- Tell the user: "The current video duration limit is 15 seconds. Please shorten the duration and try again."
+- Default **15 seconds**, maximum **20 seconds**. If the user requests more than 20 seconds, reject upfront — do not call the API
+- Tell the user: "The current video duration limit is 20 seconds. Please shorten the duration and try again."
 
 ## Error Handling
 
@@ -103,14 +103,14 @@ When any command returns an error:
 | "Platform credits insufficient" | Inform user service is temporarily unavailable, contact Nexu admin |
 | "File too large" | Suggest the user send a smaller file |
 | "Video upload not supported" | Tell user only images can be used as source material |
-| "Video duration cannot exceed 15 seconds" | Suggest shortening the duration |
+| "Video duration cannot exceed 20 seconds" | Suggest shortening the duration |
 | "Service temporarily unavailable" | Wait a few minutes and retry |
 
 ## Command Reference
 
 | Scenario | Command | Blocking? |
 |---|---|---|
-| First-time setup | `setup --api-key mgk_xxx --gateway-url https://...` | No |
+| First-time setup | `setup --api-key mgk_xxx` | No |
 | Check status | `check` | No |
 | Update key | `update-key --api-key mgk_newkey` | No |
 | Remove key | `remove-key` | No |
