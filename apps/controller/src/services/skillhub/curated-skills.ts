@@ -45,6 +45,7 @@ export const CURATED_SKILL_SLUGS: readonly string[] = [
  * These are NOT on ClawHub, so they're copied directly to the skills directory.
  */
 export const STATIC_SKILL_SLUGS: readonly string[] = [
+  "libtv-video",
   "coding-agent",
   "gh-issues",
   "clawhub",
