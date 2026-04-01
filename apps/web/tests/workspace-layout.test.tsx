@@ -95,6 +95,26 @@ function installBrowserStubs() {
 
 function renderWorkspaceLayout(
   initialEntry = "/workspace/sessions/sess-1",
+  rewardsStatus?: {
+    viewer: {
+      cloudConnected: boolean;
+      activeModelId: string | null;
+      activeModelProviderId: string | null;
+      usingManagedModel: boolean;
+    };
+    progress: {
+      claimedCount: number;
+      totalCount: number;
+      earnedCredits: number;
+      availableCredits?: number;
+    };
+    cloudBalance: {
+      totalBalance: number;
+      totalRecharged: number;
+      totalConsumed: number;
+    } | null;
+    tasks?: Array<Record<string, unknown>>;
+  },
 ): string {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -120,6 +140,12 @@ function renderWorkspaceLayout(
     email: "alice@example.com",
     name: "Alice",
   });
+  if (rewardsStatus) {
+    queryClient.setQueryData(["desktop-rewards"], {
+      tasks: [],
+      ...rewardsStatus,
+    });
+  }
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
@@ -165,6 +191,60 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain("layout.nav.rewards");
     expect(markup).toContain("layout.mobile.rewards");
     expect(markup).toContain("Rewards body");
+  });
+
+  it("renders the logged-out sidebar growth card", () => {
+    const markup = renderWorkspaceLayout();
+
+    expect(markup).toContain("layout.sidebar.loginTitle");
+    expect(markup).toContain("layout.sidebar.loginSubtitle");
+    expect(markup).not.toContain("layout.sidebar.rewardsTitle");
+  });
+
+  it("renders the logged-in rewards card with balance and progress", () => {
+    const markup = renderWorkspaceLayout("/workspace/sessions/sess-1", {
+      viewer: {
+        cloudConnected: true,
+        activeModelId: "link/gemini",
+        activeModelProviderId: "link",
+        usingManagedModel: true,
+      },
+      progress: {
+        claimedCount: 4,
+        totalCount: 10,
+        earnedCredits: 700,
+      },
+      cloudBalance: {
+        totalBalance: 200,
+        totalRecharged: 900,
+        totalConsumed: 700,
+      },
+    });
+
+    expect(markup).toContain("layout.sidebar.rewardsTitle");
+    expect(markup).toContain("layout.sidebar.progressLabel");
+    expect(markup).toContain("layout.sidebar.balanceLabel");
+    expect(markup).toContain("layout.sidebar.balanceLabel 200");
+    expect(markup).not.toContain("layout.sidebar.loginTitle");
+  });
+
+  it("renders a balance placeholder when rewards status has no balance yet", () => {
+    const markup = renderWorkspaceLayout("/workspace/sessions/sess-1", {
+      viewer: {
+        cloudConnected: true,
+        activeModelId: "link/gemini",
+        activeModelProviderId: "link",
+        usingManagedModel: true,
+      },
+      progress: {
+        claimedCount: 1,
+        totalCount: 10,
+        earnedCredits: 100,
+      },
+      cloudBalance: null,
+    });
+
+    expect(markup).toContain("layout.sidebar.balancePlaceholder");
   });
 
   it("renders WhatsApp sessions with the correct sidebar icon and label", () => {

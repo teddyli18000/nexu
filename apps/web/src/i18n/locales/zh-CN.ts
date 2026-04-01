@@ -148,6 +148,15 @@ const zhCN = {
   "layout.mobile.settings": "设置",
   "layout.mobile.settingsSubtitle": "管理 AI 模型服务商",
   "layout.mobile.conversations": "对话",
+  "layout.sidebar.loginTitle": "登录 nexu 账号",
+  "layout.sidebar.loginSubtitle": "使用云端模型与奖励",
+  "layout.sidebar.loginPending": "等待浏览器完成登录",
+  "layout.sidebar.rewardsTitle": "分享 nexu，赚取积分",
+  "layout.sidebar.rewardsSubtitle": "每日、开源与社媒任务",
+  "layout.sidebar.progressLabel": "已领取任务",
+  "layout.sidebar.balanceLabel": "积分余额",
+  "layout.sidebar.balancePlaceholder": "积分同步中…",
+  "layout.sidebar.rewardsCta": "查看",
   "layout.empty.title": "暂无对话",
   "layout.empty.description":
     "请先配置平台 Bot，然后在 Slack / Discord / WhatsApp 中 @nexu 或直接私信小龙虾 🦞 —— 对话会自动出现在这里。",
@@ -297,10 +306,17 @@ const zhCN = {
   "budget.confirm.cancel": "稍后再说",
   "budget.confirm.checkinDesc":
     "确认今日打卡后，+${n} 会加入你的奖励额度。每天可领取一次。",
-  "budget.banner.warningTitle": "积分即将耗尽",
-  "budget.banner.depletedTitle": "积分已耗尽",
+  "budget.banner.warningTitle": "云端额度即将耗尽",
+  "budget.banner.depletedTitle": "云端额度已用尽",
   "budget.banner.description":
     "完成任务赚取更多积分，或使用自带 API Key (BYOK) 继续使用。",
+  "budget.banner.warningDescription":
+    "套餐额度即将耗尽，使用自带 API Key 或升级套餐可避免任务中断。",
+  "budget.banner.depletedDescription":
+    "套餐额度已用尽（明天重置），使用自带 API Key 或升级套餐继续使用。",
+  "budget.banner.actionsLabel": "选择操作",
+  "budget.banner.apiKey": "自带 API Key",
+  "budget.banner.upgrade": "升级套餐",
   "budget.banner.earnCredits": "做任务赚积分",
   "budget.banner.byok": "自带 API Key",
   "rewards.action.claimed": "已领取",

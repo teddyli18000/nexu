@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
+  ChevronRight,
   ChevronUp,
   CircleHelp,
-  Coins,
   Gift,
   Globe,
   Home,
@@ -543,6 +543,17 @@ function WorkspaceLayoutInner() {
   const userName = me?.name?.trim() || session?.user?.name || userEmail;
   const userImage = me?.image ?? session?.user?.image ?? null;
   const userInitial = (userName[0] ?? userEmail[0] ?? "U").toUpperCase();
+  const rewardProgressPercent =
+    rewardsStatus.progress.totalCount > 0
+      ? Math.round(
+          (rewardsStatus.progress.claimedCount /
+            rewardsStatus.progress.totalCount) *
+            100,
+        )
+      : 0;
+  const rewardBalanceLabel = rewardsStatus.cloudBalance
+    ? `${t("layout.sidebar.balanceLabel")} ${rewardsStatus.cloudBalance.totalBalance}`
+    : t("layout.sidebar.balancePlaceholder");
 
   const showEmptyState =
     sessions.length === 0 &&
@@ -815,7 +826,7 @@ function WorkspaceLayoutInner() {
           </div>
         </div>
 
-        {/* Cloud login / credits area */}
+        {/* Sidebar growth card */}
         <div
           className="px-3 pb-1 shrink-0"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
@@ -824,46 +835,73 @@ function WorkspaceLayoutInner() {
             <button
               type="button"
               onClick={() => void handleCloudConnect()}
-              className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-[12px] font-medium text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors cursor-pointer"
-              title={t("layout.loginCta")}
+              className="group w-full rounded-[18px] border border-border-subtle bg-gradient-to-r from-surface-2 via-surface-1 to-surface-2 px-4 py-3 text-left shadow-[0_10px_30px_rgba(15,23,42,0.04)] hover:border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
             >
-              {cloudConnecting ? (
-                <Sparkles size={14} className="animate-pulse shrink-0" />
-              ) : (
-                <LogIn size={14} className="shrink-0" />
-              )}
-              {!collapsed && t("layout.loginCta")}
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#101318_0%,#232831_100%)] text-white shadow-[0_10px_20px_rgba(15,23,42,0.18)]">
+                  {cloudConnecting ? (
+                    <Sparkles size={16} className="animate-pulse" />
+                  ) : (
+                    <LogIn size={16} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-text-primary">
+                    {t("layout.sidebar.loginTitle")}
+                  </div>
+                  <div className="text-[11px] text-text-muted">
+                    {cloudConnecting
+                      ? t("layout.sidebar.loginPending")
+                      : t("layout.sidebar.loginSubtitle")}
+                  </div>
+                </div>
+                <ChevronRight
+                  size={14}
+                  className="shrink-0 text-text-tertiary transition-transform group-hover:translate-x-0.5"
+                />
+              </div>
             </button>
           ) : (
             <Link
               to="/workspace/rewards"
-              className="flex items-center gap-2 w-full rounded-lg px-3 py-2 hover:bg-surface-3 transition-colors"
-              title={t("layout.credits.label")}
+              className="group block w-full rounded-[18px] border border-[#f4d9b5] bg-[linear-gradient(135deg,#fffaf1_0%,#fff2e4_50%,#fffaf4_100%)] px-4 py-3 text-left text-text-primary shadow-[0_12px_30px_rgba(214,119,6,0.08)] hover:border-[#efc994]"
             >
-              <Coins
-                size={14}
-                className="text-[var(--color-brand-primary)] shrink-0"
-              />
-              {!collapsed && (
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-1 text-[11px] leading-tight truncate">
-                    <span className="font-semibold tabular-nums text-text-primary">
-                      {rewardsStatus.progress.claimedCount}
-                    </span>
-                    <span className="text-text-muted font-normal">
-                      / {rewardsStatus.progress.totalCount}
-                    </span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#f59e0b_0%,#f97316_100%)] text-white shadow-[0_10px_20px_rgba(249,115,22,0.22)]">
+                  <Gift size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold">
+                    {t("layout.sidebar.rewardsTitle")}
                   </div>
-                  <div className="mt-1 h-[3px] w-full rounded-full bg-border overflow-hidden">
+                  <div className="text-[11px] text-text-muted">
+                    {t("layout.sidebar.rewardsSubtitle")}
+                  </div>
+                </div>
+                <div className="rounded-full border border-white/70 bg-white/80 px-2 py-1 text-[11px] font-semibold text-[#b45309]">
+                  {rewardsStatus.progress.claimedCount}/
+                  {rewardsStatus.progress.totalCount}
+                </div>
+              </div>
+              {!collapsed && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-text-muted">
+                    <span>{t("layout.sidebar.progressLabel")}</span>
+                    <span>{rewardProgressPercent}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-border">
                     <div
-                      className="h-full rounded-full bg-[var(--color-brand-primary)] transition-all duration-300 ease-out"
-                      style={{
-                        width:
-                          rewardsStatus.progress.totalCount > 0
-                            ? `${Math.round((rewardsStatus.progress.claimedCount / rewardsStatus.progress.totalCount) * 100)}%`
-                            : "0%",
-                      }}
+                      className="h-full rounded-full bg-[var(--color-brand-primary)] transition-all"
+                      style={{ width: `${rewardProgressPercent}%` }}
                     />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <div className="font-semibold text-text-primary">
+                      {rewardBalanceLabel}
+                    </div>
+                    <span className="text-[#b45309] transition-transform group-hover:translate-x-0.5">
+                      {t("layout.sidebar.rewardsCta")}
+                    </span>
                   </div>
                 </div>
               )}

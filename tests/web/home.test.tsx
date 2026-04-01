@@ -88,12 +88,21 @@ function renderRewardsPage(): string {
 }
 
 describe("HomePage", () => {
-  it("renders a teaser entry that links into the rewards center", () => {
+  it("does not render the removed rewards teaser card on the home page", () => {
     const markup = renderHomePage();
 
-    expect(markup).toContain('href="/workspace/rewards"');
-    expect(markup).toContain("budget.viral.loginFirst");
-    expect(markup).toContain("home.rewardsTeaser.cta");
+    expect(markup).not.toContain('href="/workspace/rewards"');
+    expect(markup).not.toContain("budget.viral.loginFirst");
+    expect(markup).not.toContain("home.rewardsTeaser.cta");
+  });
+
+  it("renders the development budget debug panel", () => {
+    const markup = renderHomePage();
+
+    expect(markup).toContain("Budget Debug");
+    expect(markup).toContain("真实状态");
+    expect(markup).toContain("预警");
+    expect(markup).toContain("耗尽");
   });
 
   it("renders the alpha hero as a looping muted autoplay video", () => {

@@ -11,7 +11,6 @@ import {
   WechatIcon,
   WhatsAppIcon,
 } from "@/components/platform-icons";
-import { HomeRewardsTeaser } from "@/components/rewards/home-rewards-teaser";
 import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { useGitHubStars } from "@/hooks/use-github-stars";
 import { getChannelChatUrl } from "@/lib/channel-links";
@@ -66,6 +65,12 @@ type LiveStatusResponse = {
     alive: boolean;
   };
 };
+
+type BudgetBannerStatus = "healthy" | "warning" | "depleted";
+type BudgetBannerDebugMode = "actual" | Exclude<BudgetBannerStatus, "healthy">;
+
+const budgetBannerDebugStorageKey = "nexu_budget_banner_debug_mode";
+const showBudgetBannerDebugPanel = import.meta.env.DEV;
 
 function formatRelativeTime(
   date: string | null | undefined,
@@ -270,6 +275,19 @@ export function HomePage() {
   const [modalChannel, setModalChannel] = useState<
     "feishu" | "slack" | "discord" | null
   >(null);
+  const [budgetBannerDebugMode, setBudgetBannerDebugMode] =
+    useState<BudgetBannerDebugMode>(() => {
+      if (!showBudgetBannerDebugPanel) return "actual";
+      try {
+        const stored = localStorage.getItem(budgetBannerDebugStorageKey);
+        if (stored === "warning" || stored === "depleted") {
+          return stored;
+        }
+      } catch {
+        // ignore storage errors
+      }
+      return "actual";
+    });
 
   // Budget warning banner: dismissed for today using localStorage
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(() => {
@@ -285,7 +303,7 @@ export function HomePage() {
 
   const { status: rewardsStatus } = useDesktopRewardsStatus();
 
-  const budgetBannerStatus = useMemo((): "warning" | "depleted" | "healthy" => {
+  const budgetBannerStatus = useMemo((): BudgetBannerStatus => {
     if (!rewardsStatus.viewer.cloudConnected) return "healthy";
     const { cloudBalance } = rewardsStatus;
     if (cloudBalance === null) return "healthy";
@@ -307,6 +325,21 @@ export function HomePage() {
       // ignore storage errors
     }
   }, []);
+  const handleBudgetBannerDebugModeChange = useCallback(
+    (mode: BudgetBannerDebugMode) => {
+      setBudgetBannerDebugMode(mode);
+      try {
+        if (mode === "actual") {
+          localStorage.removeItem(budgetBannerDebugStorageKey);
+          return;
+        }
+        localStorage.setItem(budgetBannerDebugStorageKey, mode);
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [],
+  );
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
@@ -489,6 +522,13 @@ export function HomePage() {
   const connectedTypes = new Set<string>(
     activeChannels.map((c) => c.channelType),
   );
+  const resolvedBudgetBannerStatus =
+    budgetBannerDebugMode === "actual"
+      ? budgetBannerStatus
+      : budgetBannerDebugMode;
+  const shouldShowBudgetBanner =
+    resolvedBudgetBannerStatus !== "healthy" &&
+    (!bannerDismissed || budgetBannerDebugMode !== "actual");
 
   const { data: liveStatus } = useQuery({
     queryKey: ["channels-live-status"],
@@ -534,6 +574,13 @@ export function HomePage() {
           label: t("home.agent.starting"),
         };
   }, [hasChannel, liveStatus, t]);
+  const budgetBannerDebugPanel = showBudgetBannerDebugPanel ? (
+    <BudgetBannerDebugPanel
+      actualStatus={budgetBannerStatus}
+      mode={budgetBannerDebugMode}
+      onModeChange={handleBudgetBannerDebugModeChange}
+    />
+  ) : null;
 
   const handleChannelCreated = useCallback(
     (channelId: string) => {
@@ -628,9 +675,9 @@ export function HomePage() {
     return (
       <div className="h-full overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
-          {!bannerDismissed && budgetBannerStatus !== "healthy" && (
+          {shouldShowBudgetBanner && (
             <BudgetWarningBanner
-              status={budgetBannerStatus}
+              status={resolvedBudgetBannerStatus}
               onDismiss={handleBannerDismiss}
             />
           )}
@@ -737,10 +784,7 @@ export function HomePage() {
               </div>
             </div>
           </div>
-
-          <HomeRewardsTeaser />
         </div>
-
         {modalChannel && (
           <ChannelConnectModal
             channelType={modalChannel}
@@ -780,6 +824,7 @@ export function HomePage() {
             }}
           />
         )}
+        {budgetBannerDebugPanel}
       </div>
     );
   }
@@ -793,9 +838,9 @@ export function HomePage() {
         className="max-w-4xl mx-auto px-4 sm:px-6 pb-6 sm:pb-8 space-y-6"
         style={{ paddingTop: isDesktopClient ? "2rem" : "1.5rem" }}
       >
-        {!bannerDismissed && budgetBannerStatus !== "healthy" && (
+        {shouldShowBudgetBanner && (
           <BudgetWarningBanner
-            status={budgetBannerStatus}
+            status={resolvedBudgetBannerStatus}
             onDismiss={handleBannerDismiss}
           />
         )}
@@ -1082,8 +1127,6 @@ export function HomePage() {
           </div>
         </div>
 
-        <HomeRewardsTeaser />
-
         {/* Activity Feed */}
         <ActivityFeed />
 
@@ -1098,7 +1141,6 @@ export function HomePage() {
           }
         />
       </div>
-
       {modalChannel && (
         <ChannelConnectModal
           channelType={modalChannel}
@@ -1137,6 +1179,58 @@ export function HomePage() {
           }}
         />
       )}
+      {budgetBannerDebugPanel}
+    </div>
+  );
+}
+
+function BudgetBannerDebugPanel({
+  actualStatus,
+  mode,
+  onModeChange,
+}: {
+  actualStatus: BudgetBannerStatus;
+  mode: BudgetBannerDebugMode;
+  onModeChange: (mode: BudgetBannerDebugMode) => void;
+}) {
+  const options: Array<{
+    label: string;
+    value: BudgetBannerDebugMode;
+  }> = [
+    { label: "真实状态", value: "actual" },
+    { label: "预警", value: "warning" },
+    { label: "耗尽", value: "depleted" },
+  ];
+
+  return (
+    <div className="pointer-events-none fixed bottom-6 right-6 z-40">
+      <div className="pointer-events-auto w-[220px] rounded-2xl border border-border bg-white/95 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.16)] backdrop-blur">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+          Budget Debug
+        </div>
+        <div className="mt-1 text-[12px] text-text-secondary">
+          当前真实状态：{actualStatus}
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {options.map((option) => {
+            const active = mode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onModeChange(option.value)}
+                className={
+                  active
+                    ? "rounded-lg bg-[#111317] px-2 py-2 text-[12px] font-medium text-white transition"
+                    : "rounded-lg border border-border bg-surface-1 px-2 py-2 text-[12px] font-medium text-text-secondary transition hover:border-border-hover hover:bg-surface-2"
+                }
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

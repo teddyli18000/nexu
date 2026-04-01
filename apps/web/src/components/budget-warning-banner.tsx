@@ -8,25 +8,43 @@ export interface BudgetWarningBannerProps {
   onDismiss: () => void;
 }
 
+const statusConfig = {
+  warning: {
+    titleKey: "budget.banner.warningTitle",
+    descriptionKey: "budget.banner.warningDescription",
+    border: "border-[#f5dfa0]",
+    bg: "bg-[linear-gradient(135deg,#fffbec_0%,#fff8dc_100%)]",
+    iconColor: "text-[#b07d12]",
+    textClass: "text-[#7a5a08]",
+    upgradeClass: "bg-[#eab308] text-[#3b2f0b] hover:bg-[#dca40a]",
+  },
+  depleted: {
+    titleKey: "budget.banner.depletedTitle",
+    descriptionKey: "budget.banner.depletedDescription",
+    border: "border-[#f5c6c0]",
+    bg: "bg-[linear-gradient(135deg,#fff5f4_0%,#fff0ee_100%)]",
+    iconColor: "text-[#d94f3d]",
+    textClass: "text-[#9b2c1e]",
+    upgradeClass: "bg-[#ff5a3d] text-white hover:bg-[#ed4729]",
+  },
+} as const;
+
 export function BudgetWarningBanner({
   status,
   onDismiss,
 }: BudgetWarningBannerProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-
-  const isDepleted = status === "depleted";
+  const config = statusConfig[status];
 
   return (
     <div
       className={cn(
         "relative rounded-[18px] border px-5 py-4",
-        isDepleted
-          ? "border-[#f5c6c0] bg-[linear-gradient(135deg,#fff5f4_0%,#fff0ee_100%)]"
-          : "border-[#f5dfa0] bg-[linear-gradient(135deg,#fffbec_0%,#fff8dc_100%)]",
+        config.border,
+        config.bg,
       )}
     >
-      {/* Dismiss button */}
       <button
         type="button"
         onClick={onDismiss}
@@ -37,58 +55,44 @@ export function BudgetWarningBanner({
       </button>
 
       <div className="flex flex-col gap-3 pr-6 sm:flex-row sm:items-center sm:gap-5">
-        {/* Title + description */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div
             className={cn(
               "flex items-center gap-1.5 text-[13px] font-semibold",
-              isDepleted ? "text-[#9b2c1e]" : "text-[#7a5a08]",
+              config.textClass,
             )}
           >
-            <Zap
-              size={14}
-              className={isDepleted ? "text-[#d94f3d]" : "text-[#b07d12]"}
-            />
-            {isDepleted
-              ? t("budget.banner.depletedTitle")
-              : t("budget.banner.warningTitle")}
+            <Zap size={14} className={config.iconColor} />
+            {t(config.titleKey)}
           </div>
-          <p
-            className={cn(
-              "text-[12px] leading-[1.6]",
-              isDepleted ? "text-[#7a3b32]" : "text-[#6b5010]",
-            )}
-          >
-            {t("budget.banner.description")}
+          <p className={cn("text-[12px] leading-[1.6]", config.textClass)}>
+            {t(config.descriptionKey)}
           </p>
         </div>
 
-        {/* CTA buttons */}
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/workspace/rewards")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors",
-              isDepleted
-                ? "bg-[#d94f3d] text-white hover:bg-[#c0392b]"
-                : "bg-[#b07d12] text-white hover:bg-[#9a6d0f]",
-            )}
-          >
-            {t("budget.banner.earnCredits")}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/workspace/settings")}
-            className={cn(
-              "rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-colors",
-              isDepleted
-                ? "border-[#d94f3d] text-[#9b2c1e] hover:bg-[#fff0ee]"
-                : "border-[#b07d12] text-[#7a5a08] hover:bg-[#fffbec]",
-            )}
-          >
-            {t("budget.banner.byok")}
-          </button>
+        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+          <div className={cn("text-[11px] font-medium", config.textClass)}>
+            {t("budget.banner.actionsLabel")}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/workspace/models?tab=providers")}
+              className="rounded-lg bg-[#111317] px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-[#1b1f24]"
+            >
+              {t("budget.banner.apiKey")}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/workspace/settings")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
+                config.upgradeClass,
+              )}
+            >
+              {t("budget.banner.upgrade")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
