@@ -54,8 +54,6 @@ Once you receive the email, copy your Seedance 2.0 trial key, open the IM conver
 
 If activation succeeds, you can start using Seedance 2.0 directly in the conversation.
 
-![Confirmation from nexu after sending the key](/assets/seedance/key-activation-confirmation.webp)
-
 ## Step 5: Generate Your First Video
 
 After activation, simply send a video generation request to `nexu`.
@@ -110,10 +108,6 @@ It is strongly recommended. Since the key must be sent to `nexu` before you can 
 
 More complete prompts usually produce more stable results and outputs that are closer to what you expect.
 
-**Q: How many times can I use the official trial key? What if I want to keep using Seedance 2.0?**
+**Q: How many times can I use the official trial key?**
 
 The official trial key is only meant for evaluation, and it usually includes just 2 video generation attempts.
-
-If you want to continue using it, you can apply for your own API key on the [Medeo website](https://www.medeo.app/) and keep generating videos according to your own account quota.
-
-At the moment, Seedance 2.0 in nexu is provided based on Medeo's skill. After you get your own API key, send that key to `nexu`, and you can continue generating videos with Seedance 2.0.

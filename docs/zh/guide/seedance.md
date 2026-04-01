@@ -54,8 +54,6 @@
 
 如果激活成功，你就可以开始在对话中调用 Seedance 2.0 生成视频。
 
-![发送 Key 后 nexu 的确认回复](/assets/seedance/key-activation-confirmation.webp)
-
 ## 第五步：生成第一个视频
 
 激活完成后，直接向 `nexu` 发送视频生成指令即可。
@@ -110,10 +108,6 @@
 
 更完整的提示词通常会带来更稳定、更接近预期的视频效果。
 
-**Q: 官方发放的体验 Key 可以使用多久？如果想继续使用怎么办？**
+**Q: 官方发放的体验 Key 可以使用多久？**
 
 官方发放的体验 Key 仅用于体验 Seedance 2.0，通常只包含 2 次视频生成机会。
-
-如果你希望继续使用，可以前往 [Medeo 官网](https://www.medeo.app/) 申请自己的 API Key，之后即可按照你自己账号的额度继续生成视频。
-
-目前 nexu 的 Seedance 2.0 是基于 Medeo 的 skill 提供的。拿到自己的 API Key 后，把这个 Key 发送给 `nexu`，就可以继续使用 Seedance 2.0 生成视频。
