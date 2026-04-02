@@ -61,6 +61,10 @@ describe("registerDesktopRewardsRoutes", () => {
       quotaFallbackService: {
         triggerFallback,
       },
+      githubStarVerificationService: {
+        prepareSession: vi.fn(),
+        verifySession: vi.fn(),
+      },
     } as never);
 
     const response = await app.request("/api/internal/desktop/rewards");
@@ -74,5 +78,133 @@ describe("registerDesktopRewardsRoutes", () => {
     expect(getDesktopRewardsStatus).toHaveBeenCalledTimes(2);
     expect(payload.viewer.activeModelId).toBe("openai/gpt-4.1");
     expect(payload.viewer.usingManagedModel).toBe(false);
+  });
+
+  it("rejects invalid proof URLs before forwarding the claim", async () => {
+    const claimDesktopReward = vi.fn();
+    const app = new OpenAPIHono<ControllerBindings>();
+    registerDesktopRewardsRoutes(app, {
+      configStore: {
+        getDesktopRewardsStatus: vi.fn(),
+        claimDesktopReward,
+      },
+      quotaFallbackService: {
+        triggerFallback: vi.fn(),
+      },
+      githubStarVerificationService: {
+        prepareSession: vi.fn(),
+        verifySession: vi.fn(),
+      },
+    } as never);
+
+    const response = await app.request("/api/internal/desktop/rewards/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: "x_share",
+        proof: {
+          url: "https://www.reddit.com/r/test/comments/abc123/example-post/",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(claimDesktopReward).not.toHaveBeenCalled();
+  });
+
+  it("verifies GitHub star sessions before forwarding the claim", async () => {
+    const claimDesktopReward = vi.fn().mockResolvedValue({
+      ok: true,
+      alreadyClaimed: false,
+      status: {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini-2.5-flash",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 1,
+          totalCount: 11,
+          earnedCredits: 300,
+        },
+        tasks: [],
+        cloudBalance: null,
+      },
+    });
+    const verifySession = vi.fn().mockResolvedValue({
+      ok: true,
+      currentStars: 1640,
+    });
+    const app = new OpenAPIHono<ControllerBindings>();
+    registerDesktopRewardsRoutes(app, {
+      configStore: {
+        getDesktopRewardsStatus: vi.fn(),
+        claimDesktopReward,
+      },
+      quotaFallbackService: {
+        triggerFallback: vi.fn(),
+      },
+      githubStarVerificationService: {
+        prepareSession: vi.fn(),
+        verifySession,
+      },
+    } as never);
+
+    const response = await app.request("/api/internal/desktop/rewards/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: "github_star",
+        proof: {
+          githubSessionId: "github-session-1",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(verifySession).toHaveBeenCalledWith("github-session-1");
+    expect(claimDesktopReward).toHaveBeenCalledWith("github_star", {
+      githubSessionId: "github-session-1",
+    });
+  });
+
+  it("starts a GitHub star verification session from the dedicated route", async () => {
+    const prepareSession = vi.fn().mockResolvedValue({
+      sessionId: "github-session-1",
+      baselineStars: 1638,
+      expiresAt: "2026-04-02T12:00:00.000Z",
+    });
+    const app = new OpenAPIHono<ControllerBindings>();
+    registerDesktopRewardsRoutes(app, {
+      configStore: {
+        getDesktopRewardsStatus: vi.fn(),
+        claimDesktopReward: vi.fn(),
+      },
+      quotaFallbackService: {
+        triggerFallback: vi.fn(),
+      },
+      githubStarVerificationService: {
+        prepareSession,
+        verifySession: vi.fn(),
+      },
+    } as never);
+
+    const response = await app.request(
+      "/api/internal/desktop/rewards/github-star-session",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessionId: "github-session-1",
+      baselineStars: 1638,
+      expiresAt: "2026-04-02T12:00:00.000Z",
+    });
+    expect(prepareSession).toHaveBeenCalledTimes(1);
   });
 });

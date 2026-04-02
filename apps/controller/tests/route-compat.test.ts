@@ -179,6 +179,13 @@ async function createTestContainer(
     skillhubService,
     openclawSyncService,
     openclawAuthService,
+    quotaFallbackService: {
+      triggerFallback: vi.fn(),
+    } as never,
+    githubStarVerificationService: {
+      prepareSession: vi.fn(),
+      verifySession: vi.fn(),
+    } as never,
     wsClient,
     gatewayService,
     runtimeState,

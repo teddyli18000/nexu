@@ -532,7 +532,9 @@ function WorkspaceLayoutInner() {
   const rewardTaskCountLabel = `${rewardsStatus.progress.claimedCount}/${rewardsStatus.progress.totalCount}`;
   const rewardBalanceValue = rewardsStatus.cloudBalance
     ? `${rewardsStatus.cloudBalance.totalBalance} ${t("layout.sidebar.balanceUnit")}`
-    : t("layout.sidebar.balancePlaceholder");
+    : cloudConnected
+      ? `0 ${t("layout.sidebar.balanceUnit")}`
+      : t("layout.sidebar.balancePlaceholder");
   const shouldShowRewardsBanner =
     cloudConnected &&
     rewardsStatus.progress.totalCount > 0 &&

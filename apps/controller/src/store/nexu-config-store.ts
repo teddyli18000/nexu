@@ -6,6 +6,7 @@ import type {
   ConnectDiscordInput,
   ConnectFeishuInput,
   ConnectSlackInput,
+  DesktopRewardClaimProof,
   DesktopRewardsStatus,
   RewardTaskId,
 } from "@nexu/shared";
@@ -1411,6 +1412,7 @@ export class NexuConfigStore {
 
   async claimDesktopReward(
     taskId: RewardTaskId,
+    proof?: DesktopRewardClaimProof,
   ): Promise<DesktopRewardClaimResponse> {
     const config = await this.getConfig();
     const cloud = readDesktopCloud(config);
@@ -1430,7 +1432,7 @@ export class NexuConfigStore {
       cloudUrl,
       apiKey: cloud.apiKey,
     });
-    const result = await service.claimReward(taskId);
+    const result = await service.claimReward(taskId, proof);
 
     if (!result.ok) {
       return {

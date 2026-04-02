@@ -30,6 +30,14 @@ export const rewardTaskSchema = z.object({
 
 export type RewardTask = z.infer<typeof rewardTaskSchema>;
 export type RewardTaskId = z.infer<typeof rewardTaskIdSchema>;
+export const rewardUrlProofTaskIdSchema = z.enum([
+  "x_share",
+  "reddit",
+  "lingying",
+  "facebook",
+  "whatsapp",
+]);
+export type RewardUrlProofTaskId = z.infer<typeof rewardUrlProofTaskIdSchema>;
 
 const GITHUB_URL = "https://github.com/nexu-io/nexu";
 const X_SHARE_URL = `https://x.com/intent/tweet?text=${encodeURIComponent(
@@ -211,8 +219,16 @@ export const desktopRewardsStatusSchema = z.object({
   autoFallbackTriggered: z.boolean().optional(),
 });
 
+export const desktopRewardClaimProofSchema = z
+  .object({
+    url: z.string().trim().url().max(2048).optional(),
+    githubSessionId: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
+
 export const claimDesktopRewardRequestSchema = z.object({
   taskId: rewardTaskIdSchema,
+  proof: desktopRewardClaimProofSchema.optional(),
 });
 
 export const claimDesktopRewardResponseSchema = z.object({
@@ -221,9 +237,59 @@ export const claimDesktopRewardResponseSchema = z.object({
   status: desktopRewardsStatusSchema,
 });
 
+export const prepareGithubStarSessionRequestSchema = z.object({});
+
+export const prepareGithubStarSessionResponseSchema = z.object({
+  sessionId: z.string().min(1),
+  baselineStars: z.number().int().nonnegative(),
+  expiresAt: z.string(),
+});
+
+const rewardUrlProofPatterns = {
+  x_share:
+    /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/\d+(?:[/?#].*)?$/i,
+  reddit:
+    /^https?:\/\/(?:(?:www\.)?reddit\.com\/r\/[A-Za-z0-9_]+\/comments\/[A-Za-z0-9]+(?:\/[^/?#]+)?|redd\.it\/[A-Za-z0-9]+)(?:[/?#].*)?$/i,
+  lingying:
+    /^https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/(?:feed\/update\/urn:li:(?:share|activity):\d+|posts\/[^/?#]+|pulse\/[^?#]+)(?:[/?#].*)?$/i,
+  facebook:
+    /^https?:\/\/(?:www\.)?facebook\.com\/(?:[^/?#]+\/posts\/\d+|story\.php\?story_fbid=\d+[^#]*|permalink\.php\?story_fbid=\d+[^#]*|share\/p\/[A-Za-z0-9]+|reel\/\d+)(?:[/?#].*)?$/i,
+  whatsapp:
+    /^https?:\/\/(?:(?:chat|www)\.whatsapp\.com\/(?:invite\/|channel\/)?[A-Za-z0-9/_-]+|wa\.me\/channel\/[A-Za-z0-9]+)(?:[/?#].*)?$/i,
+} as const satisfies Record<RewardUrlProofTaskId, RegExp>;
+
+export function rewardTaskRequiresUrlProof(
+  taskId: RewardTaskId,
+): taskId is RewardUrlProofTaskId {
+  return rewardUrlProofTaskIdSchema.safeParse(taskId).success;
+}
+
+export function rewardTaskRequiresGithubStarSession(
+  taskId: RewardTaskId,
+): boolean {
+  return taskId === "github_star";
+}
+
+export function validateRewardProofUrl(
+  taskId: RewardUrlProofTaskId,
+  value: string,
+): boolean {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return false;
+  }
+  return rewardUrlProofPatterns[taskId].test(normalized);
+}
+
 export type DesktopRewardsLedger = z.infer<typeof desktopRewardsLedgerSchema>;
 export type DesktopRewardClaimEntry = z.infer<
   typeof desktopRewardClaimEntrySchema
 >;
 export type RewardTaskStatus = z.infer<typeof rewardTaskStatusSchema>;
 export type DesktopRewardsStatus = z.infer<typeof desktopRewardsStatusSchema>;
+export type DesktopRewardClaimProof = z.infer<
+  typeof desktopRewardClaimProofSchema
+>;
+export type PrepareGithubStarSessionResponse = z.infer<
+  typeof prepareGithubStarSessionResponseSchema
+>;

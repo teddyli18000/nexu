@@ -1051,14 +1051,51 @@ export type GetApiInternalDesktopRewardsResponses = {
 
 export type GetApiInternalDesktopRewardsResponse = GetApiInternalDesktopRewardsResponses[keyof GetApiInternalDesktopRewardsResponses];
 
+export type PostApiInternalDesktopRewardsGithubStarSessionData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal/desktop/rewards/github-star-session';
+};
+
+export type PostApiInternalDesktopRewardsGithubStarSessionResponses = {
+    /**
+     * Prepare a GitHub star verification session
+     */
+    200: {
+        sessionId: string;
+        baselineStars: number;
+        expiresAt: string;
+    };
+};
+
+export type PostApiInternalDesktopRewardsGithubStarSessionResponse = PostApiInternalDesktopRewardsGithubStarSessionResponses[keyof PostApiInternalDesktopRewardsGithubStarSessionResponses];
+
 export type PostApiInternalDesktopRewardsClaimData = {
     body?: {
         taskId: 'daily_checkin' | 'github_star' | 'x_share' | 'reddit' | 'xiaohongshu' | 'lingying' | 'jike' | 'wechat' | 'feishu' | 'facebook' | 'whatsapp';
+        proof?: {
+            url?: string;
+            githubSessionId?: string;
+        };
     };
     path?: never;
     query?: never;
     url: '/api/internal/desktop/rewards/claim';
 };
+
+export type PostApiInternalDesktopRewardsClaimErrors = {
+    /**
+     * Invalid claim proof
+     */
+    400: {
+        message: string;
+    };
+};
+
+export type PostApiInternalDesktopRewardsClaimError = PostApiInternalDesktopRewardsClaimErrors[keyof PostApiInternalDesktopRewardsClaimErrors];
 
 export type PostApiInternalDesktopRewardsClaimResponses = {
     /**

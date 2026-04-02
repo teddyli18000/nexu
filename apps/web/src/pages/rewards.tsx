@@ -10,7 +10,12 @@ import {
   getRewardCheckingDescriptionKey,
 } from "@/lib/reward-virtual-check";
 import { cn } from "@/lib/utils";
-import type { RewardTaskStatus } from "@nexu/shared";
+import {
+  type RewardTaskStatus,
+  rewardTaskRequiresGithubStarSession,
+  rewardTaskRequiresUrlProof,
+  validateRewardProofUrl,
+} from "@nexu/shared";
 import { Check, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,11 +34,15 @@ const REWARD_GROUPS: Array<{
 function RewardConfirmModal({
   task,
   phase,
+  proofUrl,
+  onProofUrlChange,
   onCancel,
   onConfirm,
 }: {
   task: RewardTaskStatus;
   phase: RewardConfirmPhase;
+  proofUrl: string;
+  onProofUrlChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
 }) {
@@ -45,6 +54,12 @@ function RewardConfirmModal({
   const isChecking = phase === "checking";
   const isClaiming = phase === "claiming";
   const isBusy = isChecking || isClaiming;
+  const proofUrlTaskId = rewardTaskRequiresUrlProof(task.id) ? task.id : null;
+  const requiresUrlProof = proofUrlTaskId !== null;
+  const proofUrlTouched = proofUrl.trim().length > 0;
+  const proofUrlValid = proofUrlTaskId
+    ? validateRewardProofUrl(proofUrlTaskId, proofUrl)
+    : true;
   const descKey = isChecking
     ? getRewardCheckingDescriptionKey(task)
     : isClaiming
@@ -56,7 +71,7 @@ function RewardConfirmModal({
           : task.requiresScreenshot
             ? "budget.confirm.screenshotDesc"
             : "budget.confirm.desc";
-  const canConfirm = !isImage || imageDownloaded;
+  const canConfirm = (!isImage || imageDownloaded) && proofUrlValid;
   const title = isChecking
     ? t("budget.confirm.checkingTitle")
     : isClaiming
@@ -134,6 +149,45 @@ function RewardConfirmModal({
             </div>
           ) : null}
 
+          {requiresUrlProof ? (
+            <div className="mb-3 w-full text-left">
+              <label
+                htmlFor={`reward-proof-url-${task.id}`}
+                className="mb-1.5 block text-[12px] font-medium text-text-primary"
+              >
+                {t("rewards.proofUrlLabel")}
+              </label>
+              <input
+                id={`reward-proof-url-${task.id}`}
+                type="url"
+                value={proofUrl}
+                onChange={(event) => onProofUrlChange(event.target.value)}
+                placeholder={t("rewards.proofUrlPlaceholder")}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                disabled={isBusy}
+                className={cn(
+                  "h-[36px] w-full rounded-[10px] border bg-white px-3 text-[13px] text-text-primary outline-none transition-colors placeholder:text-text-muted disabled:cursor-not-allowed disabled:bg-surface-2",
+                  proofUrlTouched && !proofUrlValid
+                    ? "border-[var(--color-danger)] focus:border-[var(--color-danger)]"
+                    : "border-border focus:border-[var(--color-brand-primary)]",
+                )}
+              />
+              <div className="mt-1 text-[11px] leading-5">
+                {proofUrlTouched && !proofUrlValid ? (
+                  <span className="text-[var(--color-danger)]">
+                    {t("rewards.proofUrlInvalid")}
+                  </span>
+                ) : (
+                  <span className="text-text-muted">
+                    {t("rewards.proofUrlHint")}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex w-full items-center gap-2">
             <button
               type="button"
@@ -161,12 +215,23 @@ function RewardConfirmModal({
 
 export function RewardsPage() {
   const { t } = useTranslation();
-  const { status, loading, refresh, claimTask, claimingTaskId } =
-    useDesktopRewardsStatus();
+  const {
+    status,
+    loading,
+    refresh,
+    claimTask,
+    claimingTaskId,
+    prepareGithubStarSession,
+    isPreparingGithubStarSession,
+  } = useDesktopRewardsStatus();
   const [confirmTaskId, setConfirmTaskId] = useState<
     RewardTaskStatus["id"] | null
   >(null);
   const [confirmPhase, setConfirmPhase] = useState<RewardConfirmPhase>("idle");
+  const [confirmProofUrl, setConfirmProofUrl] = useState("");
+  const [confirmGithubSessionId, setConfirmGithubSessionId] = useState<
+    string | null
+  >(null);
 
   const { cloudConnecting, handleCloudConnect } = useCloudConnect({
     cloudConnected: status.viewer.cloudConnected,
@@ -191,11 +256,40 @@ export function RewardsPage() {
       return;
     }
 
+    if (task.id === "daily_checkin") {
+      try {
+        const result = await claimTask({ taskId: task.id });
+        if (result.alreadyClaimed) {
+          toast.success(t("rewards.claimAlreadyDone"));
+        } else if (result.ok) {
+          toast.success(t("rewards.claimSuccess"));
+        } else {
+          toast.error(t("rewards.claimFailed"));
+        }
+      } catch {
+        toast.error(t("rewards.claimFailed"));
+      }
+      return;
+    }
+
+    setConfirmPhase("idle");
+    setConfirmProofUrl("");
+    setConfirmGithubSessionId(null);
+
+    if (rewardTaskRequiresGithubStarSession(task.id)) {
+      try {
+        const session = await prepareGithubStarSession();
+        setConfirmGithubSessionId(session.sessionId);
+      } catch {
+        toast.error(t("rewards.githubSessionFailed"));
+        return;
+      }
+    }
+
     if (task.shareMode !== "image" && task.actionUrl) {
       await openExternalUrl(task.actionUrl);
     }
 
-    setConfirmPhase("idle");
     setConfirmTaskId(task.id);
   };
 
@@ -400,7 +494,9 @@ export function RewardsPage() {
                           disabled={
                             loading ||
                             task.isClaimed ||
-                            claimingTaskId === task.id
+                            claimingTaskId === task.id ||
+                            (isPreparingGithubStarSession &&
+                              task.id === "github_star")
                           }
                           onClick={() => void handleTaskAction(task)}
                           className={cn(
@@ -411,6 +507,9 @@ export function RewardsPage() {
                           )}
                         >
                           {claimingTaskId === task.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : isPreparingGithubStarSession &&
+                            task.id === "github_star" ? (
                             <Loader2 size={13} className="animate-spin" />
                           ) : null}
                           {actionLabel}
@@ -451,9 +550,13 @@ export function RewardsPage() {
               ? "claiming"
               : confirmPhase
           }
+          proofUrl={confirmProofUrl}
+          onProofUrlChange={setConfirmProofUrl}
           onCancel={() => {
             setConfirmPhase("idle");
             setConfirmTaskId(null);
+            setConfirmProofUrl("");
+            setConfirmGithubSessionId(null);
           }}
           onConfirm={async () => {
             if (confirmPhase !== "idle") {
@@ -465,7 +568,20 @@ export function RewardsPage() {
             try {
               const result = await completeRewardWithVirtualCheck({
                 task: confirmTask,
-                claim: () => claimTask(confirmTask.id),
+                claim: () =>
+                  claimTask({
+                    taskId: confirmTask.id,
+                    proof: {
+                      url: rewardTaskRequiresUrlProof(confirmTask.id)
+                        ? confirmProofUrl.trim()
+                        : undefined,
+                      githubSessionId: rewardTaskRequiresGithubStarSession(
+                        confirmTask.id,
+                      )
+                        ? (confirmGithubSessionId ?? undefined)
+                        : undefined,
+                    },
+                  }),
                 onPhaseChange: (phase) => {
                   if (phase === "claiming") {
                     setConfirmPhase("claiming");
@@ -484,6 +600,8 @@ export function RewardsPage() {
               }
               setConfirmPhase("idle");
               setConfirmTaskId(null);
+              setConfirmProofUrl("");
+              setConfirmGithubSessionId(null);
             } catch {
               toast.error(t("rewards.claimFailed"));
               setConfirmPhase("idle");

@@ -283,7 +283,7 @@ describe("WorkspaceLayout", () => {
     expect(markup).not.toContain('data-rewards-card-loading="true"');
     expect(markup).toContain('data-sidebar-growth-card="rewards"');
     expect(markup).toContain("layout.sidebar.rewardsTitle");
-    expect(markup).toContain("layout.sidebar.balancePlaceholder");
+    expect(markup).toContain("0 layout.sidebar.balanceUnit");
   });
 
   it("renders the logged-in rewards card with a separate balance entry", () => {
@@ -321,7 +321,7 @@ describe("WorkspaceLayout", () => {
     expect(markup).not.toContain("layout.sidebar.loginTitle");
   });
 
-  it("renders a balance placeholder when rewards status has no balance yet", () => {
+  it("renders zero balance when connected but cloud balance is null", () => {
     const markup = renderWorkspaceLayout(
       "/workspace/sessions/sess-1",
       {
@@ -343,7 +343,7 @@ describe("WorkspaceLayout", () => {
       },
     );
 
-    expect(markup).toContain("layout.sidebar.balancePlaceholder");
+    expect(markup).toContain("0 layout.sidebar.balanceUnit");
   });
 
   it("prefers desktop cloud status over stale rewards state when the user has logged out", () => {

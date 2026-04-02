@@ -428,16 +428,20 @@ describe("NexuConfigStore", () => {
     const store = new NexuConfigStore(env);
 
     let fetchCallCount = 0;
+    let claimBody: unknown = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (_input, init) => {
         fetchCallCount += 1;
+        claimBody = init?.body ?? null;
         return new Response(JSON.stringify(claimResponse), { status: 200 });
       }),
     );
 
     try {
-      const result = await store.claimDesktopReward("daily_checkin");
+      const result = await store.claimDesktopReward("daily_checkin", {
+        url: "https://x.com/nexu_io/status/1900000000000000000",
+      });
       expect(result.ok).toBe(true);
       expect(result.alreadyClaimed).toBe(false);
       expect(result.status.tasks).toHaveLength(1);
@@ -445,6 +449,12 @@ describe("NexuConfigStore", () => {
       expect(result.status.progress.claimedCount).toBe(1);
       // Only one fetch call for claim — no extra status fetch
       expect(fetchCallCount).toBe(1);
+      expect(claimBody).toBe(
+        JSON.stringify({
+          taskId: "daily_checkin",
+          proofUrl: "https://x.com/nexu_io/status/1900000000000000000",
+        }),
+      );
     } finally {
       vi.unstubAllGlobals();
     }

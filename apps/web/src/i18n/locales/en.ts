@@ -312,6 +312,15 @@ const en = {
   "rewards.claimAlreadyDone": "Reward already claimed for this period",
   "rewards.claimFailed": "Failed to claim reward",
   "rewards.downloadFailed": "Failed to download share card",
+  "rewards.githubSessionFailed":
+    "Failed to start GitHub star verification. Please try again.",
+  "rewards.proofUrlLabel": "Paste your share URL",
+  "rewards.proofUrlPlaceholder":
+    "Paste the public link you posted on that platform",
+  "rewards.proofUrlHint":
+    "Only public URLs that match the platform format can be claimed.",
+  "rewards.proofUrlInvalid":
+    "The URL does not match the current platform format.",
   "rewards.progress": "{{earned}} / {{total}} completed",
   "rewards.card.cycle":
     "Available per weekly cycle, excluding daily repeat claims",

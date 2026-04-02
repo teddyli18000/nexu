@@ -3,10 +3,20 @@ import {
   claimDesktopRewardRequestSchema,
   claimDesktopRewardResponseSchema,
   desktopRewardsStatusSchema,
+  prepareGithubStarSessionRequestSchema,
+  prepareGithubStarSessionResponseSchema,
+  rewardTaskRequiresGithubStarSession,
+  rewardTaskRequiresUrlProof,
+  validateRewardProofUrl,
 } from "@nexu/shared";
+import { z } from "zod";
 import type { ControllerContainer } from "../app/container.js";
 import { logger } from "../lib/logger.js";
 import type { ControllerBindings } from "../types.js";
+
+const errorResponseSchema = z.object({
+  message: z.string(),
+});
 
 export function registerDesktopRewardsRoutes(
   app: OpenAPIHono<ControllerBindings>,
@@ -61,6 +71,39 @@ export function registerDesktopRewardsRoutes(
   app.openapi(
     createRoute({
       method: "post",
+      path: "/api/internal/desktop/rewards/github-star-session",
+      tags: ["Desktop"],
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: prepareGithubStarSessionRequestSchema,
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: prepareGithubStarSessionResponseSchema,
+            },
+          },
+          description: "Prepare a GitHub star verification session",
+        },
+      },
+    }),
+    async (c) => {
+      return c.json(
+        await container.githubStarVerificationService.prepareSession(),
+        200,
+      );
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: "post",
       path: "/api/internal/desktop/rewards/claim",
       tags: ["Desktop"],
       request: {
@@ -79,12 +122,49 @@ export function registerDesktopRewardsRoutes(
           },
           description: "Claim a desktop reward",
         },
+        400: {
+          content: {
+            "application/json": { schema: errorResponseSchema },
+          },
+          description: "Invalid claim proof",
+        },
       },
     }),
     async (c) => {
       const body = c.req.valid("json");
+      const proofUrl = body.proof?.url?.trim();
+
+      if (rewardTaskRequiresUrlProof(body.taskId)) {
+        if (!proofUrl || !validateRewardProofUrl(body.taskId, proofUrl)) {
+          return c.json({ message: "Invalid proof URL for reward task" }, 400);
+        }
+      }
+
+      if (rewardTaskRequiresGithubStarSession(body.taskId)) {
+        const sessionId = body.proof?.githubSessionId?.trim();
+        if (!sessionId) {
+          return c.json(
+            { message: "Missing GitHub star verification session" },
+            400,
+          );
+        }
+
+        const verification =
+          await container.githubStarVerificationService.verifySession(
+            sessionId,
+          );
+
+        if (!verification.ok) {
+          const message =
+            verification.reason === "not_increased"
+              ? "GitHub star count did not increase during verification"
+              : "GitHub star verification session is invalid or expired";
+          return c.json({ message }, 400);
+        }
+      }
+
       return c.json(
-        await container.configStore.claimDesktopReward(body.taskId),
+        await container.configStore.claimDesktopReward(body.taskId, body.proof),
         200,
       );
     },

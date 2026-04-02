@@ -1,3 +1,4 @@
+import type { DesktopRewardClaimProof } from "@nexu/shared";
 import { z } from "zod";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 
@@ -63,7 +64,10 @@ export type CloudRewardResult<T> =
 
 export type CloudRewardService = {
   getRewardsStatus(): Promise<CloudRewardResult<RewardStatusResponse>>;
-  claimReward(taskId: string): Promise<CloudRewardResult<RewardClaimResponse>>;
+  claimReward(
+    taskId: string,
+    proof?: DesktopRewardClaimProof,
+  ): Promise<CloudRewardResult<RewardClaimResponse>>;
 };
 
 export function createCloudRewardService(
@@ -107,12 +111,15 @@ export function createCloudRewardService(
       }
     },
 
-    async claimReward(taskId) {
+    async claimReward(taskId, proof) {
       try {
         const res = await fetchWithAuth("/api/v1/rewards/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskId }),
+          body: JSON.stringify({
+            taskId,
+            proofUrl: proof?.url?.trim() || undefined,
+          }),
         });
         if (res.status === 401 || res.status === 403) {
           return { ok: false, reason: "auth_failed" };
