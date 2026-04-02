@@ -27,9 +27,40 @@ vi.mock("@web-gen/api/sdk.gen", () => ({
       channels: [],
     },
   })),
+  getApiInternalDesktopReady: vi.fn(async () => ({
+    data: {
+      status: "active",
+    },
+  })),
+  getApiV1ChannelsLiveStatus: vi.fn(async () => ({
+    data: {
+      gatewayConnected: true,
+      channels: [],
+      agent: {
+        modelId: "link/gemini",
+        modelName: "Gemini",
+        alive: true,
+      },
+    },
+  })),
+  getApiV1Sessions: vi.fn(async () => ({
+    data: {
+      sessions: [],
+    },
+  })),
 }));
 
-function renderHomePage(): string {
+function renderHomePage({
+  channels,
+  sessions,
+  rewardsStatus,
+  liveStatus,
+}: {
+  channels?: Array<Record<string, unknown>>;
+  sessions?: Array<Record<string, unknown>>;
+  rewardsStatus?: Record<string, unknown>;
+  liveStatus?: Record<string, unknown>;
+} = {}): string {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -37,6 +68,22 @@ function renderHomePage(): string {
       },
     },
   });
+
+  queryClient.setQueryData(["runtime-ready"], {
+    status: "active",
+  });
+  queryClient.setQueryData(["channels"], {
+    channels: channels ?? [],
+  });
+  queryClient.setQueryData(["sessions"], {
+    sessions: sessions ?? [],
+  });
+  if (liveStatus) {
+    queryClient.setQueryData(["channels-live-status"], liveStatus);
+  }
+  if (rewardsStatus) {
+    queryClient.setQueryData(["desktop-rewards"], rewardsStatus);
+  }
 
   return renderToStaticMarkup(
     createElement(
@@ -105,6 +152,23 @@ describe("HomePage", () => {
     expect(markup).toContain("耗尽");
   });
 
+  it("does not fall back to the onboarding scene when session history already exists", () => {
+    const markup = renderHomePage({
+      sessions: [
+        {
+          id: "session-1",
+          channelType: "feishu",
+          title: "Alice · feishu",
+          messageCount: 5,
+          lastMessageAt: "2026-04-02T03:22:43.694Z",
+        },
+      ],
+    });
+
+    expect(markup).not.toContain("Choose a channel to get started");
+    expect(markup).toContain("Channels");
+  });
+
   it("renders the alpha hero as a looping muted autoplay video", () => {
     const markup = renderHomePage();
 
@@ -114,6 +178,68 @@ describe("HomePage", () => {
     expect(markup).toContain('playsInline=""');
     expect(markup).toContain('muted=""');
     expect(markup).toContain('loop=""');
+  });
+
+  it("renders the budget warning banner below the running hero block", () => {
+    const markup = renderHomePage({
+      channels: [
+        {
+          id: "channel-1",
+          channelType: "feishu",
+          status: "connected",
+        },
+      ],
+      liveStatus: {
+        gatewayConnected: true,
+        channels: [
+          {
+            channelType: "feishu",
+            channelId: "channel-1",
+            accountId: "acct-1",
+            status: "connected",
+            ready: true,
+            connected: true,
+            running: true,
+            configured: true,
+            lastError: null,
+          },
+        ],
+        agent: {
+          modelId: "link/gemini",
+          modelName: "Gemini",
+          alive: true,
+        },
+      },
+      rewardsStatus: {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 8,
+          totalCount: rewardTasks.length,
+          earnedCredits: 800,
+          availableCredits: 200,
+        },
+        tasks: rewardTasks.map((task) => ({
+          ...task,
+          isClaimed: false,
+          lastClaimedAt: null,
+          claimCount: 0,
+        })),
+        cloudBalance: {
+          totalBalance: 0,
+          totalRecharged: 800,
+          totalConsumed: 800,
+        },
+      },
+    });
+
+    expect(markup.indexOf("nexu alpha")).toBeLessThan(
+      markup.indexOf('data-budget-banner-status="depleted"'),
+    );
   });
 });
 

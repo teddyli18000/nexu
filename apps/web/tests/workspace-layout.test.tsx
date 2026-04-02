@@ -271,6 +271,21 @@ describe("WorkspaceLayout", () => {
     expect(markup).not.toContain("layout.sidebar.rewardsTitle");
   });
 
+  it("renders the connected rewards shell immediately while balance data is still syncing", () => {
+    const markup = renderWorkspaceLayout(
+      "/workspace/sessions/sess-1",
+      undefined,
+      {
+        connected: true,
+      },
+    );
+
+    expect(markup).not.toContain('data-rewards-card-loading="true"');
+    expect(markup).toContain('data-sidebar-growth-card="rewards"');
+    expect(markup).toContain("layout.sidebar.rewardsTitle");
+    expect(markup).toContain("layout.sidebar.balancePlaceholder");
+  });
+
   it("renders the logged-in rewards card with a separate balance entry", () => {
     const markup = renderWorkspaceLayout(
       "/workspace/sessions/sess-1",

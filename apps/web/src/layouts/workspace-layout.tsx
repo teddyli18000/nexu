@@ -344,8 +344,7 @@ function WorkspaceLayoutInner() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showHelpMenu, setShowHelpMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
-  const { status: rewardsStatus, loading: rewardsLoading } =
-    useDesktopRewardsStatus();
+  const { status: rewardsStatus } = useDesktopRewardsStatus();
   const update = useAutoUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const hasUpdate =
@@ -539,9 +538,7 @@ function WorkspaceLayoutInner() {
     rewardsStatus.progress.totalCount > 0 &&
     rewardsStatus.progress.claimedCount < rewardsStatus.progress.totalCount;
   const rewardsCardLoading =
-    cloudStatusLoading ||
-    desktopCloudStatus === undefined ||
-    (cloudConnected && rewardsLoading);
+    cloudStatusLoading && desktopCloudStatus === undefined;
 
   const showEmptyState =
     sessions.length === 0 &&
@@ -892,7 +889,7 @@ function WorkspaceLayoutInner() {
                   />
                 </Link>
               )}
-              <div className="px-3 mb-1.5 relative">
+              <div className="group/balance px-3 mb-1.5 relative">
                 <Link
                   to="/workspace/rewards"
                   data-sidebar-rewards-balance="true"
@@ -916,6 +913,58 @@ function WorkspaceLayoutInner() {
                     </span>
                   </div>
                 </Link>
+                {rewardsStatus.cloudBalance ? (
+                  <div className="pointer-events-none absolute bottom-full left-3 right-3 z-30 mb-2 opacity-0 transition-opacity duration-150 group-hover/balance:pointer-events-auto group-hover/balance:opacity-100">
+                    <div className="rounded-xl border border-border bg-surface-1 p-3.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[13px] font-semibold text-text-primary">
+                          ✦ {t("layout.sidebar.balancePopup.total")}
+                        </span>
+                        <span className="tabular-nums text-[14px] font-bold text-text-primary">
+                          {rewardsStatus.cloudBalance.totalBalance}
+                        </span>
+                      </div>
+                      <div className="space-y-2 border-t border-border/60 pt-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-text-muted">
+                            {t("layout.sidebar.balancePopup.recharged")}
+                          </span>
+                          <span className="tabular-nums text-[11px] font-medium text-text-secondary">
+                            {rewardsStatus.cloudBalance.totalRecharged}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-text-muted">
+                            {t("layout.sidebar.balancePopup.earned")}
+                          </span>
+                          <span className="tabular-nums text-[11px] font-medium text-text-secondary">
+                            {rewardsStatus.progress.earnedCredits}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-text-muted">
+                            {t("layout.sidebar.balancePopup.consumed")}
+                          </span>
+                          <span className="tabular-nums text-[11px] font-medium text-text-secondary">
+                            {rewardsStatus.cloudBalance.totalConsumed}
+                          </span>
+                        </div>
+                      </div>
+                      <Link
+                        to="/workspace/rewards"
+                        className="mt-2.5 flex items-center justify-between border-t border-border/60 pt-2.5 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+                        onClick={() => {
+                          track("workspace_sidebar_click", {
+                            target: "credits_popup_detail",
+                          });
+                        }}
+                      >
+                        {t("layout.sidebar.balancePopup.viewDetail")}
+                        <ChevronRight size={12} />
+                      </Link>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

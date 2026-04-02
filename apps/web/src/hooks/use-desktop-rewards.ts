@@ -75,6 +75,7 @@ export function useDesktopRewardsStatus() {
     queryKey: DESKTOP_REWARDS_QUERY_KEY,
     queryFn: fetchDesktopRewardsStatus,
     refetchInterval: 60_000,
+    retry: false,
   });
 
   useEffect(() => {

@@ -159,6 +159,11 @@ const zhCN = {
   "layout.sidebar.balanceUnit": "积分",
   "layout.sidebar.balancePlaceholder": "积分同步中…",
   "layout.sidebar.rewardsCta": "查看",
+  "layout.sidebar.balancePopup.total": "剩余积分总量",
+  "layout.sidebar.balancePopup.recharged": "套餐积分余额",
+  "layout.sidebar.balancePopup.earned": "赠送积分余额",
+  "layout.sidebar.balancePopup.consumed": "累计消耗",
+  "layout.sidebar.balancePopup.viewDetail": "查看使用情况",
   "layout.empty.title": "暂无对话",
   "layout.empty.description":
     "请先配置平台 Bot，然后在 Slack / Discord / WhatsApp 中 @nexu 或直接私信小龙虾 🦞 —— 对话会自动出现在这里。",
