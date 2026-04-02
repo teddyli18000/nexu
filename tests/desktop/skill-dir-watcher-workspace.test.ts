@@ -218,7 +218,10 @@ describe("SkillDirWatcher workspace reconciliation", () => {
 
       removeWorkspaceSkill("bot-1", "live-tool");
 
-      await waitUntil(() => db.getInstalledByAgent("bot-1").length === 0, 8_000);
+      await waitUntil(
+        () => db.getInstalledByAgent("bot-1").length === 0,
+        8_000,
+      );
       watcher.stop();
     },
   );
