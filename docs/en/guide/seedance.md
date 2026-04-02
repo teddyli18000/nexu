@@ -24,9 +24,7 @@ You will need to:
 2. Join the group, check the pinned message, open the form link, and submit your information
 3. Wait for the review process
 
-After starring the repository, click the button in the popup to join the group.
-
-![Apply for a trial key: click the button to join the group](/assets/seedance/apply-key-step2-join-group.webp)
+![Apply for a trial key: go to GitHub and star nexu](/assets/seedance/apply-key-step1-star.webp)
 
 **GitHub Star screenshot requirements (required for review)**: When you submit your application, include a screenshot of the repository page that clearly shows the **repository name**, **Star status** (for example, that you have starred the repository), and your **signed-in GitHub identity**. **All of these are required** for the screenshot to pass review; missing any of them may affect approval. Example below:
 
@@ -34,9 +32,9 @@ After starring the repository, click the button in the popup to join the group.
 
 After approval, the trial key will be sent to the email address you provided in the form.
 
-When you star the `nexu` repository on GitHub, you can follow the screenshot below:
+After starring the repository, click the button in the popup to join the group.
 
-![Apply for a trial key: go to GitHub and star nexu](/assets/seedance/apply-key-step1-star.webp)
+![Apply for a trial key: click the button to join the group](/assets/seedance/apply-key-step2-join-group.webp)
 
 Once you are in the group, check the pinned message, open the form link, and submit your information.
 
