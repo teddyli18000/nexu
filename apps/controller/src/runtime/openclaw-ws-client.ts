@@ -552,6 +552,10 @@ export class OpenClawWsClient {
         this.ws?.close(4008, "missing nonce");
         return;
       }
+      logger.info(
+        { nonceLength: nonce.length, deviceId: this.deviceIdentity.deviceId },
+        "openclaw_ws_connect_challenge",
+      );
       this.sendConnectRequest(nonce);
       return;
     }
@@ -603,6 +607,14 @@ export class OpenClawWsClient {
     if (res.ok) {
       pending.resolve(res.payload);
     } else {
+      logger.error(
+        {
+          requestId: res.id,
+          error: res.error?.message ?? "openclaw request failed",
+          code: res.error?.code ?? null,
+        },
+        "openclaw_ws_request_error",
+      );
       pending.reject(
         new Error(res.error?.message ?? "openclaw request failed"),
       );
@@ -643,6 +655,24 @@ export class OpenClawWsClient {
     const signature = signDevicePayload(
       this.deviceIdentity.privateKeyPem,
       payloadStr,
+    );
+
+    logger.info(
+      {
+        requestId: id,
+        deviceId: this.deviceIdentity.deviceId,
+        clientId,
+        clientMode,
+        role,
+        scopes,
+        platform,
+        hasGatewayToken: Boolean(explicitGatewayToken),
+        hasStoredDeviceToken: Boolean(storedDeviceToken),
+        hasResolvedDeviceToken: Boolean(resolvedDeviceToken),
+        nonceLength: nonce.length,
+        signedAtMs,
+      },
+      "openclaw_ws_connect_request",
     );
 
     const frame: RequestFrame = {
