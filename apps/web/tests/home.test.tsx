@@ -28,7 +28,26 @@ vi.mock("../lib/api/sdk.gen", () => ({
   })),
 }));
 
-function renderHomePage(): string {
+function renderHomePage(rewardsStatus?: {
+  viewer: {
+    cloudConnected: boolean;
+    activeModelId: string | null;
+    activeModelProviderId: string | null;
+    usingManagedModel: boolean;
+  };
+  progress: {
+    claimedCount: number;
+    totalCount: number;
+    earnedCredits: number;
+    availableCredits?: number;
+  };
+  cloudBalance: {
+    totalBalance: number;
+    totalRecharged: number;
+    totalConsumed: number;
+  } | null;
+  tasks?: Array<Record<string, unknown>>;
+}): string {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -36,6 +55,13 @@ function renderHomePage(): string {
       },
     },
   });
+
+  if (rewardsStatus) {
+    queryClient.setQueryData(["desktop-rewards"], {
+      tasks: [],
+      ...rewardsStatus,
+    });
+  }
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
@@ -102,6 +128,30 @@ describe("HomePage", () => {
     expect(markup).toContain("真实状态");
     expect(markup).toContain("预警");
     expect(markup).toContain("耗尽");
+  });
+
+  it("does not show a budget banner after switching away from managed models", () => {
+    const markup = renderHomePage({
+      viewer: {
+        cloudConnected: true,
+        activeModelId: "openai/gpt-4.1",
+        activeModelProviderId: "openai",
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 4,
+        totalCount: 10,
+        earnedCredits: 800,
+      },
+      cloudBalance: {
+        totalBalance: 0,
+        totalRecharged: 800,
+        totalConsumed: 800,
+      },
+    });
+
+    expect(markup).not.toContain("budget.banner.depletedTitle");
+    expect(markup).not.toContain("budget.banner.warningTitle");
   });
 
   it("renders the alpha hero as a looping muted autoplay video", () => {

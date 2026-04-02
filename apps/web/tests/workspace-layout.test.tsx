@@ -184,13 +184,29 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain("Design sync thread");
   });
 
-  it("renders a rewards navigation entry and marks it active on the rewards route", () => {
-    const markup = renderWorkspaceLayout("/workspace/rewards");
+  it("keeps the rewards page route without rendering a main navigation tab", () => {
+    const markup = renderWorkspaceLayout("/workspace/rewards", {
+      viewer: {
+        cloudConnected: true,
+        activeModelId: "link/gemini",
+        activeModelProviderId: "link",
+        usingManagedModel: true,
+      },
+      progress: {
+        claimedCount: 4,
+        totalCount: 10,
+        earnedCredits: 700,
+      },
+      cloudBalance: {
+        totalBalance: 200,
+        totalRecharged: 900,
+        totalConsumed: 700,
+      },
+    });
 
-    expect(markup).toContain('href="/workspace/rewards"');
-    expect(markup).toContain("layout.nav.rewards");
-    expect(markup).toContain("layout.mobile.rewards");
+    expect(markup).not.toContain("layout.nav.rewards");
     expect(markup).toContain("Rewards body");
+    expect(markup).toContain("layout.sidebar.rewardsTitle");
   });
 
   it("renders the logged-out sidebar growth card", () => {
@@ -201,7 +217,7 @@ describe("WorkspaceLayout", () => {
     expect(markup).not.toContain("layout.sidebar.rewardsTitle");
   });
 
-  it("renders the logged-in rewards card with balance and progress", () => {
+  it("renders the logged-in rewards banner with a separate balance entry", () => {
     const markup = renderWorkspaceLayout("/workspace/sessions/sess-1", {
       viewer: {
         cloudConnected: true,
@@ -222,9 +238,9 @@ describe("WorkspaceLayout", () => {
     });
 
     expect(markup).toContain("layout.sidebar.rewardsTitle");
-    expect(markup).toContain("layout.sidebar.progressLabel");
+    expect(markup).toContain("4/10");
     expect(markup).toContain("layout.sidebar.balanceLabel");
-    expect(markup).toContain("layout.sidebar.balanceLabel 200");
+    expect(markup).toContain("200 layout.sidebar.balanceUnit");
     expect(markup).not.toContain("layout.sidebar.loginTitle");
   });
 

@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("BudgetWarningBanner", () => {
-  it("renders warning copy with API key and upgrade actions", () => {
+  it("renders warning copy with rewards and BYOK actions", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter>
         <BudgetWarningBanner status="warning" onDismiss={vi.fn()} />
@@ -19,8 +19,8 @@ describe("BudgetWarningBanner", () => {
 
     expect(markup).toContain("budget.banner.warningTitle");
     expect(markup).toContain("budget.banner.warningDescription");
-    expect(markup).toContain("budget.banner.apiKey");
-    expect(markup).toContain("budget.banner.upgrade");
+    expect(markup).toContain("budget.banner.earnCredits");
+    expect(markup).toContain("budget.banner.byok");
     expect(markup).not.toContain("budget.banner.depletedTitle");
   });
 

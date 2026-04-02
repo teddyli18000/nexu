@@ -17,7 +17,6 @@ import {
   Gift,
   Globe,
   Home,
-  LogIn,
   LogOut,
   Mail,
   Menu,
@@ -543,17 +542,14 @@ function WorkspaceLayoutInner() {
   const userName = me?.name?.trim() || session?.user?.name || userEmail;
   const userImage = me?.image ?? session?.user?.image ?? null;
   const userInitial = (userName[0] ?? userEmail[0] ?? "U").toUpperCase();
-  const rewardProgressPercent =
-    rewardsStatus.progress.totalCount > 0
-      ? Math.round(
-          (rewardsStatus.progress.claimedCount /
-            rewardsStatus.progress.totalCount) *
-            100,
-        )
-      : 0;
-  const rewardBalanceLabel = rewardsStatus.cloudBalance
-    ? `${t("layout.sidebar.balanceLabel")} ${rewardsStatus.cloudBalance.totalBalance}`
+  const rewardTaskCountLabel = `${rewardsStatus.progress.claimedCount}/${rewardsStatus.progress.totalCount}`;
+  const rewardBalanceValue = rewardsStatus.cloudBalance
+    ? `${rewardsStatus.cloudBalance.totalBalance} ${t("layout.sidebar.balanceUnit")}`
     : t("layout.sidebar.balancePlaceholder");
+  const shouldShowRewardsBanner =
+    rewardsStatus.viewer.cloudConnected &&
+    rewardsStatus.progress.totalCount > 0 &&
+    rewardsStatus.progress.claimedCount < rewardsStatus.progress.totalCount;
 
   const showEmptyState =
     sessions.length === 0 &&
@@ -712,20 +708,6 @@ function WorkspaceLayoutInner() {
               {t("layout.nav.home")}
             </Link>
             <Link
-              to="/workspace/rewards"
-              onClick={() => {
-                track("workspace_rewards_click");
-                track("workspace_sidebar_click", { target: "rewards" });
-              }}
-              className={cn(
-                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
-                isRewardsPage && "nav-item-active",
-              )}
-            >
-              <Gift size={16} className="shrink-0" />
-              {t("layout.nav.rewards")}
-            </Link>
-            <Link
               to="/workspace/skills"
               onClick={() => {
                 track("workspace_skills_click");
@@ -835,77 +817,86 @@ function WorkspaceLayoutInner() {
             <button
               type="button"
               onClick={() => void handleCloudConnect()}
-              className="group w-full rounded-[18px] border border-border-subtle bg-gradient-to-r from-surface-2 via-surface-1 to-surface-2 px-4 py-3 text-left shadow-[0_10px_30px_rgba(15,23,42,0.04)] hover:border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
+              className="group flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
             >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#101318_0%,#232831_100%)] text-white shadow-[0_10px_20px_rgba(15,23,42,0.18)]">
-                  {cloudConnecting ? (
-                    <Sparkles size={16} className="animate-pulse" />
-                  ) : (
-                    <LogIn size={16} />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-text-primary">
-                    {t("layout.sidebar.loginTitle")}
-                  </div>
-                  <div className="text-[11px] text-text-muted">
-                    {cloudConnecting
-                      ? t("layout.sidebar.loginPending")
-                      : t("layout.sidebar.loginSubtitle")}
-                  </div>
-                </div>
-                <ChevronRight
-                  size={14}
-                  className="shrink-0 text-text-tertiary transition-transform group-hover:translate-x-0.5"
-                />
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-border bg-surface-2">
+                {cloudConnecting ? (
+                  <Sparkles
+                    size={12}
+                    className="animate-pulse text-text-secondary"
+                  />
+                ) : (
+                  <img
+                    src="/brand/logo-black-1.svg"
+                    alt="nexu"
+                    className="h-3.5 w-3.5"
+                  />
+                )}
               </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] font-medium text-text-secondary">
+                  {t("layout.sidebar.loginTitle")}
+                </div>
+                <div className="mt-0.5 text-[10px] leading-none text-text-muted">
+                  {cloudConnecting
+                    ? t("layout.sidebar.loginPending")
+                    : t("layout.sidebar.loginSubtitle")}
+                </div>
+              </div>
+              <ChevronRight
+                size={12}
+                className="shrink-0 text-text-muted transition-transform duration-200 group-hover:translate-x-0.5"
+              />
             </button>
           ) : (
-            <Link
-              to="/workspace/rewards"
-              className="group block w-full rounded-[18px] border border-[#f4d9b5] bg-[linear-gradient(135deg,#fffaf1_0%,#fff2e4_50%,#fffaf4_100%)] px-4 py-3 text-left text-text-primary shadow-[0_12px_30px_rgba(214,119,6,0.08)] hover:border-[#efc994]"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#f59e0b_0%,#f97316_100%)] text-white shadow-[0_10px_20px_rgba(249,115,22,0.22)]">
-                  <Gift size={18} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold">
+            <div>
+              {shouldShowRewardsBanner && (
+                <Link
+                  to="/workspace/rewards"
+                  className="group mb-2 flex items-center gap-3 rounded-[12px] border border-[#F5DFC0]/50 bg-[linear-gradient(135deg,#FFF8F0_0%,#FFFAF5_50%,#FFF5EB_100%)] px-3.5 py-3 shadow-[0_1px_3px_rgba(245,200,120,0.08)] transition-all duration-200 hover:border-[#F0D0A0]/60 hover:shadow-[0_2px_8px_rgba(245,200,120,0.15)]"
+                  onClick={() => {
+                    track("workspace_rewards_click");
+                    track("workspace_sidebar_click", { target: "rewards" });
+                  }}
+                >
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[linear-gradient(135deg,#fbbf24_0%,#fb923c_100%)] text-white shadow-[0_1px_3px_rgba(245,158,11,0.25)]">
+                    <Gift size={14} />
+                  </div>
+                  <span className="min-w-0 flex-1 text-[12px] font-medium leading-[1.3] text-text-primary">
                     {t("layout.sidebar.rewardsTitle")}
-                  </div>
-                  <div className="text-[11px] text-text-muted">
-                    {t("layout.sidebar.rewardsSubtitle")}
-                  </div>
-                </div>
-                <div className="rounded-full border border-white/70 bg-white/80 px-2 py-1 text-[11px] font-semibold text-[#b45309]">
-                  {rewardsStatus.progress.claimedCount}/
-                  {rewardsStatus.progress.totalCount}
-                </div>
-              </div>
-              {!collapsed && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-text-muted">
-                    <span>{t("layout.sidebar.progressLabel")}</span>
-                    <span>{rewardProgressPercent}%</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-border">
-                    <div
-                      className="h-full rounded-full bg-[var(--color-brand-primary)] transition-all"
-                      style={{ width: `${rewardProgressPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <div className="font-semibold text-text-primary">
-                      {rewardBalanceLabel}
-                    </div>
-                    <span className="text-[#b45309] transition-transform group-hover:translate-x-0.5">
-                      {t("layout.sidebar.rewardsCta")}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[11px] text-text-tertiary">
+                    {rewardTaskCountLabel}
+                  </span>
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-text-muted transition-transform duration-200 group-hover:translate-x-0.5"
+                  />
+                </Link>
+              )}
+              <Link
+                to="/workspace/rewards"
+                className="block w-full rounded-[8px] px-2.5 py-2 transition-colors hover:bg-black/5"
+                onClick={() => {
+                  track("workspace_rewards_click");
+                  track("workspace_sidebar_click", { target: "credits" });
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="text-[11px] text-[var(--color-brand-primary)]">
+                      ✦
+                    </span>
+                    <span className="truncate text-[11px] font-semibold leading-none text-text-secondary">
+                      {t("layout.sidebar.balanceLabel")}
                     </span>
                   </div>
+                  <span className="shrink-0 tabular-nums text-[11px] font-medium leading-none text-text-secondary">
+                    {rewardBalanceValue}
+                  </span>
                 </div>
-              )}
-            </Link>
+              </Link>
+            </div>
           )}
         </div>
 
@@ -1164,23 +1155,6 @@ function WorkspaceLayoutInner() {
                   >
                     <Home size={14} />
                     {t("layout.nav.home")}
-                  </Link>
-                  <Link
-                    to="/workspace/rewards"
-                    onClick={() => {
-                      track("workspace_rewards_click");
-                      track("workspace_sidebar_click", { target: "rewards" });
-                      setMobileDrawerOpen(false);
-                    }}
-                    className={cn(
-                      "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-0.5 px-3 py-2",
-                      isRewardsPage
-                        ? "bg-accent/10 text-accent"
-                        : "text-text-muted hover:text-text-primary hover:bg-surface-3",
-                    )}
-                  >
-                    <Gift size={14} />
-                    {t("layout.mobile.rewards")}
                   </Link>
                   <Link
                     to="/workspace/skills"

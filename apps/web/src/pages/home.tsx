@@ -305,6 +305,7 @@ export function HomePage() {
 
   const budgetBannerStatus = useMemo((): BudgetBannerStatus => {
     if (!rewardsStatus.viewer.cloudConnected) return "healthy";
+    if (!rewardsStatus.viewer.usingManagedModel) return "healthy";
     const { cloudBalance } = rewardsStatus;
     if (cloudBalance === null) return "healthy";
     if (cloudBalance.totalBalance === 0) return "depleted";

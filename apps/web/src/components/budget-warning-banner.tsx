@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { X, Zap } from "lucide-react";
+import { Cpu, Gift, X, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -14,18 +14,16 @@ const statusConfig = {
     descriptionKey: "budget.banner.warningDescription",
     border: "border-[#f5dfa0]",
     bg: "bg-[linear-gradient(135deg,#fffbec_0%,#fff8dc_100%)]",
-    iconColor: "text-[#b07d12]",
     textClass: "text-[#7a5a08]",
-    upgradeClass: "bg-[#eab308] text-[#3b2f0b] hover:bg-[#dca40a]",
+    taskClass: "bg-[#eab308] text-[#3b2f0b] hover:bg-[#dca40a]",
   },
   depleted: {
     titleKey: "budget.banner.depletedTitle",
     descriptionKey: "budget.banner.depletedDescription",
     border: "border-[#f5c6c0]",
     bg: "bg-[linear-gradient(135deg,#fff5f4_0%,#fff0ee_100%)]",
-    iconColor: "text-[#d94f3d]",
     textClass: "text-[#9b2c1e]",
-    upgradeClass: "bg-[#ff5a3d] text-white hover:bg-[#ed4729]",
+    taskClass: "bg-[#ff5a3d] text-white hover:bg-[#ed4729]",
   },
 } as const;
 
@@ -36,11 +34,15 @@ export function BudgetWarningBanner({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const config = statusConfig[status];
+  const accentColor =
+    status === "depleted" ? "var(--color-danger)" : "var(--color-warning)";
+  const buttonClass =
+    "inline-flex items-center justify-center gap-1.5 rounded-[8px] px-[14px] py-[5px] text-[12px] font-medium transition-colors";
 
   return (
     <div
       className={cn(
-        "relative rounded-[18px] border px-5 py-4",
+        "relative rounded-xl border px-5 py-4",
         config.border,
         config.bg,
       )}
@@ -48,49 +50,58 @@ export function BudgetWarningBanner({
       <button
         type="button"
         onClick={onDismiss}
-        className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full text-current opacity-50 transition-opacity hover:opacity-80"
+        className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-black/8 hover:text-text-secondary"
         aria-label="Dismiss"
       >
-        <X size={14} />
+        <X size={12} />
       </button>
 
-      <div className="flex flex-col gap-3 pr-6 sm:flex-row sm:items-center sm:gap-5">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="pr-4">
+        <div className="flex items-start gap-3">
+          <div
+            className="mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px]"
+            style={{
+              background: `color-mix(in srgb, ${accentColor} 15%, transparent)`,
+            }}
+          >
+            <Zap size={14} style={{ color: accentColor }} />
+          </div>
           <div
             className={cn(
-              "flex items-center gap-1.5 text-[13px] font-semibold",
+              "pt-[3px] text-[13px] font-semibold",
               config.textClass,
             )}
           >
-            <Zap size={14} className={config.iconColor} />
             {t(config.titleKey)}
           </div>
+        </div>
+
+        <div className="mt-3 pl-10">
           <p className={cn("text-[12px] leading-[1.6]", config.textClass)}>
             {t(config.descriptionKey)}
           </p>
-        </div>
-
-        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-          <div className={cn("text-[11px] font-medium", config.textClass)}>
+          <div className="mb-1.5 mt-3 text-[11px] text-text-tertiary">
             {t("budget.banner.actionsLabel")}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => navigate("/workspace/models?tab=providers")}
-              className="rounded-lg bg-[#111317] px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-[#1b1f24]"
+              onClick={() => navigate("/workspace/rewards")}
+              className={cn(buttonClass, config.taskClass)}
             >
-              {t("budget.banner.apiKey")}
+              <Gift size={12} />
+              {t("budget.banner.earnCredits")}
             </button>
             <button
               type="button"
-              onClick={() => navigate("/workspace/settings")}
+              onClick={() => navigate("/workspace/models?tab=providers")}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
-                config.upgradeClass,
+                buttonClass,
+                "border border-border bg-white text-text-secondary hover:bg-surface-1",
               )}
             >
-              {t("budget.banner.upgrade")}
+              <Cpu size={12} />
+              {t("budget.banner.byok")}
             </button>
           </div>
         </div>

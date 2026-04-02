@@ -149,12 +149,13 @@ const en = {
   "layout.mobile.skills": "Skills",
   "layout.mobile.skillsSubtitle": "Browse AI capabilities",
   "layout.sidebar.loginTitle": "Sign in with nexu",
-  "layout.sidebar.loginSubtitle": "Use hosted models and rewards",
+  "layout.sidebar.loginSubtitle": "Use official credits",
   "layout.sidebar.loginPending": "Waiting for browser sign-in",
-  "layout.sidebar.rewardsTitle": "Share nexu, earn credits",
+  "layout.sidebar.rewardsTitle": "Share nexu, earn extra credits",
   "layout.sidebar.rewardsSubtitle": "Daily, open-source, and social tasks",
   "layout.sidebar.progressLabel": "Tasks claimed",
   "layout.sidebar.balanceLabel": "Balance",
+  "layout.sidebar.balanceUnit": "credits",
   "layout.sidebar.balancePlaceholder": "Balance syncing…",
   "layout.sidebar.rewardsCta": "Open",
   "layout.mobile.settings": "Settings",
@@ -318,9 +319,9 @@ const en = {
   "budget.banner.description":
     "Complete tasks to earn more credits, or use your own API key (BYOK) to continue.",
   "budget.banner.warningDescription":
-    "Hosted plan is nearly exhausted—switch to a BYOK key or upgrade to keep tasks running.",
+    "Hosted credits are running low. Claim more task rewards or switch to your own API key to keep tasks running.",
   "budget.banner.depletedDescription":
-    "Hosted plan has been used up (resets tomorrow). Use your own API key or upgrade to continue.",
+    "Hosted credits are fully used up (reset tomorrow). Claim task rewards or switch to your own API key to continue.",
   "budget.banner.actionsLabel": "Actions",
   "budget.banner.apiKey": "Use API key",
   "budget.banner.upgrade": "Upgrade plan",
