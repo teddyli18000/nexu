@@ -75,6 +75,7 @@ type BudgetBannerStatus = "healthy" | "warning" | "depleted";
 type BudgetBannerDebugMode = "actual" | Exclude<BudgetBannerStatus, "healthy">;
 
 const budgetBannerDebugStorageKey = "nexu_budget_banner_debug_mode";
+const budgetBannerDismissStorageKey = "nexu_budget_banner_dismissed_v2";
 const showBudgetBannerDebugPanel = import.meta.env.DEV;
 
 function formatRelativeTime(
@@ -294,17 +295,18 @@ export function HomePage() {
       return "actual";
     });
 
-  // Budget warning banner: dismissed for today using localStorage
-  const [bannerDismissed, setBannerDismissed] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem("nexu_budget_banner_dismissed");
-      if (!stored) return false;
-      const { date } = JSON.parse(stored) as { date: string };
-      return date === new Date().toDateString();
-    } catch {
-      return false;
-    }
-  });
+  const [dismissedBudgetBannerStatus, setDismissedBudgetBannerStatus] =
+    useState<Exclude<BudgetBannerStatus, "healthy"> | null>(() => {
+      try {
+        const stored = sessionStorage.getItem(budgetBannerDismissStorageKey);
+        if (stored === "warning" || stored === "depleted") {
+          return stored;
+        }
+      } catch {
+        // ignore storage errors
+      }
+      return null;
+    });
 
   const { status: rewardsStatus } = useDesktopRewardsStatus();
 
@@ -320,17 +322,21 @@ export function HomePage() {
     return "healthy";
   }, [rewardsStatus]);
 
-  const handleBannerDismiss = useCallback(() => {
-    setBannerDismissed(true);
-    try {
-      localStorage.setItem(
-        "nexu_budget_banner_dismissed",
-        JSON.stringify({ date: new Date().toDateString() }),
-      );
-    } catch {
-      // ignore storage errors
-    }
-  }, []);
+  const handleBannerDismiss = useCallback(
+    (status: Exclude<BudgetBannerStatus, "healthy">) => {
+      if (budgetBannerDebugMode !== "actual") {
+        return;
+      }
+
+      setDismissedBudgetBannerStatus(status);
+      try {
+        sessionStorage.setItem(budgetBannerDismissStorageKey, status);
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [budgetBannerDebugMode],
+  );
   const handleBudgetBannerDebugModeChange = useCallback(
     (mode: BudgetBannerDebugMode) => {
       setBudgetBannerDebugMode(mode);
@@ -544,9 +550,19 @@ export function HomePage() {
     budgetBannerDebugMode === "actual"
       ? budgetBannerStatus
       : budgetBannerDebugMode;
-  const shouldShowBudgetBanner =
+  const shouldShowBudgetStatusCta =
     resolvedBudgetBannerStatus !== "healthy" &&
-    (!bannerDismissed || budgetBannerDebugMode !== "actual");
+    (budgetBannerDebugMode !== "actual" ||
+      dismissedBudgetBannerStatus !== resolvedBudgetBannerStatus);
+  const activeBudgetBannerStatus: Exclude<
+    BudgetBannerStatus,
+    "healthy"
+  > | null =
+    shouldShowBudgetStatusCta && resolvedBudgetBannerStatus === "warning"
+      ? "warning"
+      : shouldShowBudgetStatusCta && resolvedBudgetBannerStatus === "depleted"
+        ? "depleted"
+        : null;
 
   const { data: liveStatus } = useQuery({
     queryKey: ["channels-live-status"],
@@ -768,10 +784,10 @@ export function HomePage() {
             </div>
           </div>
 
-          {shouldShowBudgetBanner && (
+          {activeBudgetBannerStatus !== null && (
             <BudgetWarningBanner
-              status={resolvedBudgetBannerStatus}
-              onDismiss={handleBannerDismiss}
+              status={activeBudgetBannerStatus}
+              onDismiss={() => handleBannerDismiss(activeBudgetBannerStatus)}
             />
           )}
 
@@ -973,10 +989,10 @@ export function HomePage() {
           </div>
         </div>
 
-        {shouldShowBudgetBanner && (
+        {activeBudgetBannerStatus !== null && (
           <BudgetWarningBanner
-            status={resolvedBudgetBannerStatus}
-            onDismiss={handleBannerDismiss}
+            status={activeBudgetBannerStatus}
+            onDismiss={() => handleBannerDismiss(activeBudgetBannerStatus)}
           />
         )}
 

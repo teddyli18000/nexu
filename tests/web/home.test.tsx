@@ -180,7 +180,70 @@ describe("HomePage", () => {
     expect(markup).toContain('loop=""');
   });
 
-  it("renders the budget warning banner below the running hero block", () => {
+  it("renders the low-credit warning banner below the running hero block", () => {
+    const markup = renderHomePage({
+      channels: [
+        {
+          id: "channel-1",
+          channelType: "feishu",
+          status: "connected",
+        },
+      ],
+      liveStatus: {
+        gatewayConnected: true,
+        channels: [
+          {
+            channelType: "feishu",
+            channelId: "channel-1",
+            accountId: "acct-1",
+            status: "connected",
+            ready: true,
+            connected: true,
+            running: true,
+            configured: true,
+            lastError: null,
+          },
+        ],
+        agent: {
+          modelId: "link/gemini",
+          modelName: "Gemini",
+          alive: true,
+        },
+      },
+      rewardsStatus: {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 8,
+          totalCount: rewardTasks.length,
+          earnedCredits: 800,
+          availableCredits: 200,
+        },
+        tasks: rewardTasks.map((task) => ({
+          ...task,
+          isClaimed: false,
+          lastClaimedAt: null,
+          claimCount: 0,
+        })),
+        cloudBalance: {
+          totalBalance: 5,
+          totalRecharged: 805,
+          totalConsumed: 800,
+        },
+      },
+    });
+
+    expect(markup.indexOf("nexu alpha")).toBeLessThan(
+      markup.indexOf('data-budget-banner-status="warning"'),
+    );
+    expect(markup).not.toContain('data-budget-dialog-status="depleted"');
+  });
+
+  it("renders a depleted credits banner when balance is exhausted", () => {
     const markup = renderHomePage({
       channels: [
         {
@@ -237,9 +300,8 @@ describe("HomePage", () => {
       },
     });
 
-    expect(markup.indexOf("nexu alpha")).toBeLessThan(
-      markup.indexOf('data-budget-banner-status="depleted"'),
-    );
+    expect(markup).toContain('data-budget-banner-status="depleted"');
+    expect(markup).not.toContain('data-budget-dialog-status="depleted"');
   });
 });
 
