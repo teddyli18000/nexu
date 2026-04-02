@@ -101,4 +101,6 @@
 
 ## 还有疑问？
 
-如果你还有其他问题，或希望获取最新支持，欢迎查看 [联系我们](/zh/guide/contact)。
+如果你还有其他问题，或希望获取最新支持：
+
+[![联系我们](/assets/seedance/contact-us.webp)](/zh/guide/contact)

@@ -101,4 +101,6 @@ Go to the [LibTV website](https://www.liblib.tv/) and sign in to your account. T
 
 ## Still have questions?
 
-If you have any other questions or want the latest support, see [Contact us](/guide/contact).
+If you have any other questions or want the latest support:
+
+[![Contact us](/assets/seedance/contact-us.webp)](/guide/contact)
