@@ -24,6 +24,10 @@
 2. 进群后查看置顶消息，打开问卷链接并填写信息
 3. 等待工作人员审核
 
+**GitHub Star 截图标准（审核必备）**：提交审核材料时，请附上仓库页面的截图，且图中需能清楚看到 **仓库名称**、**Star 状态**（例如已为该仓库点过 Star），以及 **GitHub 登录状态**（能看出当前已登录的账号）。**以上均为截图通过审核的必备要素**；缺漏可能影响审核结果。下方为符合要求的示例：
+
+![通过审核的 GitHub Star 截图示例](/assets/seedance/github-star-review-example.webp)
+
 审核通过后，体验 Key 会发送到你在问卷中填写的邮箱。
 
 ![申请体验 Key：前往 GitHub Star](/assets/seedance/apply-key-step1-star.webp)

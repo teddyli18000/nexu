@@ -24,6 +24,10 @@ You will need to:
 2. Join the group, check the pinned message, open the form link, and submit your information
 3. Wait for the review process
 
+**GitHub Star screenshot requirements (required for review)**: When you submit your application, include a screenshot of the repository page that clearly shows the **repository name**, **Star status** (for example, that you have starred the repository), and your **signed-in GitHub identity**. **All of these are required** for the screenshot to pass review; missing any of them may affect approval. Example below:
+
+![Example of a GitHub Star screenshot that meets review requirements](/assets/seedance/github-star-review-example.webp)
+
 After approval, the trial key will be sent to the email address you provided in the form.
 
 ![Apply for a trial key: go to GitHub and star nexu](/assets/seedance/apply-key-step1-star.webp)
