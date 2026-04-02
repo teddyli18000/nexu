@@ -1,10 +1,8 @@
 import { isSupportedByokProviderId } from "../lib/byok-providers.js";
 import { logger } from "../lib/logger.js";
+import { isManagedCloudModelId } from "../lib/managed-models.js";
 import type { NexuConfigStore } from "../store/nexu-config-store.js";
 import type { OpenClawSyncService } from "./openclaw-sync-service.js";
-
-// Cloud-managed model IDs use the "link/" prefix (Nexu Link models).
-const MANAGED_MODEL_PREFIX = "link/";
 
 export interface QuotaFallbackResult {
   success: boolean;
@@ -29,13 +27,7 @@ export class QuotaFallbackService {
     const desktopConfig = config.desktop as {
       cloud?: { models?: Array<{ id: string }> };
     };
-    if (modelId.startsWith(MANAGED_MODEL_PREFIX)) {
-      return true;
-    }
-
-    return (desktopConfig.cloud?.models ?? []).some(
-      (model) => model.id === modelId,
-    );
+    return isManagedCloudModelId(modelId, desktopConfig.cloud?.models ?? []);
   }
 
   // Returns true when the current default model is a Nexu-managed (cloud) model.

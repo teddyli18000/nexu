@@ -25,6 +25,7 @@ import {
 import type { z } from "zod";
 import type { ControllerEnv } from "../app/env.js";
 import { logger } from "../lib/logger.js";
+import { resolveManagedCloudModel } from "../lib/managed-models.js";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 import {
   type RewardStatusResponse,
@@ -1348,11 +1349,10 @@ export class NexuConfigStore {
     const config = await this.getConfig();
     const cloud = readDesktopCloud(config);
     const activeModelId = config.runtime.defaultModelId || null;
-    const activeManagedModel =
-      activeModelId !== null
-        ? ((cloud.models ?? []).find((model) => model.id === activeModelId) ??
-          null)
-        : null;
+    const activeManagedModel = resolveManagedCloudModel(
+      activeModelId,
+      cloud.models ?? [],
+    );
 
     if (cloud.connected && cloud.apiKey) {
       const { activeProfile } =
@@ -1444,11 +1444,10 @@ export class NexuConfigStore {
     const config2 = await this.getConfig();
     const cloud2 = readDesktopCloud(config2);
     const activeModelId2 = config2.runtime.defaultModelId || null;
-    const activeManagedModel2 =
-      activeModelId2 !== null
-        ? ((cloud2.models ?? []).find((model) => model.id === activeModelId2) ??
-          null)
-        : null;
+    const activeManagedModel2 = resolveManagedCloudModel(
+      activeModelId2,
+      cloud2.models ?? [],
+    );
 
     return {
       ok: claimData.ok,

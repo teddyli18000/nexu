@@ -285,13 +285,14 @@ const en = {
   "home.noRecentActivity": "No recent conversations",
 
   // ── Rewards ──
-  "rewards.title": "Earn more usage",
-  "rewards.desc": "Complete tasks to get extra usage credits.",
+  "rewards.title": "Share nexu, earn extra credits",
+  "rewards.desc":
+    "Share nexu with your communities and complete tasks to earn extra credits.",
   "rewards.progressLabel": "Completed",
   "rewards.earnedLabel": "Earned",
   "rewards.totalCredits": "Reward credits {{n}}",
   "rewards.taskProgress": "Weekly tasks {{a}} / {{b}}",
-  "rewards.checkinTotal": "Daily check-ins claimed: ${n}",
+  "rewards.checkinTotal": "Daily check-ins claimed: ${n} credits",
   "rewards.group.daily": "Daily",
   "rewards.group.opensource": "Open Source",
   "rewards.group.social": "Social & messaging",
@@ -318,30 +319,30 @@ const en = {
   "rewards.card.localState": "Controller-backed status",
   "rewards.card.localStateHint":
     "Claims now come from the desktop controller routes and stay idempotent across app restarts.",
-  "budget.viral.title": "Earn more usage",
+  "budget.viral.title": "Share nexu, earn extra credits",
   "budget.viral.loginFirst": "Log in for free AI models",
   "budget.viral.desc": "Help spread the word, get rewarded.",
   "budget.viral.rules": "View reward rules →",
   "budget.viral.summary":
-    "{{claimed}}/{{total}} completed · ${{earned}} earned",
+    "{{claimed}}/{{total}} completed · {{earned}} credits earned",
   "budget.viral.viewAll": "View all rewards →",
   "budget.cta.go": "Go",
   "budget.cta.share": "Share",
   "budget.cta.download": "Save image",
   "budget.cta.checkin": "Check in",
-  "budget.cta.done": "+${n} earned",
+  "budget.cta.done": "+${n} credits earned",
   "budget.confirm.title": "Confirm: {channel}",
   "budget.confirm.desc":
-    "After you complete the action, come back and confirm to receive +${n}.",
+    "After you complete the action, come back and confirm to receive +${n} credits.",
   "budget.confirm.screenshotDesc":
-    "Share first on the target platform, then come back and confirm to receive +${n}.",
+    "Share first on the target platform, then come back and confirm to receive +${n} credits.",
   "budget.confirm.imageDesc":
-    "Download the share card, post it on the platform, then come back and confirm to receive +${n}.",
+    "Download the share card, post it on the platform, then come back and confirm to receive +${n} credits.",
   "budget.confirm.downloadImage": "Download share card",
   "budget.confirm.done": "I've done it",
   "budget.confirm.cancel": "Not yet",
   "budget.confirm.checkinDesc":
-    "Confirm today's check-in to add +${n} to your reward balance. This can be claimed once per day.",
+    "Confirm today's check-in to add +${n} credits to your reward balance. This can be claimed once per day.",
   "budget.confirm.checkingTitle": "Checking task completion",
   "budget.confirm.checkingDesc":
     "Please wait while we confirm the task status for you.",

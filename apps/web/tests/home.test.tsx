@@ -238,7 +238,7 @@ describe("RewardsPage", () => {
     expect(markup).toContain("https://docs.nexu.io/rewards");
   });
 
-  it("matches the source rewards page shell instead of the wider card layout", () => {
+  it("uses the积分 copy and hides the redundant cloud balance summary card", () => {
     const markup = renderRewardsPage({
       viewer: {
         cloudConnected: false,
@@ -258,7 +258,38 @@ describe("RewardsPage", () => {
       cloudBalance: null,
     });
 
-    expect(markup).toContain("max-w-[520px]");
+    expect(zhCN["rewards.title"]).toBe("分享 nexu，获取额外积分");
+    expect(zhCN["rewards.desc"]).toBe(
+      "把 nexu 分享给你的社区，完成任务获取额外积分。",
+    );
+    expect(markup).toContain("layout.sidebar.balanceUnit");
+    expect(markup).not.toContain("rewards.cloudBalance");
+    expect(markup).not.toContain("rewards.totalEarned");
+    expect(markup).not.toContain("rewards.totalUsed");
+  });
+
+  it("aligns the rewards page shell with the home content width", () => {
+    const markup = renderRewardsPage({
+      viewer: {
+        cloudConnected: false,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 2,
+        totalCount: rewardTasks.length,
+        earnedCredits: 5,
+        availableCredits: rewardTasks.reduce(
+          (sum, task) => sum + task.reward,
+          0,
+        ),
+      },
+      cloudBalance: null,
+    });
+
+    expect(markup).toContain("max-w-4xl");
+    expect(markup).not.toContain("max-w-[520px]");
     expect(markup).not.toContain("rewards.badge");
     expect(markup).not.toContain("rewards.refresh");
   });
@@ -266,7 +297,10 @@ describe("RewardsPage", () => {
 
 describe("Rewards locale parity", () => {
   it("keeps the source Chinese rewards copy for the header and task labels", () => {
-    expect(zhCN["rewards.desc"]).toBe("完成以下任务，获得额外用量。");
+    expect(zhCN["rewards.title"]).toBe("分享 nexu，获取额外积分");
+    expect(zhCN["rewards.desc"]).toBe(
+      "把 nexu 分享给你的社区，完成任务获取额外积分。",
+    );
     expect(zhCN["reward.github_star.name"]).toBe("Star us");
     expect(zhCN["reward.reddit.name"]).toBe("发帖到 Reddit");
     expect(zhCN["reward.xiaohongshu.name"]).toBe("发帖到小红书");

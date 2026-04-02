@@ -1,6 +1,5 @@
-import { openExternalUrl } from "@/lib/desktop-links";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, Settings2, X, Zap } from "lucide-react";
+import { Gift, Settings2, X, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -78,6 +77,14 @@ export function BudgetWarningBanner({
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
+              onClick={() => navigate("/workspace/rewards")}
+              className={cn(buttonClass, config.primaryClass)}
+            >
+              <Gift size={12} />
+              {t("budget.banner.earnCredits")}
+            </button>
+            <button
+              type="button"
               onClick={() => navigate("/workspace/models?tab=providers")}
               className={cn(
                 buttonClass,
@@ -86,16 +93,6 @@ export function BudgetWarningBanner({
             >
               <Settings2 size={12} />
               {t("budget.banner.byok")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void openExternalUrl("https://nexu.io");
-              }}
-              className={cn(buttonClass, config.primaryClass)}
-            >
-              <ArrowUpRight size={12} />
-              {t("budget.banner.upgrade")}
             </button>
           </div>
         </div>

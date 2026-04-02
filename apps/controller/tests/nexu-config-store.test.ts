@@ -288,6 +288,43 @@ describe("NexuConfigStore", () => {
     expect(status.cloudBalance).toBeNull();
   });
 
+  it("treats link-prefixed default models as managed even before cloud inventory hydrates", async () => {
+    await mkdir(path.join(rootDir, ".nexu"), { recursive: true });
+    await writeFile(
+      path.join(rootDir, ".nexu", "config.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          runtime: {
+            defaultModelId: "link/gemini-3-flash-preview",
+          },
+          desktop: {
+            cloud: {
+              connected: true,
+              polling: false,
+              userName: "Cloud User",
+              userEmail: "user@nexu.io",
+              connectedAt: "2026-04-01T00:00:00.000Z",
+              linkUrl: "https://link.nexu.io",
+              models: [],
+            },
+          },
+          secrets: {},
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const store = new NexuConfigStore(env);
+
+    const status = await store.getDesktopRewardsStatus();
+    expect(status.viewer.cloudConnected).toBe(true);
+    expect(status.viewer.activeModelId).toBe("link/gemini-3-flash-preview");
+    expect(status.viewer.usingManagedModel).toBe(true);
+  });
+
   it("getDesktopRewardsStatus returns cloudConnected:false when cloud returns 401 auth_failed", async () => {
     await mkdir(path.join(rootDir, ".nexu"), { recursive: true });
     await writeFile(

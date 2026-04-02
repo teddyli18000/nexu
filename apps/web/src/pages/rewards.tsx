@@ -201,7 +201,7 @@ export function RewardsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[520px] p-6">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6">
           <h1 className="mb-1 text-[22px] font-bold text-text-primary">
             {t("rewards.title")}
@@ -237,7 +237,8 @@ export function RewardsPage() {
                   {status.progress.claimedCount} / {status.progress.totalCount}
                 </span>
                 <span className="tabular-nums text-[12px] font-medium text-[var(--color-success)]">
-                  +${formatRewardAmount(status.progress.earnedCredits)}
+                  +{formatRewardAmount(status.progress.earnedCredits)}{" "}
+                  {t("layout.sidebar.balanceUnit")}
                 </span>
               </div>
               <div className="h-[5px] w-full overflow-hidden rounded-full bg-border/60">
@@ -251,33 +252,6 @@ export function RewardsPage() {
             </>
           )}
         </div>
-
-        {!loading && status.cloudBalance ? (
-          <div className="mb-6 flex items-center justify-between rounded-[18px] border border-border bg-surface-0 px-4 py-3">
-            <div>
-              <div className="text-[11px] font-medium text-text-secondary">
-                {t("rewards.cloudBalance")}
-              </div>
-              <div className="mt-0.5 text-[20px] font-bold tabular-nums text-text-primary">
-                {formatRewardAmount(status.cloudBalance.totalBalance)}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[11px] text-text-muted">
-                {t("rewards.totalEarned")}:{" "}
-                <span className="tabular-nums">
-                  {formatRewardAmount(status.cloudBalance.totalRecharged)}
-                </span>
-              </div>
-              <div className="text-[11px] text-text-muted">
-                {t("rewards.totalUsed")}:{" "}
-                <span className="tabular-nums">
-                  {formatRewardAmount(status.cloudBalance.totalConsumed)}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         {!loading && !status.viewer.cloudConnected ? (
           <div className="mb-6 rounded-[18px] border border-[#d6c7aa] bg-[#faf3e6] px-4 py-3">
@@ -405,7 +379,8 @@ export function RewardsPage() {
                               {t(`reward.${task.id}.name`)}
                             </span>
                             <span className="text-[11px] font-semibold leading-none tabular-nums text-[var(--color-success)]">
-                              +${formatRewardAmount(task.reward)}
+                              +{formatRewardAmount(task.reward)}{" "}
+                              {t("layout.sidebar.balanceUnit")}
                             </span>
                           </div>
                           <div
