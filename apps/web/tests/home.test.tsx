@@ -72,7 +72,26 @@ function renderHomePage(rewardsStatus?: {
   );
 }
 
-function renderRewardsPage(): string {
+function renderRewardsPage(rewardsStatus?: {
+  viewer: {
+    cloudConnected: boolean;
+    activeModelId: string | null;
+    activeModelProviderId: string | null;
+    usingManagedModel: boolean;
+  };
+  progress: {
+    claimedCount: number;
+    totalCount: number;
+    earnedCredits: number;
+    availableCredits?: number;
+  };
+  cloudBalance?: {
+    totalBalance: number;
+    totalRecharged: number;
+    totalConsumed: number;
+  } | null;
+  tasks?: Array<Record<string, unknown>>;
+}): string {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -81,27 +100,22 @@ function renderRewardsPage(): string {
     },
   });
 
-  queryClient.setQueryData(["desktop-rewards"], {
-    viewer: {
-      cloudConnected: false,
-      activeModelId: null,
-      activeModelProviderId: null,
-      usingManagedModel: false,
-    },
-    progress: {
-      claimedCount: 2,
-      totalCount: rewardTasks.length,
-      earnedCredits: 5,
-      availableCredits: rewardTasks.reduce((sum, task) => sum + task.reward, 0),
-    },
-    tasks: rewardTasks.map((task) => ({
-      ...task,
-      isClaimed: task.id === "daily_checkin" || task.id === "github_star",
-      lastClaimedAt: null,
-      claimCount:
-        task.id === "daily_checkin" || task.id === "github_star" ? 1 : 0,
-    })),
-  });
+  if (rewardsStatus) {
+    queryClient.setQueryData(["desktop-rewards"], {
+      viewer: rewardsStatus.viewer,
+      progress: rewardsStatus.progress,
+      cloudBalance: rewardsStatus.cloudBalance ?? null,
+      tasks:
+        rewardsStatus.tasks ??
+        rewardTasks.map((task) => ({
+          ...task,
+          isClaimed: task.id === "daily_checkin" || task.id === "github_star",
+          lastClaimedAt: null,
+          claimCount:
+            task.id === "daily_checkin" || task.id === "github_star" ? 1 : 0,
+        })),
+    });
+  }
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
@@ -167,8 +181,33 @@ describe("HomePage", () => {
 });
 
 describe("RewardsPage", () => {
-  it("renders the merged social rewards group including Facebook and WhatsApp", () => {
+  it("renders a loading summary instead of fake zero values before rewards resolve", () => {
     const markup = renderRewardsPage();
+
+    expect(markup).toContain('data-rewards-summary-loading="true"');
+    expect(markup).not.toContain("+$0");
+    expect(markup).not.toContain("0 / 11");
+  });
+
+  it("renders the merged social rewards group including Facebook and WhatsApp", () => {
+    const markup = renderRewardsPage({
+      viewer: {
+        cloudConnected: false,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 2,
+        totalCount: rewardTasks.length,
+        earnedCredits: 5,
+        availableCredits: rewardTasks.reduce(
+          (sum, task) => sum + task.reward,
+          0,
+        ),
+      },
+      cloudBalance: null,
+    });
 
     expect(markup).toContain("rewards.group.social");
     expect(markup).toContain("reward.facebook.name");
@@ -176,14 +215,48 @@ describe("RewardsPage", () => {
   });
 
   it("renders the source reward rules link in the header", () => {
-    const markup = renderRewardsPage();
+    const markup = renderRewardsPage({
+      viewer: {
+        cloudConnected: false,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 2,
+        totalCount: rewardTasks.length,
+        earnedCredits: 5,
+        availableCredits: rewardTasks.reduce(
+          (sum, task) => sum + task.reward,
+          0,
+        ),
+      },
+      cloudBalance: null,
+    });
 
     expect(markup).toContain("budget.viral.rules");
     expect(markup).toContain("https://docs.nexu.io/rewards");
   });
 
   it("matches the source rewards page shell instead of the wider card layout", () => {
-    const markup = renderRewardsPage();
+    const markup = renderRewardsPage({
+      viewer: {
+        cloudConnected: false,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 2,
+        totalCount: rewardTasks.length,
+        earnedCredits: 5,
+        availableCredits: rewardTasks.reduce(
+          (sum, task) => sum + task.reward,
+          0,
+        ),
+      },
+      cloudBalance: null,
+    });
 
     expect(markup).toContain("max-w-[520px]");
     expect(markup).not.toContain("rewards.badge");

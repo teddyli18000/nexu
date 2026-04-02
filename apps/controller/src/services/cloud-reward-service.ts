@@ -24,6 +24,7 @@ const cloudRewardProgressSchema = z.object({
   claimedCount: z.number(),
   totalCount: z.number(),
   earnedCredits: z.number(),
+  availableCredits: z.number().optional(),
 });
 
 const cloudBalanceSchema = z

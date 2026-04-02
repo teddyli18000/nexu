@@ -2,13 +2,14 @@ import { BrandMark } from "@/components/brand-mark";
 import { PlatformIcon } from "@/components/platform-icons";
 import { useAutoUpdate } from "@/hooks/use-auto-update";
 import { useCommunitySkills } from "@/hooks/use-community-catalog";
+import { syncDesktopCloudQueries } from "@/hooks/use-desktop-cloud-status";
 import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { type Locale, useLocale } from "@/hooks/use-locale";
 import { authClient } from "@/lib/auth-client";
 import { openExternalUrl } from "@/lib/desktop-links";
 import { normalizeChannel, track } from "@/lib/tracking";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   ChevronRight,
@@ -339,8 +340,11 @@ function WorkspaceLayoutInner() {
   const [showHelpMenu, setShowHelpMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [cloudConnecting, setCloudConnecting] = useState(false);
-  const { status: rewardsStatus, refresh: refreshRewards } =
-    useDesktopRewardsStatus();
+  const {
+    status: rewardsStatus,
+    loading: rewardsLoading,
+    refresh: refreshRewards,
+  } = useDesktopRewardsStatus();
   const update = useAutoUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const hasUpdate =
@@ -403,6 +407,7 @@ function WorkspaceLayoutInner() {
   const langRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
   const { data: skillsData } = useCommunitySkills();
   const installedSkillsCount = skillsData?.installedSkills?.length ?? 0;
@@ -507,6 +512,11 @@ function WorkspaceLayoutInner() {
     setCloudConnecting(true);
     try {
       const { data } = await postApiInternalDesktopCloudConnect();
+      if (data?.error === "Already connected. Disconnect first.") {
+        await syncDesktopCloudQueries(queryClient);
+        setCloudConnecting(false);
+        return;
+      }
       if (data?.browserUrl) {
         openExternalUrl(data.browserUrl);
       }
@@ -526,10 +536,14 @@ function WorkspaceLayoutInner() {
   }, [cloudConnecting, refreshRewards, rewardsStatus.viewer.cloudConnected]);
 
   useEffect(() => {
-    if (rewardsStatus.viewer.cloudConnected) {
-      setCloudConnecting(false);
+    if (!cloudConnecting || !rewardsStatus.viewer.cloudConnected) {
+      return;
     }
-  }, [rewardsStatus.viewer.cloudConnected]);
+
+    void syncDesktopCloudQueries(queryClient).finally(() => {
+      setCloudConnecting(false);
+    });
+  }, [cloudConnecting, queryClient, rewardsStatus.viewer.cloudConnected]);
 
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
@@ -813,7 +827,28 @@ function WorkspaceLayoutInner() {
           className="px-3 pb-1 shrink-0"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
-          {!rewardsStatus.viewer.cloudConnected ? (
+          {rewardsLoading ? (
+            <div
+              data-rewards-card-loading="true"
+              className="w-full rounded-[14px] border border-border-subtle bg-gradient-to-r from-surface-2 via-surface-1 to-surface-2 px-3 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+            >
+              <div className="animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="h-7 w-7 rounded-[8px] bg-border/80" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-24 rounded-full bg-border/80" />
+                    <div className="h-2.5 w-20 rounded-full bg-border/60" />
+                  </div>
+                  <div className="h-3 w-8 rounded-full bg-border/70" />
+                </div>
+                <div className="mt-3 h-px bg-border/70" />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="h-2.5 w-14 rounded-full bg-border/60" />
+                  <div className="h-2.5 w-16 rounded-full bg-border/70" />
+                </div>
+              </div>
+            </div>
+          ) : !rewardsStatus.viewer.cloudConnected ? (
             <button
               type="button"
               onClick={() => void handleCloudConnect()}

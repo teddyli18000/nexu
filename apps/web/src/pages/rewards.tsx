@@ -3,10 +3,12 @@ import {
   WechatIcon,
   WhatsAppIcon,
 } from "@/components/platform-icons";
+import { syncDesktopCloudQueries } from "@/hooks/use-desktop-cloud-status";
 import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { openExternalUrl } from "@/lib/desktop-links";
 import { cn } from "@/lib/utils";
 import type { RewardTaskStatus } from "@nexu/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarCheck2,
   Download,
@@ -287,7 +289,8 @@ function RewardConfirmModal({
 
 export function RewardsPage() {
   const { t } = useTranslation();
-  const { status, refresh, claimTask, claimingTaskId } =
+  const queryClient = useQueryClient();
+  const { status, loading, refresh, claimTask, claimingTaskId } =
     useDesktopRewardsStatus();
   const [confirmTaskId, setConfirmTaskId] = useState<
     RewardTaskStatus["id"] | null
@@ -318,10 +321,14 @@ export function RewardsPage() {
   }, [cloudConnecting, refresh, status.viewer.cloudConnected]);
 
   useEffect(() => {
-    if (status.viewer.cloudConnected) {
-      setCloudConnecting(false);
+    if (!cloudConnecting || !status.viewer.cloudConnected) {
+      return;
     }
-  }, [status.viewer.cloudConnected]);
+
+    void syncDesktopCloudQueries(queryClient).finally(() => {
+      setCloudConnecting(false);
+    });
+  }, [cloudConnecting, queryClient, status.viewer.cloudConnected]);
 
   const handleCloudConnect = async () => {
     setCloudConnecting(true);
@@ -334,6 +341,8 @@ export function RewardsPage() {
       }
 
       if (data?.error === "Already connected. Disconnect first.") {
+        await syncDesktopCloudQueries(queryClient);
+        setCloudConnecting(false);
         await refresh();
         return;
       }
@@ -387,25 +396,39 @@ export function RewardsPage() {
         </div>
 
         <div className="mb-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="tabular-nums text-[12px] font-medium text-text-secondary">
-              {status.progress.claimedCount} / {status.progress.totalCount}
-            </span>
-            <span className="tabular-nums text-[12px] font-medium text-[var(--color-success)]">
-              +${formatRewardAmount(status.progress.earnedCredits)}
-            </span>
-          </div>
-          <div className="h-[5px] w-full overflow-hidden rounded-full bg-border/60">
-            <div
-              className="h-full rounded-full bg-[var(--color-success)] transition-all duration-500"
-              style={{
-                width: `${status.progress.totalCount > 0 ? (status.progress.claimedCount / status.progress.totalCount) * 100 : 0}%`,
-              }}
-            />
-          </div>
+          {loading ? (
+            <div data-rewards-summary-loading="true" className="animate-pulse">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="h-3 w-14 rounded-full bg-border/70" />
+                <div className="h-3 w-10 rounded-full bg-border/70" />
+              </div>
+              <div className="h-[5px] w-full overflow-hidden rounded-full bg-border/60">
+                <div className="h-full w-1/3 rounded-full bg-border/80" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="tabular-nums text-[12px] font-medium text-text-secondary">
+                  {status.progress.claimedCount} / {status.progress.totalCount}
+                </span>
+                <span className="tabular-nums text-[12px] font-medium text-[var(--color-success)]">
+                  +${formatRewardAmount(status.progress.earnedCredits)}
+                </span>
+              </div>
+              <div className="h-[5px] w-full overflow-hidden rounded-full bg-border/60">
+                <div
+                  className="h-full rounded-full bg-[var(--color-success)] transition-all duration-500"
+                  style={{
+                    width: `${status.progress.totalCount > 0 ? (status.progress.claimedCount / status.progress.totalCount) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        {status.cloudBalance ? (
+        {!loading && status.cloudBalance ? (
           <div className="mb-6 flex items-center justify-between rounded-[18px] border border-border bg-surface-0 px-4 py-3">
             <div>
               <div className="text-[11px] font-medium text-text-secondary">
@@ -432,7 +455,7 @@ export function RewardsPage() {
           </div>
         ) : null}
 
-        {!status.viewer.cloudConnected ? (
+        {!loading && !status.viewer.cloudConnected ? (
           <div className="mb-6 rounded-[18px] border border-[#d6c7aa] bg-[#faf3e6] px-4 py-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -459,7 +482,9 @@ export function RewardsPage() {
           </div>
         ) : null}
 
-        {status.viewer.cloudConnected && !status.viewer.usingManagedModel ? (
+        {!loading &&
+        status.viewer.cloudConnected &&
+        !status.viewer.usingManagedModel ? (
           <div className="mb-6 rounded-[18px] border border-border bg-surface-0 px-4 py-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -494,13 +519,15 @@ export function RewardsPage() {
                         "${n}",
                         formatRewardAmount(task.reward),
                       )
-                    : task.repeatMode === "daily"
-                      ? t("budget.cta.checkin")
-                      : task.shareMode === "image"
-                        ? t("budget.cta.download")
-                        : task.shareMode === "tweet"
-                          ? t("budget.cta.share")
-                          : t("budget.cta.go");
+                    : loading
+                      ? "..."
+                      : task.repeatMode === "daily"
+                        ? t("budget.cta.checkin")
+                        : task.shareMode === "image"
+                          ? t("budget.cta.download")
+                          : task.shareMode === "tweet"
+                            ? t("budget.cta.share")
+                            : t("budget.cta.go");
 
                   return (
                     <div
@@ -551,7 +578,11 @@ export function RewardsPage() {
 
                       <button
                         type="button"
-                        disabled={task.isClaimed || claimingTaskId === task.id}
+                        disabled={
+                          loading ||
+                          task.isClaimed ||
+                          claimingTaskId === task.id
+                        }
                         onClick={() => void handleTaskAction(task)}
                         className={cn(
                           "inline-flex h-[26px] shrink-0 items-center justify-center gap-2 rounded-full px-3 text-[11px] font-medium leading-none transition-all",

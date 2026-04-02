@@ -22,10 +22,26 @@ export class QuotaFallbackService {
     private readonly syncService: OpenClawSyncService,
   ) {}
 
+  private isManagedModelId(
+    modelId: string,
+    config: Awaited<ReturnType<NexuConfigStore["getConfig"]>>,
+  ): boolean {
+    const desktopConfig = config.desktop as {
+      cloud?: { models?: Array<{ id: string }> };
+    };
+    if (modelId.startsWith(MANAGED_MODEL_PREFIX)) {
+      return true;
+    }
+
+    return (desktopConfig.cloud?.models ?? []).some(
+      (model) => model.id === modelId,
+    );
+  }
+
   // Returns true when the current default model is a Nexu-managed (cloud) model.
   async isUsingManagedModel(): Promise<boolean> {
     const config = await this.configStore.getConfig();
-    return config.runtime.defaultModelId.startsWith(MANAGED_MODEL_PREFIX);
+    return this.isManagedModelId(config.runtime.defaultModelId, config);
   }
 
   // Returns the first enabled BYOK provider that has an API key and at least one model.
@@ -83,7 +99,8 @@ export class QuotaFallbackService {
   // Restores the default model to a managed (cloud) model if one is available.
   // Expects callers to pass the target managed model ID.
   async restoreManaged(managedModelId: string): Promise<QuotaFallbackResult> {
-    if (!managedModelId.startsWith(MANAGED_MODEL_PREFIX)) {
+    const config = await this.configStore.getConfig();
+    if (!this.isManagedModelId(managedModelId, config)) {
       logger.warn(
         { managedModelId },
         "quota_fallback_restore_rejected_non_managed_model",
@@ -91,7 +108,6 @@ export class QuotaFallbackService {
       return { success: false };
     }
 
-    const config = await this.configStore.getConfig();
     const previousModelId = config.runtime.defaultModelId;
 
     await this.configStore.setDefaultModel(managedModelId);

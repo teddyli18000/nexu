@@ -210,10 +210,31 @@ describe("WorkspaceLayout", () => {
   });
 
   it("renders the logged-out sidebar growth card", () => {
-    const markup = renderWorkspaceLayout();
+    const markup = renderWorkspaceLayout("/workspace/sessions/sess-1", {
+      viewer: {
+        cloudConnected: false,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 0,
+        totalCount: 11,
+        earnedCredits: 0,
+      },
+      cloudBalance: null,
+    });
 
     expect(markup).toContain("layout.sidebar.loginTitle");
     expect(markup).toContain("layout.sidebar.loginSubtitle");
+    expect(markup).not.toContain("layout.sidebar.rewardsTitle");
+  });
+
+  it("renders a loading shell instead of a fake zero-state card before rewards resolve", () => {
+    const markup = renderWorkspaceLayout();
+
+    expect(markup).toContain('data-rewards-card-loading="true"');
+    expect(markup).not.toContain("layout.sidebar.loginTitle");
     expect(markup).not.toContain("layout.sidebar.rewardsTitle");
   });
 

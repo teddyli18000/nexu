@@ -1,4 +1,9 @@
 import {
+  syncDesktopCloudQueries,
+  useDesktopCloudStatus,
+} from "@/hooks/use-desktop-cloud-status";
+import { useQueryClient } from "@tanstack/react-query";
+import {
   ArrowRight,
   Check,
   ChevronLeft,
@@ -12,7 +17,6 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  getApiInternalDesktopCloudStatus,
   postApiInternalDesktopCloudConnect,
   postApiInternalDesktopCloudDisconnect,
 } from "../../lib/api/sdk.gen";
@@ -67,6 +71,7 @@ export function WelcomePage() {
   const { t } = useLocale();
   usePageTitle(t("welcome.pageTitle"));
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // If already set up, skip welcome
   if (isSetupComplete()) {
@@ -82,53 +87,30 @@ export function WelcomePage() {
   const [verified, setVerified] = useState(false);
   const [cloudConnecting, setCloudConnecting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [cloudStatus, setCloudStatus] = useState({
-    connected: false,
-    polling: false,
-  });
+  const { data: cloudStatus, refetch: refetchDesktopCloudStatus } =
+    useDesktopCloudStatus();
+  const cloudConnected = cloudStatus?.connected ?? false;
+  const cloudPolling = cloudStatus?.polling ?? false;
 
   useEffect(() => {
-    let cancelled = false;
+    if (!cloudConnected) {
+      return;
+    }
 
-    const restoreCloudStatus = async () => {
-      try {
-        const { data } = await getApiInternalDesktopCloudStatus();
-        if (cancelled) return;
-
-        setCloudStatus({
-          connected: Boolean(data?.connected),
-          polling: Boolean(data?.polling),
-        });
-
-        if (data?.connected) {
-          markSetupComplete();
-          navigate("/workspace", { replace: true });
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    void restoreCloudStatus();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
+    markSetupComplete();
+    navigate("/workspace", { replace: true });
+  }, [cloudConnected, navigate]);
 
   // Poll cloud-status while waiting for browser login
   useEffect(() => {
-    if (!cloudConnecting && !cloudStatus.polling) return;
+    if (!cloudConnecting && !cloudPolling) return;
     const interval = setInterval(async () => {
       try {
-        const { data } = await getApiInternalDesktopCloudStatus();
-        setCloudStatus({
-          connected: Boolean(data?.connected),
-          polling: Boolean(data?.polling),
-        });
-        if (data?.connected) {
+        const result = await refetchDesktopCloudStatus();
+        if (result.data?.connected) {
           setCloudConnecting(false);
           setLoginError(null);
+          await syncDesktopCloudQueries(queryClient);
           markSetupComplete();
           navigate("/workspace");
         }
@@ -137,7 +119,13 @@ export function WelcomePage() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [cloudConnecting, cloudStatus.polling, navigate]);
+  }, [
+    cloudConnecting,
+    cloudPolling,
+    navigate,
+    queryClient,
+    refetchDesktopCloudStatus,
+  ]);
 
   const activePreset =
     PROVIDER_OPTIONS.find((p) => p.id === selectedProvider) ??
@@ -174,6 +162,7 @@ export function WelcomePage() {
       }
       if (data?.error === "Already connected. Disconnect first.") {
         setLoginError(null);
+        await syncDesktopCloudQueries(queryClient);
         markSetupComplete();
         navigate("/workspace", { replace: true });
         return;
