@@ -1,70 +1,72 @@
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const fsState = vi.hoisted(() => ({
+  paths: new Set<string>(),
+  stampContents: new Map<string, string>(),
+  archiveStamp: "123:456",
+}));
+
+const execFileSyncMock = vi.hoisted(() => vi.fn());
+
+vi.mock("node:child_process", () => ({
+  execFileSync: execFileSyncMock,
+  execFile: vi.fn(
+    (_cmd: unknown, _args: unknown, cb?: (...a: unknown[]) => void) => {
+      cb?.(null, "", "");
+    },
+  ),
+}));
+
+vi.mock("node:util", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:util")>();
+  return {
+    ...actual,
+    promisify: () => vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
+  };
+});
+
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn((target: string) => fsState.paths.has(target)),
+  mkdirSync: vi.fn((target: string) => {
+    fsState.paths.add(target);
+  }),
+  readFileSync: vi.fn(
+    (target: string) => fsState.stampContents.get(target) ?? "",
+  ),
+  statSync: vi.fn(() => ({ size: 123, mtimeMs: 456 })),
+  writeFileSync: vi.fn((target: string, contents: string) => {
+    fsState.paths.add(target);
+    fsState.stampContents.set(target, contents);
+  }),
+}));
+
+import { resolveRuntimeManifestsRoots } from "../../apps/desktop/main/platforms/shared/runtime-roots";
 import {
+  buildSkillNodePath,
   createRuntimeUnitManifests,
   ensurePackagedOpenclawSidecar,
 } from "../../apps/desktop/main/runtime/manifests";
 import { readProxyPolicy } from "../../apps/desktop/shared/proxy-config";
 import type { DesktopRuntimeConfig } from "../../apps/desktop/shared/runtime-config";
 
-const mkdirSyncMock = vi.hoisted(() => vi.fn());
+function normalizePathForAssertion(target: string): string {
+  return path
+    .normalize(target)
+    .replace(/^[A-Za-z]:/, "")
+    .replace(/\\/g, "/");
+}
 
-vi.mock("node:fs", () => ({
-  mkdirSync: mkdirSyncMock,
-}));
+function runtimePath(...segments: string[]): string {
+  return normalizePathForAssertion(path.join(...segments));
+}
 
-vi.mock("../../apps/desktop/shared/workspace-paths", () => ({
-  getWorkspaceRoot: vi.fn(() => "/repo"),
-}));
-
-vi.mock("../../apps/desktop/shared/desktop-paths", () => ({
-  getOpenclawSkillsDir: vi.fn((userDataPath: string) =>
-    path.resolve(userDataPath, "runtime/openclaw/state/skills"),
-  ),
-}));
-
-function createPlatformCapabilities() {
-  return {
-    platformId: "mac",
-    runtimeResidency: "managed",
-    packagedArchive: {
-      format: "tar.gz",
-      extractionMode: "async",
-      supportsAtomicSwap: true,
-    },
-    resolveRuntimeRoots: vi.fn(),
-    sidecarMaterializer: {
-      materializePackagedOpenclawSidecar: vi.fn(async ({ runtimeRoot }) =>
-        path.resolve(runtimeRoot, "sidecars/openclaw"),
-      ),
-    },
-    runtimeExecutables: {
-      resolveSkillNodePath: vi.fn(
-        ({
-          electronRoot,
-          isPackaged,
-          openclawSidecarRoot,
-          inheritedNodePath,
-        }) => {
-          const bundled = isPackaged
-            ? path.resolve(openclawSidecarRoot, "../bundled-node-modules")
-            : path.resolve(electronRoot, "node_modules");
-          return [bundled, inheritedNodePath]
-            .filter(Boolean)
-            .join(path.delimiter);
-        },
-      ),
-      resolveOpenclawNodePath: vi.fn(() => "/custom/bin"),
-    },
-    portStrategy: { allocateRuntimePorts: vi.fn() },
-    stateMigrationPolicy: { run: vi.fn() },
-    shutdownCoordinator: { install: vi.fn() },
-  };
+function absoluteRuntimePath(base: string, ...segments: string[]): string {
+  return path.resolve(base, ...segments);
 }
 
 function createRuntimeConfig(): DesktopRuntimeConfig {
   return {
-    runtimeMode: "internal",
     buildInfo: {
       version: "1.0.0",
       source: "local-dev",
@@ -79,7 +81,7 @@ function createRuntimeConfig(): DesktopRuntimeConfig {
       NO_PROXY: "example.com",
     }),
     updates: {
-      autoUpdateEnabled: false,
+      autoUpdateEnabled: true,
       channel: "stable",
     },
     ports: {
@@ -96,184 +98,402 @@ function createRuntimeConfig(): DesktopRuntimeConfig {
       gateway: "gw-secret-token",
     },
     paths: {
-      nexuHome: "/Users/testuser/.nexu",
-      openclawBin: "/unused/openclaw",
+      nexuHome: "/tmp/nexu-home",
+      openclawBin: "openclaw-wrapper",
     },
     desktopAuth: {
-      name: "Desktop",
-      email: "desktop@example.com",
-      password: "secret",
+      name: "NexU Desktop",
+      email: "desktop@nexu.local",
+      password: "desktop-local-password",
     },
     sentryDsn: null,
+    runtimeMode: "internal",
+    amplitudeApiKey: null,
   };
-}
-
-function normalizePath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/^[A-Za-z]:/, "");
 }
 
 describe("desktop runtime manifests", () => {
   beforeEach(() => {
-    mkdirSyncMock.mockReset();
-    mkdirSyncMock.mockImplementation((target: string) => target);
+    fsState.paths.clear();
+    fsState.stampContents.clear();
+    execFileSyncMock.mockReset();
   });
 
-  it("delegates packaged sidecar materialization to platform capabilities", async () => {
-    const capabilities = createPlatformCapabilities();
+  describe("buildSkillNodePath", () => {
+    it("prefers bundled desktop node_modules in dev", () => {
+      const result = buildSkillNodePath("/repo/apps/desktop", false, "");
 
-    const result = await ensurePackagedOpenclawSidecar(
-      "/Applications/Nexu.app/Contents/Resources/runtime",
-      "/Users/testuser/Library/Application Support/@nexu/desktop/runtime",
-      capabilities as never,
-    );
+      expect(normalizePathForAssertion(result)).toBe(
+        runtimePath("/repo/apps/desktop", "node_modules"),
+      );
+    });
 
-    expect(normalizePath(result)).toBe(
-      "/Users/testuser/Library/Application Support/@nexu/desktop/runtime/sidecars/openclaw",
-    );
-    expect(
-      capabilities.sidecarMaterializer.materializePackagedOpenclawSidecar,
-    ).toHaveBeenCalledWith({
-      runtimeSidecarBaseRoot:
-        "/Applications/Nexu.app/Contents/Resources/runtime",
-      runtimeRoot:
-        "/Users/testuser/Library/Application Support/@nexu/desktop/runtime",
+    it("prefers packaged bundled-node-modules for desktop dist", () => {
+      const result = buildSkillNodePath(
+        "/Applications/Nexu.app/Contents/Resources",
+        true,
+        "",
+      );
+
+      expect(normalizePathForAssertion(result)).toBe(
+        runtimePath(
+          "/Applications/Nexu.app/Contents/Resources",
+          "bundled-node-modules",
+        ),
+      );
+    });
+
+    it("preserves inherited NODE_PATH entries without duplication", () => {
+      const bundledPath = path.resolve("/repo/apps/desktop", "node_modules");
+      const inherited = [
+        bundledPath,
+        "/usr/local/lib/node_modules",
+        "/opt/custom/node_modules",
+      ].join(path.delimiter);
+
+      const result = buildSkillNodePath("/repo/apps/desktop", false, inherited);
+      expect(normalizePathForAssertion(result)).toBe(
+        [
+          normalizePathForAssertion(bundledPath),
+          "/usr/local/lib/node_modules",
+          "/opt/custom/node_modules",
+        ].join(path.delimiter),
+      );
     });
   });
 
-  it("uses desktop node_modules as NODE_PATH in dev", async () => {
-    const capabilities = createPlatformCapabilities();
-    const manifests = await createRuntimeUnitManifests(
-      "/repo/apps/desktop",
-      "/tmp/user-data",
-      false,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
+  describe("ensurePackagedOpenclawSidecar", () => {
+    it("reuses existing extracted sidecar when stamp and entry already match", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.tar.gz",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const stampPath = absoluteRuntimePath(extractedRoot, ".archive-stamp");
+      const entryPath = absoluteRuntimePath(
+        extractedRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
 
-    const controller = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
-    expect(normalizePath(controller?.env?.NODE_PATH ?? "")).toBe(
-      "/repo/apps/desktop/node_modules",
-    );
-  });
+      fsState.paths.add(archivePath);
+      fsState.paths.add(stampPath);
+      fsState.paths.add(entryPath);
+      fsState.stampContents.set(stampPath, fsState.archiveStamp);
 
-  it("uses packaged sidecar roots and bundled NODE_PATH in dist mode", async () => {
-    const capabilities = createPlatformCapabilities();
-    const manifests = await createRuntimeUnitManifests(
-      "/Applications/Nexu.app/Contents/Resources",
-      "/Users/testuser/Library/Application Support/@nexu/desktop",
-      true,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
+      const expectedRoot = runtimePath(
+        "/Users/testuser/.nexu",
+        "openclaw-sidecar",
+      );
 
-    const controller = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
-    expect(normalizePath(controller?.cwd ?? "")).toBe(
-      "/Applications/Nexu.app/Contents/Resources/runtime/controller",
-    );
-    expect(normalizePath(controller?.env?.NODE_PATH ?? "")).toBe(
-      "/Users/testuser/Library/Application Support/@nexu/desktop/runtime/sidecars/bundled-node-modules",
-    );
-  });
+      const result = ensurePackagedOpenclawSidecar(
+        runtimeSidecarBaseRoot,
+        runtimeRoot,
+      );
 
-  it("delegates NODE_PATH resolution to the runtime executable resolver", async () => {
-    const capabilities = createPlatformCapabilities();
-    capabilities.runtimeExecutables.resolveSkillNodePath.mockImplementation(
-      ({ electronRoot, isPackaged, openclawSidecarRoot }) =>
-        [electronRoot, String(isPackaged), openclawSidecarRoot].join("|"),
-    );
-
-    const manifests = await createRuntimeUnitManifests(
-      "/repo/apps/desktop",
-      "/tmp/user-data",
-      false,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
-
-    const controller = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
-    const nodePath = controller?.env?.NODE_PATH ?? "";
-    expect(nodePath).toContain("/repo/apps/desktop|false|");
-    expect(
-      normalizePath(nodePath).endsWith("/repo/.tmp/sidecars/openclaw"),
-    ).toBe(true);
-  });
-
-  it("wires controller environment to runtime roots and custom PATH", async () => {
-    const capabilities = createPlatformCapabilities();
-    const manifests = await createRuntimeUnitManifests(
-      "/repo/apps/desktop",
-      "/tmp/user-data",
-      false,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
-
-    const controller = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
-    expect(normalizePath(controller?.env?.OPENCLAW_STATE_DIR ?? "")).toBe(
-      "/tmp/user-data/runtime/openclaw/state",
-    );
-    expect(normalizePath(controller?.env?.OPENCLAW_CONFIG_PATH ?? "")).toBe(
-      "/tmp/user-data/runtime/openclaw/config/openclaw.json",
-    );
-    expect(controller?.env?.PATH).toBe("/custom/bin");
-  });
-
-  it("propagates normalized proxy env to dev web and controller manifests", async () => {
-    const capabilities = createPlatformCapabilities();
-    const manifests = await createRuntimeUnitManifests(
-      "/repo/apps/desktop",
-      "/tmp/user-data",
-      false,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
-
-    const webManifest = manifests.find((manifest) => manifest.id === "web");
-    const controllerManifest = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
-
-    expect(webManifest?.env).toMatchObject({
-      HTTP_PROXY: "http://proxy.example.com:8080",
-      HTTPS_PROXY: "http://secure-proxy.example.com:8443",
-      ALL_PROXY: "socks5://proxy.example.com:1080",
-      NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+      expect(normalizePathForAssertion(result)).toBe(expectedRoot);
+      expect(execFileSyncMock).not.toHaveBeenCalled();
     });
-    expect(controllerManifest?.env).toMatchObject({
-      HTTP_PROXY: "http://proxy.example.com:8080",
-      HTTPS_PROXY: "http://secure-proxy.example.com:8443",
-      ALL_PROXY: "socks5://proxy.example.com:1080",
-      NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+
+    it("extracts through staging, verifies entry, and atomically swaps into place", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.tar.gz",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const stagingRoot = `${extractedRoot}.staging`;
+      const stagingEntry = absoluteRuntimePath(
+        stagingRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
+
+      fsState.paths.add(archivePath);
+
+      execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === "tar" && args[3] === stagingRoot) {
+          fsState.paths.add(stagingRoot);
+          fsState.paths.add(stagingEntry);
+        }
+        if (cmd === "mv") {
+          fsState.paths.delete(stagingRoot);
+          fsState.paths.delete(stagingEntry);
+          fsState.paths.add(extractedRoot);
+          fsState.paths.add(
+            `${extractedRoot}/node_modules/openclaw/openclaw.mjs`,
+          );
+        }
+      });
+
+      const expectedRoot = runtimePath(
+        "/Users/testuser/.nexu",
+        "openclaw-sidecar",
+      );
+      const result = ensurePackagedOpenclawSidecar(
+        runtimeSidecarBaseRoot,
+        runtimeRoot,
+      );
+
+      expect(normalizePathForAssertion(result)).toBe(expectedRoot);
+      expect(execFileSyncMock).toHaveBeenCalledWith("tar", [
+        "-xzf",
+        archivePath,
+        "-C",
+        stagingRoot,
+      ]);
+      expect(execFileSyncMock).toHaveBeenCalledWith("mv", [
+        stagingRoot,
+        extractedRoot,
+      ]);
+      expect(
+        fsState.stampContents.get(
+          absoluteRuntimePath(stagingRoot, ".archive-stamp"),
+        ),
+      ).toBe(fsState.archiveStamp);
+    });
+
+    it("cleans leftover staging directories before a fresh extraction", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.tar.gz",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const stagingRoot = `${extractedRoot}.staging`;
+      const stagingEntry = absoluteRuntimePath(
+        stagingRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
+
+      fsState.paths.add(archivePath);
+      fsState.paths.add(stagingRoot);
+
+      execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === "rm" && args[1] === stagingRoot) {
+          fsState.paths.delete(stagingRoot);
+        }
+        if (cmd === "tar" && args[3] === stagingRoot) {
+          fsState.paths.add(stagingRoot);
+          fsState.paths.add(stagingEntry);
+        }
+        if (cmd === "mv") {
+          fsState.paths.delete(stagingRoot);
+          fsState.paths.delete(stagingEntry);
+          fsState.paths.add(extractedRoot);
+          fsState.paths.add(
+            `${extractedRoot}/node_modules/openclaw/openclaw.mjs`,
+          );
+        }
+      });
+
+      ensurePackagedOpenclawSidecar(runtimeSidecarBaseRoot, runtimeRoot);
+
+      expect(execFileSyncMock).toHaveBeenCalledWith("rm", ["-rf", stagingRoot]);
+      expect(execFileSyncMock).toHaveBeenCalledWith("tar", [
+        "-xzf",
+        archivePath,
+        "-C",
+        stagingRoot,
+      ]);
+    });
+
+    it("retries extraction after a transient tar failure and succeeds on the next attempt", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.tar.gz",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const stagingRoot = `${extractedRoot}.staging`;
+      const stagingEntry = absoluteRuntimePath(
+        stagingRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
+      let tarAttempts = 0;
+
+      fsState.paths.add(archivePath);
+
+      execFileSyncMock.mockImplementation((cmd: string, _args: string[]) => {
+        if (cmd === "tar") {
+          tarAttempts++;
+          if (tarAttempts === 1) {
+            throw new Error("tar exploded");
+          }
+          fsState.paths.add(stagingRoot);
+          fsState.paths.add(stagingEntry);
+        }
+        if (cmd === "mv") {
+          fsState.paths.delete(stagingRoot);
+          fsState.paths.delete(stagingEntry);
+          fsState.paths.add(extractedRoot);
+          fsState.paths.add(
+            `${extractedRoot}/node_modules/openclaw/openclaw.mjs`,
+          );
+        }
+      });
+
+      const result = ensurePackagedOpenclawSidecar(
+        runtimeSidecarBaseRoot,
+        runtimeRoot,
+      );
+
+      expect(normalizePathForAssertion(result)).toBe(
+        runtimePath("/Users/testuser/.nexu", "openclaw-sidecar"),
+      );
+      expect(tarAttempts).toBe(2);
+      expect(execFileSyncMock).toHaveBeenCalledWith("sleep", ["1"]);
+    });
+
+    it("throws after retries when extraction never produces the critical entry", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.tar.gz",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const stagingRoot = `${extractedRoot}.staging`;
+
+      fsState.paths.add(archivePath);
+
+      execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === "tar" && args[3] === stagingRoot) {
+          fsState.paths.add(stagingRoot);
+        }
+      });
+
+      expect(() =>
+        ensurePackagedOpenclawSidecar(runtimeSidecarBaseRoot, runtimeRoot),
+      ).toThrow("Extraction verification failed");
+
+      const tarCalls = execFileSyncMock.mock.calls.filter(
+        ([cmd]) => cmd === "tar",
+      );
+      const sleepCalls = execFileSyncMock.mock.calls.filter(
+        ([cmd]) => cmd === "sleep",
+      );
+      expect(tarCalls).toHaveLength(3);
+      expect(sleepCalls).toHaveLength(2);
     });
   });
 
-  it("propagates normalized proxy env to packaged controller manifest", async () => {
-    const capabilities = createPlatformCapabilities();
-    const manifests = await createRuntimeUnitManifests(
-      "/Applications/Nexu.app/Contents/Resources",
-      "/Users/testuser/Library/Application Support/@nexu/desktop",
-      true,
-      createRuntimeConfig(),
-      capabilities as never,
-    );
+  describe("createRuntimeUnitManifests", () => {
+    it("resolves runtime roots for manifest assembly", () => {
+      const roots = resolveRuntimeManifestsRoots({
+        app: {
+          getPath: (name: string) =>
+            name === "userData"
+              ? "/Users/testuser/Library/Application Support/@nexu/desktop"
+              : "/Applications/Nexu.app/Contents/Resources",
+          isPackaged: true,
+        } as never,
+        electronRoot: "/Applications/Nexu.app/Contents/Resources",
+        runtimeConfig: createRuntimeConfig(),
+      });
 
-    const controllerManifest = manifests.find(
-      (manifest) => manifest.id === "controller",
-    );
+      expect(normalizePathForAssertion(roots.runtimeRoot)).toBe(
+        runtimePath(
+          "/Users/testuser/Library/Application Support/@nexu/desktop",
+          "runtime",
+        ),
+      );
+      expect(normalizePathForAssertion(roots.openclawSidecarRoot)).toBe(
+        runtimePath(
+          "/Applications/Nexu.app/Contents/Resources/runtime",
+          "openclaw",
+        ),
+      );
+      expect(normalizePathForAssertion(roots.logsDir)).toBe(
+        runtimePath(
+          "/Users/testuser/Library/Application Support/@nexu/desktop",
+          "logs",
+          "runtime-units",
+        ),
+      );
+    });
 
-    expect(controllerManifest?.env).toMatchObject({
-      HTTP_PROXY: "http://proxy.example.com:8080",
-      HTTPS_PROXY: "http://secure-proxy.example.com:8443",
-      ALL_PROXY: "socks5://proxy.example.com:1080",
-      NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+    it("propagates normalized proxy env to dev web and controller manifests", () => {
+      const manifests = createRuntimeUnitManifests(
+        "/repo/apps/desktop",
+        "/tmp/user-data",
+        false,
+        createRuntimeConfig(),
+      );
+
+      const webManifest = manifests.find((manifest) => manifest.id === "web");
+      const controllerManifest = manifests.find(
+        (manifest) => manifest.id === "controller",
+      );
+
+      expect(webManifest?.env).toMatchObject({
+        HTTP_PROXY: "http://proxy.example.com:8080",
+        HTTPS_PROXY: "http://secure-proxy.example.com:8443",
+        ALL_PROXY: "socks5://proxy.example.com:1080",
+        NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+      });
+      expect(controllerManifest?.env).toMatchObject({
+        HTTP_PROXY: "http://proxy.example.com:8080",
+        HTTPS_PROXY: "http://secure-proxy.example.com:8443",
+        ALL_PROXY: "socks5://proxy.example.com:1080",
+        NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+      });
+    });
+
+    it("propagates normalized proxy env to packaged controller manifest", () => {
+      const manifests = createRuntimeUnitManifests(
+        "/Applications/Nexu.app/Contents/Resources",
+        "/Users/testuser/Library/Application Support/@nexu/desktop",
+        true,
+        createRuntimeConfig(),
+      );
+
+      const controllerManifest = manifests.find(
+        (manifest) => manifest.id === "controller",
+      );
+
+      expect(controllerManifest?.env).toMatchObject({
+        HTTP_PROXY: "http://proxy.example.com:8080",
+        HTTPS_PROXY: "http://secure-proxy.example.com:8443",
+        ALL_PROXY: "socks5://proxy.example.com:1080",
+        NO_PROXY: "example.com,localhost,127.0.0.1,::1",
+      });
     });
   });
 });

@@ -86,20 +86,18 @@ export async function prepareMacLaunchdUpdateInstall(
     openclaw: SERVICE_LABELS.openclaw(isDev),
   };
 
-  try {
-    if (!runtimeStateRef.launchd) {
-      throw new Error("launchd supervisor unavailable");
+  if (runtimeStateRef.launchd) {
+    try {
+      await teardownLaunchdServices({
+        launchd: runtimeStateRef.launchd,
+        labels,
+        plistDir: getDefaultPlistDir(isDev),
+      });
+    } catch (error) {
+      logLifecycleStep(
+        `launchd teardown failed, proceeding: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-
-    await teardownLaunchdServices({
-      launchd: runtimeStateRef.launchd,
-      labels,
-      plistDir: getDefaultPlistDir(isDev),
-    });
-  } catch (error) {
-    logLifecycleStep(
-      `launchd teardown failed, proceeding: ${error instanceof Error ? error.message : String(error)}`,
-    );
   }
 
   try {
@@ -302,12 +300,14 @@ export function installMacLaunchdShutdownCoordinator(
 ): void {
   if (residencyContext) {
     installLaunchdQuitHandler({
-      launchd: runtimeStateRef.launchd ?? residencyContext.serviceSupervisor,
+      launchd:
+        runtimeStateRef.launchd ??
+        (residencyContext.serviceSupervisor as never),
       labels: residencyContext.serviceLabels,
       webServer: residencyContext.embeddedWebServer,
       plistDir: getDefaultPlistDir(!electronApp.isPackaged),
-      onQuitCompletely: () =>
-        teardownMacLaunchdRuntime({
+      onQuitCompletely: () => {
+        void teardownMacLaunchdRuntime({
           app: electronApp,
           diagnosticsReporter,
           flushRuntimeLoggers,
@@ -316,9 +316,10 @@ export function installMacLaunchdShutdownCoordinator(
           orchestrator,
           reason: "app-quit",
           sleepGuardDispose,
-        }),
-      onRunInBackground: () =>
-        teardownMacLaunchdRuntime({
+        });
+      },
+      onRunInBackground: () => {
+        void teardownMacLaunchdRuntime({
           app: electronApp,
           diagnosticsReporter,
           flushRuntimeLoggers,
@@ -327,7 +328,8 @@ export function installMacLaunchdShutdownCoordinator(
           orchestrator,
           reason: "background",
           sleepGuardDispose,
-        }),
+        });
+      },
     });
   }
 

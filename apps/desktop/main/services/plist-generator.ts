@@ -55,6 +55,8 @@ export interface PlistEnv {
   openclawTmpDir: string;
   /** Normalized proxy env propagated to child processes */
   proxyEnv: Record<string, string>;
+  /** Amplitude API key for controller analytics */
+  amplitudeApiKey?: string;
 }
 
 function renderProxyEnvEntries(proxyEnv: Record<string, string>): string {
@@ -176,6 +178,12 @@ function generateControllerPlist(label: string, env: PlistEnv): string {
         <key>PATH</key>
         <string>${escapeXml(env.systemPath)}</string>`
             : ""
+        }${
+          env.amplitudeApiKey
+            ? `
+        <key>AMPLITUDE_API_KEY</key>
+        <string>${escapeXml(env.amplitudeApiKey)}</string>`
+            : ""
         }
         <key>NODE_ENV</key>
         <string>${env.isDev ? "development" : "production"}</string>
@@ -229,7 +237,9 @@ function generateOpenclawPlist(label: string, env: PlistEnv): string {
         <string>${escapeXml(env.nodePath)}</string>
         <string>${escapeXml(env.openclawPath)}</string>
         <string>gateway</string>
-        <string>run</string>${authArgs}
+        <string>run</string>
+        <string>--port</string>
+        <string>${env.openclawPort}</string>${authArgs}
     </array>
 
     <key>WorkingDirectory</key>
@@ -250,7 +260,13 @@ function generateOpenclawPlist(label: string, env: PlistEnv): string {
         <key>OPENCLAW_SERVICE_MARKER</key>
         <string>launchd</string>
         <key>OPENCLAW_IMAGE_BACKEND</key>
-        <string>sips</string>
+        <string>sips</string>${
+          env.gatewayToken
+            ? `
+        <key>OPENCLAW_GATEWAY_TOKEN</key>
+        <string>${escapeXml(env.gatewayToken)}</string>`
+            : ""
+        }
         <key>HOME</key>
         <string>${escapeXml(os.homedir())}</string>${renderProxyEnvEntries(
           env.proxyEnv,

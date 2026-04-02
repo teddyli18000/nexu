@@ -123,7 +123,14 @@ const enSidebar = [
       },
       { text: "Model Configuration", link: "/guide/models" },
       { text: "Skill Installation", link: "/guide/skills" },
-      { text: "Usage & Rewards", link: "/guide/usage" },
+      { text: "Seedance 2.0 Video Generation", link: "/guide/seedance" },
+    ],
+  },
+  {
+    text: "Help",
+    items: [
+      { text: "Update Guide", link: "/guide/update" },
+      { text: "Troubleshooting", link: "/guide/troubleshooting" },
     ],
   },
   {
@@ -162,7 +169,14 @@ const jaSidebar = [
       },
       { text: "モデル設定", link: "/ja/guide/models" },
       { text: "スキルインストール", link: "/ja/guide/skills" },
-      { text: "使用量とリワード", link: "/ja/guide/usage" },
+      { text: "Seedance 2.0 動画生成", link: "/ja/guide/seedance" },
+    ],
+  },
+  {
+    text: "ヘルプ",
+    items: [
+      { text: "アップデートガイド", link: "/ja/guide/update" },
+      { text: "トラブルシューティング", link: "/ja/guide/troubleshooting" },
     ],
   },
   {
@@ -202,7 +216,14 @@ const zhSidebar = [
       },
       { text: "模型配置", link: "/zh/guide/models" },
       { text: "技能安装", link: "/zh/guide/skills" },
-      { text: "用量与奖励", link: "/zh/guide/usage" },
+      { text: "Seedance 2.0 视频生成", link: "/zh/guide/seedance" },
+    ],
+  },
+  {
+    text: "帮助",
+    items: [
+      { text: "更新指南", link: "/zh/guide/update" },
+      { text: "修复指南", link: "/zh/guide/troubleshooting" },
     ],
   },
   {

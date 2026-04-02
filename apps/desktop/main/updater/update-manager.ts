@@ -8,6 +8,12 @@ import type {
 import type { PrepareForUpdateInstallArgs } from "../platforms/types";
 import type { RuntimeOrchestrator } from "../runtime/daemon-supervisor";
 import { writeDesktopMainLog } from "../runtime/runtime-logger";
+import {
+  checkCriticalPathsLocked,
+  ensureNexuProcessesDead,
+  teardownLaunchdServices,
+} from "../services/launchd-bootstrap";
+import type { LaunchdManager } from "../services/launchd-manager";
 import { R2_BASE_URL } from "./component-updater";
 
 export interface UpdateManagerOptions {
@@ -17,9 +23,15 @@ export interface UpdateManagerOptions {
   autoDownload?: boolean;
   checkIntervalMs?: number;
   initialDelayMs?: number;
+  /** Launchd context — required for clean service teardown before update install */
+  launchd?: {
+    manager: LaunchdManager;
+    labels: { controller: string; openclaw: string };
+    plistDir: string;
+  };
   prepareForUpdateInstall?: (
     args: PrepareForUpdateInstallArgs,
-  ) => Promise<{ handled: boolean }>;
+  ) => Promise<void>;
 }
 
 function getMacFeedArch(arch: string = process.arch): "arm64" | "x64" {
@@ -91,9 +103,12 @@ export class UpdateManager {
   private readonly feedUrl: string | null;
   private readonly checkIntervalMs: number;
   private readonly initialDelayMs: number;
-  private readonly prepareForUpdateInstallHook: UpdateManagerOptions["prepareForUpdateInstall"];
+  private readonly launchdCtx: UpdateManagerOptions["launchd"];
+  private readonly options?: UpdateManagerOptions;
   private currentFeedUrl: string;
   private checkInProgress: Promise<{ updateAvailable: boolean }> | null = null;
+  private lastProgressLogAt = 0;
+  private lastProgressLogPercent: number | null = null;
   private initialTimer: ReturnType<typeof setTimeout> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -108,9 +123,10 @@ export class UpdateManager {
     this.source = options?.source ?? "r2";
     this.channel = options?.channel ?? "stable";
     this.feedUrl = options?.feedUrl ?? null;
-    this.checkIntervalMs = options?.checkIntervalMs ?? 4 * 60 * 60 * 1000;
-    this.initialDelayMs = options?.initialDelayMs ?? 60_000;
-    this.prepareForUpdateInstallHook = options?.prepareForUpdateInstall;
+    this.checkIntervalMs = options?.checkIntervalMs ?? 15 * 60 * 1000;
+    this.initialDelayMs = options?.initialDelayMs ?? 0;
+    this.launchdCtx = options?.launchd;
+    this.options = options;
     this.currentFeedUrl = getDefaultR2FeedUrl(this.channel);
 
     autoUpdater.autoDownload = options?.autoDownload ?? false;
@@ -139,6 +155,15 @@ export class UpdateManager {
         url: this.currentFeedUrl,
       });
     }
+
+    this.logCheck("update feed configured", {
+      channel: this.channel,
+      source: this.source,
+      feedUrl: sanitizeFeedUrl(this.currentFeedUrl),
+      currentVersion: app.getVersion(),
+      remoteVersion: undefined,
+      remoteReleaseDate: undefined,
+    });
   }
 
   private getDiagnostic(partial?: {
@@ -169,7 +194,7 @@ export class UpdateManager {
   private bindEvents(): void {
     autoUpdater.on("checking-for-update", () => {
       const diagnostic = this.getDiagnostic();
-      this.logCheck("checking for update", diagnostic);
+      this.logCheck("update check event: checking for update", diagnostic);
       this.send("update:checking", diagnostic);
     });
 
@@ -178,7 +203,7 @@ export class UpdateManager {
         remoteVersion: info.version,
         remoteReleaseDate: info.releaseDate,
       });
-      this.logCheck("update available", diagnostic);
+      this.logCheck("update event: update available", diagnostic);
       this.send("update:available", {
         version: info.version,
         releaseNotes:
@@ -192,11 +217,26 @@ export class UpdateManager {
         remoteVersion: info.version,
         remoteReleaseDate: info.releaseDate,
       });
-      this.logCheck("update not available", diagnostic);
+      this.logCheck("update event: update not available", diagnostic);
       this.send("update:up-to-date", { diagnostic });
     });
 
     autoUpdater.on("download-progress", (progress) => {
+      const now = Date.now();
+      const percent = Math.round(progress.percent);
+      const shouldLog =
+        this.lastProgressLogPercent === null ||
+        Math.abs(percent - this.lastProgressLogPercent) >= 5 ||
+        now - this.lastProgressLogAt >= 5_000 ||
+        percent === 100;
+      if (shouldLog) {
+        this.lastProgressLogAt = now;
+        this.lastProgressLogPercent = percent;
+        this.logCheck(
+          `update event: download progress ${percent}%`,
+          this.getDiagnostic(),
+        );
+      }
       this.send("update:progress", {
         percent: progress.percent,
         bytesPerSecond: progress.bytesPerSecond,
@@ -206,6 +246,13 @@ export class UpdateManager {
     });
 
     autoUpdater.on("update-downloaded", (info) => {
+      this.logCheck(
+        "update event: downloaded",
+        this.getDiagnostic({
+          remoteVersion: info.version,
+          remoteReleaseDate: info.releaseDate,
+        }),
+      );
       this.send("update:downloaded", { version: info.version });
     });
 
@@ -231,7 +278,13 @@ export class UpdateManager {
   }
 
   async checkNow(): Promise<{ updateAvailable: boolean }> {
+    const startedAt = Date.now();
+    this.logCheck("update check start", this.getDiagnostic());
     if (this.checkInProgress) {
+      this.logCheck(
+        "update check skipped: already in progress",
+        this.getDiagnostic(),
+      );
       return this.checkInProgress;
     }
 
@@ -243,7 +296,10 @@ export class UpdateManager {
           remoteVersion,
           remoteReleaseDate: result?.updateInfo.releaseDate,
         });
-        this.logCheck("check complete", diagnostic);
+        this.logCheck(
+          `update check result: ${result === null ? "null" : remoteVersion === app.getVersion() ? "no update" : "update available"} (${Date.now() - startedAt}ms)`,
+          diagnostic,
+        );
         return {
           updateAvailable:
             result !== null && result.updateInfo.version !== app.getVersion(),
@@ -268,29 +324,142 @@ export class UpdateManager {
   }
 
   async quitAndInstall(): Promise<void> {
-    this.logCheck("quit-and-install: starting teardown", this.getDiagnostic());
+    const startedAt = Date.now();
+    const logStep = (message: string): void => {
+      this.logCheck(
+        `quit-and-install: ${message} (+${Date.now() - startedAt}ms)`,
+        this.getDiagnostic(),
+      );
+    };
 
-    if (this.prepareForUpdateInstallHook) {
-      const result = await this.prepareForUpdateInstallHook({
-        app,
-        orchestrator: this.orchestrator,
-        logLifecycleStep: (message) => {
-          this.logCheck(`quit-and-install: ${message}`, this.getDiagnostic());
-        },
-      });
+    logStep("start");
 
-      if (result.handled) {
-        return;
-      }
-    }
+    await this.options?.prepareForUpdateInstall?.({
+      app,
+      orchestrator: this.orchestrator,
+      logLifecycleStep: (message: string) => {
+        this.logCheck(message, this.getDiagnostic());
+      },
+    });
 
-    // The residency lifecycle hook is the authoritative update-install path.
-    // Stop periodic checks before returning so they do not fire during exit.
+    // --- Phase 1: Best-effort cleanup ---
+    // Each step is wrapped in try/catch so a failure in one step never
+    // prevents the subsequent steps or the final install from proceeding.
+    // The verification gate in phase 2 is the real safety check.
+
+    // 0. Stop periodic update checks so they don't fire during teardown.
     this.stopPeriodicCheck();
+
+    logStep("phase 1 cleanup start");
+
+    // 1a. Tear down launchd services (bootout + SIGKILL + delete ports file).
+    const launchdCtx = this.launchdCtx;
+    const teardownPromise = launchdCtx
+      ? (async () => {
+          const teardownStartedAt = Date.now();
+          try {
+            await teardownLaunchdServices({
+              launchd: launchdCtx.manager,
+              labels: launchdCtx.labels,
+              plistDir: launchdCtx.plistDir,
+            });
+            this.logCheck(
+              `quit-and-install: launchd teardown complete (+${Date.now() - teardownStartedAt}ms)`,
+              this.getDiagnostic(),
+            );
+          } catch (err) {
+            this.logCheck(
+              `quit-and-install: launchd teardown failed, proceeding: ${err instanceof Error ? err.message : String(err)} (+${Date.now() - teardownStartedAt}ms)`,
+              this.getDiagnostic(),
+            );
+          }
+        })()
+      : Promise.resolve();
+
+    // 1b. Dispose the orchestrator (stops non-launchd managed units like
+    // embedded web server, utility processes). These are child processes of
+    // the Electron main process and will be reaped by the OS on exit anyway,
+    // so failure here is non-critical.
+    const disposePromise = (async () => {
+      const disposeStartedAt = Date.now();
+      try {
+        await this.orchestrator.dispose();
+        this.logCheck(
+          `quit-and-install: orchestrator dispose complete (+${Date.now() - disposeStartedAt}ms)`,
+          this.getDiagnostic(),
+        );
+      } catch (err) {
+        this.logCheck(
+          `quit-and-install: orchestrator dispose failed, proceeding: ${err instanceof Error ? err.message : String(err)} (+${Date.now() - disposeStartedAt}ms)`,
+          this.getDiagnostic(),
+        );
+      }
+    })();
+
+    await Promise.all([teardownPromise, disposePromise]);
+
+    logStep("phase 1 cleanup end");
+
+    // --- Phase 2: Process verification ---
+    // Two sweeps of SIGKILL to clear all Nexu sidecar processes. Uses both
+    // authoritative sources (launchd labels, runtime-ports.json) and pgrep.
+    const firstSweepStartedAt = Date.now();
+    let { clean, remainingPids } = await ensureNexuProcessesDead({
+      timeoutMs: 8_000,
+      intervalMs: 200,
+    });
     this.logCheck(
-      "quit-and-install: no lifecycle handler took ownership, aborting install",
+      `quit-and-install: first sweep complete in ${Date.now() - firstSweepStartedAt}ms (${clean ? "clean" : `survivors: ${remainingPids.join(", ")}`})`,
       this.getDiagnostic(),
     );
+
+    if (!clean) {
+      const secondSweepStartedAt = Date.now();
+      ({ clean, remainingPids } = await ensureNexuProcessesDead({
+        timeoutMs: 5_000,
+        intervalMs: 200,
+      }));
+      this.logCheck(
+        `quit-and-install: second sweep complete in ${Date.now() - secondSweepStartedAt}ms (${clean ? "clean" : `survivors: ${remainingPids.join(", ")}`})`,
+        this.getDiagnostic(),
+      );
+    }
+
+    // --- Phase 3: Evidence-based install decision ---
+    // Even with surviving processes, the update may be safe if those
+    // processes don't hold file handles to critical update paths. Use
+    // lsof to check whether the .app bundle or extracted sidecar dirs
+    // are actually locked.
+    const lockCheckStartedAt = Date.now();
+    const { locked, lockedPaths } = await checkCriticalPathsLocked();
+    this.logCheck(
+      `quit-and-install: critical-path lock check complete in ${Date.now() - lockCheckStartedAt}ms (${locked ? `locked: ${lockedPaths.join(", ")}` : "unlocked"})`,
+      this.getDiagnostic(),
+    );
+
+    if (locked) {
+      // Critical paths are held open — installing now would fail or
+      // corrupt the app. Skip this attempt; electron-updater will
+      // re-detect the pending update on next launch.
+      this.logCheck(
+        `quit-and-install: ABORTING — critical paths still locked: ${lockedPaths.join(", ")}`,
+        this.getDiagnostic(),
+      );
+      return;
+    }
+
+    if (!clean) {
+      // Processes alive but no critical file handles — safe to proceed.
+      this.logCheck(
+        "quit-and-install: residual processes exist but no critical path locks, proceeding",
+        this.getDiagnostic(),
+      );
+    }
+
+    // Set force-quit flag so window close handlers don't intercept the exit
+    (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
+    logStep("triggering autoUpdater.quitAndInstall");
+    autoUpdater.quitAndInstall(false, true);
   }
 
   setChannel(channel: UpdateChannelName): void {

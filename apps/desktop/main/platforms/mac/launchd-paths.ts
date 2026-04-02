@@ -6,7 +6,6 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import { getWorkspaceRoot } from "../../../shared/workspace-paths";
 import { ensurePackagedOpenclawSidecar } from "../../runtime/manifests";
-import { getDesktopRuntimePlatformAdapter } from "../index";
 
 const execFileAsync = promisify(execFile);
 
@@ -208,10 +207,9 @@ export async function resolveLaunchdPaths(
       );
     }
 
-    const openclawSidecarRoot = await ensurePackagedOpenclawSidecar(
+    const openclawSidecarRoot = ensurePackagedOpenclawSidecar(
       runtimeDir,
       nexuHome,
-      getDesktopRuntimePlatformAdapter().capabilities,
     );
 
     return {

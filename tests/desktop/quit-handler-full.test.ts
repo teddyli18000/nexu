@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockDeleteRuntimePorts = vi.fn().mockResolvedValue(undefined);
+const mockTeardownLaunchdServices = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../../apps/desktop/main/services/launchd-bootstrap", () => ({
   deleteRuntimePorts: mockDeleteRuntimePorts,
+  teardownLaunchdServices: mockTeardownLaunchdServices,
 }));
 
 const mockApp = {
@@ -87,6 +89,7 @@ describe("installLaunchdQuitHandler", () => {
     mockApp.__nexuForceQuit = false;
     mockApp.isPackaged = true;
     mockDeleteRuntimePorts.mockResolvedValue(undefined);
+    mockTeardownLaunchdServices.mockResolvedValue(undefined);
   });
 
   it("attaches close handler to main window", async () => {
@@ -123,10 +126,6 @@ describe("installLaunchdQuitHandler", () => {
     );
 
     const opts = createQuitOpts();
-    const launchd = opts.launchd as unknown as {
-      bootoutService: ReturnType<typeof vi.fn>;
-      waitForExit: ReturnType<typeof vi.fn>;
-    };
 
     installLaunchdQuitHandler(opts as never);
 
@@ -136,14 +135,11 @@ describe("installLaunchdQuitHandler", () => {
 
     expect(opts.onBeforeQuit).toHaveBeenCalledTimes(1);
     expect(opts.webServer.close).toHaveBeenCalledTimes(1);
-    expect(launchd.bootoutService).toHaveBeenCalledWith("io.nexu.openclaw");
-    expect(launchd.bootoutService).toHaveBeenCalledWith("io.nexu.controller");
-    expect(launchd.waitForExit).toHaveBeenCalledWith("io.nexu.openclaw", 5000);
-    expect(launchd.waitForExit).toHaveBeenCalledWith(
-      "io.nexu.controller",
-      5000,
-    );
-    expect(mockDeleteRuntimePorts).toHaveBeenCalledWith("/tmp/test-plist");
+    expect(mockTeardownLaunchdServices).toHaveBeenCalledWith({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: "/tmp/test-plist",
+    });
     expect(mockApp.exit).toHaveBeenCalledWith(0);
   });
 
@@ -162,7 +158,7 @@ describe("installLaunchdQuitHandler", () => {
     await flush();
 
     expect(onRunInBackground).toHaveBeenCalledTimes(1);
-    expect(mockWindow.hide).not.toHaveBeenCalled();
+    expect(mockWindow.hide).toHaveBeenCalledTimes(1);
   });
 
   it("bypasses handlers when __nexuForceQuit is true", async () => {
@@ -196,7 +192,11 @@ describe("installLaunchdQuitHandler", () => {
 
     expect(event.preventDefault).toHaveBeenCalled();
     expect(opts.onForceQuit).toHaveBeenCalledTimes(1);
-    expect(mockDeleteRuntimePorts).toHaveBeenCalledWith("/tmp/test-plist");
+    expect(mockTeardownLaunchdServices).toHaveBeenCalledWith({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: "/tmp/test-plist",
+    });
     expect(mockApp.exit).toHaveBeenCalledWith(0);
   });
 
@@ -215,7 +215,11 @@ describe("installLaunchdQuitHandler", () => {
     await flush();
 
     expect(event.preventDefault).toHaveBeenCalled();
-    expect(mockDeleteRuntimePorts).toHaveBeenCalledWith("/tmp/test-plist");
+    expect(mockTeardownLaunchdServices).toHaveBeenCalledWith({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: "/tmp/test-plist",
+    });
     expect(mockApp.exit).toHaveBeenCalledWith(0);
   });
 
@@ -261,8 +265,11 @@ describe("quitWithDecision", () => {
     const opts = createQuitOpts();
     await quitWithDecision("quit-completely", opts as never);
 
-    expect(opts.onForceQuit).toHaveBeenCalledTimes(1);
-    expect(mockDeleteRuntimePorts).toHaveBeenCalledWith("/tmp/test-plist");
+    expect(mockTeardownLaunchdServices).toHaveBeenCalledWith({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: "/tmp/test-plist",
+    });
     expect(mockApp.exit).toHaveBeenCalledWith(0);
   });
 });

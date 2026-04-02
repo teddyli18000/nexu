@@ -1,17 +1,17 @@
 /**
  * Quit Handler - Desktop exit behavior with launchd services
  *
- * Window close (red traffic light) -> hide to background, services keep running.
- * Cmd+Q / Dock Quit -> full teardown and exit.
+ * Window close (red traffic light) → hide to background, services keep running.
+ * Cmd+Q / Dock Quit → full teardown and exit.
  */
 
 import { BrowserWindow, app } from "electron";
-import type { DesktopRuntimeSupervisor } from "../platforms/types";
 import type { EmbeddedWebServer } from "./embedded-web-server";
-import { deleteRuntimePorts } from "./launchd-bootstrap";
+import { teardownLaunchdServices } from "./launchd-bootstrap";
+import type { LaunchdManager } from "./launchd-manager";
 
 export interface QuitHandlerOptions {
-  launchd: DesktopRuntimeSupervisor;
+  launchd: LaunchdManager;
   labels: {
     controller: string;
     openclaw: string;
@@ -23,124 +23,104 @@ export interface QuitHandlerOptions {
   onBeforeQuit?: () => void | Promise<void>;
   /** Called to signal that the app should actually close windows on quit */
   onForceQuit?: () => void;
-  /** Optional lifecycle-owned override for quit completely */
-  onQuitCompletely?: () =>
-    | void
-    | Promise<void>
-    | Promise<{ handled: boolean }>
-    | { handled: boolean };
-  /** Optional lifecycle-owned override for backgrounding */
-  onRunInBackground?: () =>
-    | void
-    | Promise<void>
-    | Promise<{ handled: boolean }>
-    | { handled: boolean };
+  /** Called when the platform lifecycle owns the quit-completely path. */
+  onQuitCompletely?: () => void | Promise<void>;
+  /** Called when the platform lifecycle owns the background path. */
+  onRunInBackground?: () => void | Promise<void>;
 }
 
-export type QuitDecision = "quit-completely" | "run-in-background";
-
-async function wasHandled(
-  result:
-    | void
-    | { handled: boolean }
-    | Promise<void>
-    | Promise<{ handled: boolean }>,
-): Promise<boolean> {
-  const resolved = await result;
-  return resolved?.handled ?? false;
-}
-
-async function runTeardownAndExit(
-  opts: QuitHandlerOptions,
-  reason: string,
-): Promise<void> {
-  try {
-    await opts.onBeforeQuit?.();
-  } catch (error) {
-    console.error(`Error in onBeforeQuit (${reason}):`, error);
-  }
-
-  try {
-    await opts.webServer?.close();
-  } catch (error) {
-    console.error(`Error closing web server (${reason}):`, error);
-  }
-
-  for (const label of [opts.labels.openclaw, opts.labels.controller]) {
-    try {
-      await opts.launchd.bootoutService(label);
-    } catch (error) {
-      console.error(`Error booting out ${label}:`, error);
-    }
-
-    try {
-      await opts.launchd.waitForExit(label, 5000);
-    } catch (error) {
-      console.warn(
-        `waitForExit ${label} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (opts.plistDir) {
-    await deleteRuntimePorts(opts.plistDir).catch(() => undefined);
-  }
-
-  (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
-  opts.onForceQuit?.();
-  app.exit(0);
-}
+export type QuitDecision = "quit-completely" | "run-in-background" | "cancel";
 
 /**
  * Install quit handler for launchd-managed services.
  *
- * Uses the window "close" event as the backgrounding entry point and
- * `before-quit` as the full-exit entry point.
+ * Uses the window "close" event (synchronous) as the entry point instead of
+ * "before-quit" (which doesn't reliably support async operations in Electron).
  */
+/**
+ * Shared teardown sequence: flush logs, close web server, stop launchd
+ * services, then force-exit. Used by all quit paths (dev close, dev Cmd+Q,
+ * packaged quit-completely, packaged no-window). Extracted to avoid the
+ * "changed two of three" drift bug.
+ *
+ * Always ends with `app.exit(0)` in `finally`, so even if teardown throws,
+ * the app won't hang.
+ */
+export async function runTeardownAndExit(
+  opts: QuitHandlerOptions,
+  logLabel: string,
+): Promise<void> {
+  try {
+    try {
+      await opts.onBeforeQuit?.();
+    } catch (err) {
+      console.warn(`[${logLabel}] onBeforeQuit failed:`, err);
+    }
+    try {
+      await opts.webServer?.close();
+    } catch (err) {
+      console.warn(`[${logLabel}] webServer.close failed:`, err);
+    }
+    await teardownLaunchdServices({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: opts.plistDir ?? "",
+    });
+  } catch (err) {
+    console.error(`[${logLabel}] teardown failed:`, err);
+  } finally {
+    (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
+    app.exit(0);
+  }
+}
+
 export function installLaunchdQuitHandler(opts: QuitHandlerOptions): void {
+  // Intercept main window close — hide to background (no dialog)
   const interceptWindowClose = (window: BrowserWindow) => {
     window.on("close", (event) => {
-      if ((app as unknown as Record<string, unknown>).__nexuForceQuit) {
-        return;
-      }
+      // If a force-quit is in progress, let the window close
+      if ((app as unknown as Record<string, unknown>).__nexuForceQuit) return;
 
+      // Dev mode: teardown launchd services before letting the window close.
+      // Without this, `pnpm start` -> close window -> `pnpm start` may have
+      // stale launchd services still running and holding ports.
       if (!app.isPackaged) {
         event.preventDefault();
         void runTeardownAndExit(opts, "dev-close");
         return;
       }
 
+      // Window close (red traffic light) → hide to background.
+      // Services keep running so bots stay online.
+      // "Quit Completely" is only triggered via Cmd+Q / Dock Quit.
       event.preventDefault();
-      void (async () => {
-        if (await wasHandled(opts.onRunInBackground?.())) {
-          return;
-        }
-        window.hide();
-      })();
+      void opts.onRunInBackground?.();
+      window.hide();
     });
   };
 
+  // Apply to the main window only (avoid duplicate handlers)
   const mainWin = BrowserWindow.getAllWindows()[0];
   if (mainWin) {
     interceptWindowClose(mainWin);
   }
 
+  // Intercept Cmd+Q / Dock "Quit" — ensure teardown in both dev and packaged.
   app.on("before-quit", (event) => {
-    if ((app as unknown as Record<string, unknown>).__nexuForceQuit) {
+    if ((app as unknown as Record<string, unknown>).__nexuForceQuit) return;
+
+    // Dev mode: Cmd+Q / app.quit() must also teardown launchd services.
+    if (!app.isPackaged) {
+      event.preventDefault();
+      void runTeardownAndExit(opts, "dev-before-quit");
       return;
     }
 
+    // Packaged Cmd+Q / Dock Quit → full teardown and exit.
     event.preventDefault();
-    void (async () => {
-      if (await wasHandled(opts.onQuitCompletely?.())) {
-        return;
-      }
-
-      await runTeardownAndExit(
-        opts,
-        app.isPackaged ? "packaged-quit" : "dev-before-quit",
-      );
-    })();
+    opts.onForceQuit?.();
+    void opts.onQuitCompletely?.();
+    void runTeardownAndExit(opts, "packaged-quit");
   });
 }
 
@@ -148,24 +128,36 @@ export function installLaunchdQuitHandler(opts: QuitHandlerOptions): void {
  * Programmatically quit with a specific decision (for testing or automation).
  */
 export async function quitWithDecision(
-  decision: QuitDecision,
+  decision: "quit-completely" | "run-in-background",
   opts: QuitHandlerOptions,
 ): Promise<void> {
+  try {
+    await opts.onBeforeQuit?.();
+  } catch (err) {
+    console.error("Error in onBeforeQuit:", err);
+  }
+
+  try {
+    await opts.webServer?.close();
+  } catch (err) {
+    console.error("Error closing web server:", err);
+  }
+
   if (decision === "quit-completely") {
-    if (await wasHandled(opts.onQuitCompletely?.())) {
-      return;
-    }
+    await opts.onQuitCompletely?.();
+    await teardownLaunchdServices({
+      launchd: opts.launchd,
+      labels: opts.labels,
+      plistDir: opts.plistDir ?? "",
+    });
 
-    await runTeardownAndExit(opts, "programmatic-quit");
+    (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
+    app.exit(0);
     return;
   }
 
-  if (await wasHandled(opts.onRunInBackground?.())) {
-    return;
-  }
-
+  // run-in-background: hide window, keep services running
+  await opts.onRunInBackground?.();
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    win.hide();
-  }
+  if (win) win.hide();
 }

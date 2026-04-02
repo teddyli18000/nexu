@@ -235,16 +235,16 @@ describe("Shutdown safety", () => {
   it("quit-handler.ts exposes lifecycle-owned quit hooks", () => {
     expect(quitHandler).toContain("onQuitCompletely");
     expect(quitHandler).toContain("onRunInBackground");
-    expect(quitHandler).toContain("deleteRuntimePorts");
+    expect(quitHandler).toContain("teardownLaunchdServices");
   });
 
   // -----------------------------------------------------------------------
   // 13. update-manager delegates install prep to runtime lifecycle hook
   // -----------------------------------------------------------------------
   it("update-manager.ts uses prepareForUpdateInstall hook", () => {
-    expect(updateManager).toContain("prepareForUpdateInstallHook");
     expect(updateManager).toContain("prepareForUpdateInstall?: (");
-    expect(updateManager).toContain("result.handled");
+    expect(updateManager).toContain("prepareForUpdateInstall?: (");
+    expect(updateManager).toContain("prepareForUpdateInstall?.({");
   });
 
   it("update-manager.ts stops periodic checks during quitAndInstall", () => {
@@ -303,7 +303,25 @@ describe("Shutdown safety", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 18. dev-launchd.sh stop sends SIGTERM before SIGKILL
+  // 18. second-instance recreates the main window when none exists
+  // -----------------------------------------------------------------------
+  it("index.ts recreates the main window on second-instance when none exists", () => {
+    const indexTs = readFile("apps/desktop/main/index.ts");
+    const secondInstanceStart = indexTs.indexOf('app.on("second-instance"');
+    const secondInstanceBlock = indexTs.slice(
+      secondInstanceStart,
+      secondInstanceStart + 300,
+    );
+
+    expect(secondInstanceBlock).toContain(
+      "!mainWindow || mainWindow.isDestroyed()",
+    );
+    expect(secondInstanceBlock).toContain("createMainWindow()");
+    expect(secondInstanceBlock).toContain("focusMainWindow()");
+  });
+
+  // -----------------------------------------------------------------------
+  // 19. dev-launchd.sh stop sends SIGTERM before SIGKILL
   // -----------------------------------------------------------------------
   it("dev-launchd.sh stop_services sends SIGTERM before SIGKILL", () => {
     const devLaunchdSh = readFile("scripts/dev-launchd.sh");

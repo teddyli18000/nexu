@@ -10,6 +10,11 @@ import {
   WechatIcon,
   WhatsAppIcon,
 } from "@/components/platform-icons";
+import {
+  SEEDANCE_PROMO_DISMISS_KEY,
+  SeedancePromoBanner,
+  SeedancePromoModal,
+} from "@/components/seedance-promo";
 import { useGitHubStars } from "@/hooks/use-github-stars";
 import { getChannelChatUrl } from "@/lib/channel-links";
 import { normalizeChannel, track } from "@/lib/tracking";
@@ -270,6 +275,14 @@ export function HomePage() {
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [seedancePromoOpen, setSeedancePromoOpen] = useState(false);
+  const [showSeedancePromo, setShowSeedancePromo] = useState(() => {
+    try {
+      return sessionStorage.getItem(SEEDANCE_PROMO_DISMISS_KEY) !== "1";
+    } catch {
+      return true;
+    }
+  });
   const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoHover, setVideoHover] = useState(false);
@@ -495,6 +508,15 @@ export function HomePage() {
         };
   }, [hasChannel, liveStatus, t]);
 
+  const dismissSeedancePromo = useCallback(() => {
+    setShowSeedancePromo(false);
+    try {
+      sessionStorage.setItem(SEEDANCE_PROMO_DISMISS_KEY, "1");
+    } catch {
+      // noop
+    }
+  }, []);
+
   const handleChannelCreated = useCallback(
     (channelId: string) => {
       setPendingChannelId(channelId);
@@ -691,6 +713,14 @@ export function HomePage() {
               </div>
             </div>
           </div>
+
+          {showSeedancePromo ? (
+            <SeedancePromoBanner
+              isDismissed={false}
+              onOpen={() => setSeedancePromoOpen(true)}
+              onDismiss={dismissSeedancePromo}
+            />
+          ) : null}
         </div>
 
         {modalChannel && (
@@ -732,6 +762,12 @@ export function HomePage() {
             }}
           />
         )}
+
+        <SeedancePromoModal
+          open={seedancePromoOpen}
+          onClose={() => setSeedancePromoOpen(false)}
+          shouldAutoAdvanceAfterStar={false}
+        />
       </div>
     );
   }
@@ -822,6 +858,14 @@ export function HomePage() {
             </div>
           </div>
         </div>
+
+        {showSeedancePromo ? (
+          <SeedancePromoBanner
+            isDismissed={false}
+            onOpen={() => setSeedancePromoOpen(true)}
+            onDismiss={dismissSeedancePromo}
+          />
+        ) : null}
 
         {/* ═══ MIDDLE: Channels panel ═══ */}
         <div className="card card-static">
@@ -1081,6 +1125,12 @@ export function HomePage() {
           }}
         />
       )}
+
+      <SeedancePromoModal
+        open={seedancePromoOpen}
+        onClose={() => setSeedancePromoOpen(false)}
+        shouldAutoAdvanceAfterStar={!hasChannel}
+      />
     </div>
   );
 }

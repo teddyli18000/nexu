@@ -9,34 +9,26 @@
  */
 
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
-import { createConnection } from "node:net";
+import net, { createConnection } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 import { getWorkspaceRoot } from "../../shared/workspace-paths";
-import {
-  decideLaunchdRecovery,
-  detectStaleLaunchdSession,
-} from "../lifecycle/launchd-recovery-policy";
-import {
-  deleteLaunchdRuntimeSession,
-  readLaunchdRuntimeSession,
-  writeLaunchdRuntimeSession,
-} from "../lifecycle/launchd-session-store";
-import { platform } from "../platforms/platform-backends";
+import { ensurePackagedOpenclawSidecar } from "../runtime/manifests";
 import {
   type EmbeddedWebServer,
   startEmbeddedWebServer,
 } from "./embedded-web-server";
-import { type LaunchdManager, SERVICE_LABELS } from "./launchd-manager";
+import {
+  LaunchdManager,
+  SERVICE_LABELS,
+  type ServiceStatus,
+} from "./launchd-manager";
 import { type PlistEnv, generatePlist } from "./plist-generator";
-export {
-  ensureExternalNodeRunner,
-  resolveLaunchdPaths,
-} from "../platforms/mac/launchd-paths";
 
 export interface LaunchdBootstrapEnv {
   /** Is this a development build */
@@ -95,6 +87,12 @@ export interface LaunchdBootstrapEnv {
   openclawTmpDir: string;
   /** Normalized proxy env propagated to controller/openclaw launchd services */
   proxyEnv: Record<string, string>;
+  /** Amplitude API key for controller analytics */
+  amplitudeApiKey?: string;
+  /** Optional structured logger for packaged mode (console.log is lost in packaged builds) */
+  log?: (message: string) => void;
+  /** Optional override for controller startup validation timeout (tests only). */
+  controllerStartupValidationTimeoutMs?: number;
 }
 
 export interface LaunchdBootstrapResult {
@@ -117,6 +115,25 @@ export interface LaunchdBootstrapResult {
 }
 
 type ControllerReadyResult = { ok: true } | { ok: false; error: Error };
+
+/** Metadata persisted between sessions for attach discovery */
+interface RuntimePortsMetadata {
+  writtenAt: string;
+  electronPid: number;
+  controllerPort: number;
+  openclawPort: number;
+  webPort: number;
+  nexuHome: string;
+  isDev: boolean;
+  /** App version at the time ports were written. Used to detect reinstalls. */
+  appVersion?: string;
+  /** OpenClaw state directory — used to prevent cross-attach between builds sharing the same version. */
+  openclawStateDir?: string;
+  /** Electron userData path — used to prevent cross-attach between builds sharing the same version. */
+  userDataPath?: string;
+  /** Build source identifier (e.g. "stable", "beta", "dev") — used to prevent cross-attach. */
+  buildSource?: string;
+}
 
 /**
  * Get unified log directory path.
@@ -155,34 +172,240 @@ async function waitForControllerReadiness(
   timeoutMs = 15000,
 ): Promise<void> {
   const startedAt = Date.now();
-  const probeUrl = `http://127.0.0.1:${port}/api/auth/get-session`;
   let attempt = 0;
+  let lastProbeUrl = `http://127.0.0.1:${port}/api/internal/desktop/ready`;
+  let lastFailureReason = "probe_timeout";
 
   while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(probeUrl, {
-        headers: { Accept: "application/json" },
-      });
-      if (response.status < 500) {
-        console.log(
-          `Controller ready via ${probeUrl} status=${response.status} after ${Date.now() - startedAt}ms`,
-        );
-        return;
-      }
-    } catch {
-      // Ignore transient failures during startup
+    const result = await probeControllerReady(port, 2000);
+    lastProbeUrl = result.probeUrl;
+    if (result.ok) {
+      console.log(
+        `Controller ready via ${result.probeUrl} status=${result.status} after ${Date.now() - startedAt}ms`,
+      );
+      return;
     }
+    lastFailureReason = result.reason;
     // Adaptive polling: start aggressive (50ms), increase to 250ms
     const delay = Math.min(50 + attempt * 50, 250);
     await new Promise((r) => setTimeout(r, delay));
     attempt++;
   }
 
-  throw new Error(`Controller readiness probe timed out for ${probeUrl}`);
+  throw new Error(
+    `Controller readiness probe timed out for ${lastProbeUrl} (reason=${lastFailureReason})`,
+  );
+}
+
+type ControllerProbeFailureReason =
+  | "port_unreachable"
+  | "probe_timeout"
+  | "probe_error"
+  | "probe_status";
+
+type ControllerStartupFailureReason =
+  | "launchd_stopped"
+  | "process_exited"
+  | ControllerProbeFailureReason;
+
+type ControllerReadyProbeResult =
+  | {
+      ok: true;
+      probeUrl: string;
+      status: number;
+    }
+  | {
+      ok: false;
+      probeUrl: string;
+      reason: ControllerProbeFailureReason;
+      status?: number;
+    };
+
+type ControllerStartupValidationResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      reason: ControllerStartupFailureReason;
+      launchdStatus: ServiceStatus;
+      probeUrl: string;
+      probeStatus?: number;
+    };
+
+async function probeControllerReady(
+  port: number,
+  timeoutMs = 2000,
+): Promise<ControllerReadyProbeResult> {
+  const readyUrl = `http://127.0.0.1:${port}/api/internal/desktop/ready`;
+  const sessionUrl = `http://127.0.0.1:${port}/api/auth/get-session`;
+
+  const portListening = await probePort(port);
+  if (!portListening) {
+    return {
+      ok: false,
+      probeUrl: readyUrl,
+      reason: "port_unreachable",
+    };
+  }
+
+  try {
+    const response = await fetch(readyUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.ok) {
+      return { ok: true, probeUrl: readyUrl, status: response.status };
+    }
+    if (response.status !== 404) {
+      return {
+        ok: false,
+        probeUrl: readyUrl,
+        reason: "probe_status",
+        status: response.status,
+      };
+    }
+  } catch (error) {
+    const name = error instanceof Error ? error.name : undefined;
+    return {
+      ok: false,
+      probeUrl: readyUrl,
+      reason: name === "TimeoutError" ? "probe_timeout" : "probe_error",
+    };
+  }
+
+  try {
+    const response = await fetch(sessionUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status < 500) {
+      return { ok: true, probeUrl: sessionUrl, status: response.status };
+    }
+    return {
+      ok: false,
+      probeUrl: sessionUrl,
+      reason: "probe_status",
+      status: response.status,
+    };
+  } catch (error) {
+    const name = error instanceof Error ? error.name : undefined;
+    return {
+      ok: false,
+      probeUrl: sessionUrl,
+      reason: name === "TimeoutError" ? "probe_timeout" : "probe_error",
+    };
+  }
+}
+
+async function validateControllerStartup(opts: {
+  launchd: LaunchdManager;
+  label: string;
+  port: number;
+  probeTimeoutMs?: number;
+}): Promise<ControllerStartupValidationResult> {
+  const launchdStatus = await opts.launchd.getServiceStatus(opts.label);
+  if (launchdStatus.status === "stopped") {
+    return {
+      ok: false,
+      reason: launchdStatus.pid == null ? "launchd_stopped" : "process_exited",
+      launchdStatus,
+      probeUrl: `http://127.0.0.1:${opts.port}/api/internal/desktop/ready`,
+    };
+  }
+
+  const probe = await probeControllerReady(
+    opts.port,
+    opts.probeTimeoutMs ?? 3000,
+  );
+  if (!probe.ok) {
+    return {
+      ok: false,
+      reason: probe.reason,
+      launchdStatus,
+      probeUrl: probe.probeUrl,
+      probeStatus: probe.status,
+    };
+  }
+
+  return { ok: true };
+}
+
+async function waitForControllerStartupValidation(opts: {
+  launchd: LaunchdManager;
+  label: string;
+  port: number;
+  timeoutMs?: number;
+  probeTimeoutMs?: number;
+}): Promise<ControllerStartupValidationResult> {
+  const timeoutMs = opts.timeoutMs ?? 15000;
+  const startedAt = Date.now();
+  let attempt = 0;
+  let lastResult: ControllerStartupValidationResult | null = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    lastResult = await validateControllerStartup({
+      launchd: opts.launchd,
+      label: opts.label,
+      port: opts.port,
+      probeTimeoutMs: opts.probeTimeoutMs,
+    });
+    if (lastResult.ok) {
+      return lastResult;
+    }
+
+    const delay = Math.min(100 + attempt * 100, 500);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    attempt++;
+  }
+
+  return (
+    lastResult ?? {
+      ok: false,
+      reason: "probe_timeout",
+      launchdStatus: { label: opts.label, plistPath: "", status: "unknown" },
+      probeUrl: `http://127.0.0.1:${opts.port}/api/internal/desktop/ready`,
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Runtime ports metadata — persisted across sessions for attach discovery
+// ---------------------------------------------------------------------------
+
+function getRuntimePortsPath(plistDir: string): string {
+  return path.join(plistDir, "runtime-ports.json");
+}
+
+async function writeRuntimePorts(
+  plistDir: string,
+  meta: RuntimePortsMetadata,
+): Promise<void> {
+  // Atomic write: write to tmp file then rename, so a crash mid-write
+  // never leaves a half-written JSON that breaks the next startup.
+  const portsPath = getRuntimePortsPath(plistDir);
+  const tmpPath = `${portsPath}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(meta, null, 2), "utf8");
+  await fs.rename(tmpPath, portsPath);
+}
+
+async function readRuntimePorts(
+  plistDir: string,
+): Promise<RuntimePortsMetadata | null> {
+  try {
+    const raw = await fs.readFile(getRuntimePortsPath(plistDir), "utf8");
+    return JSON.parse(raw) as RuntimePortsMetadata;
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteRuntimePorts(plistDir: string): Promise<void> {
-  await deleteLaunchdRuntimeSession(plistDir);
+  try {
+    await fs.unlink(getRuntimePortsPath(plistDir));
+  } catch {
+    // best effort
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,20 +459,28 @@ function isProcessAlive(pid: number): boolean {
 // Port occupier detection
 // ---------------------------------------------------------------------------
 
+/**
+ * Check if a port is occupied by attempting to bind a temporary server.
+ * Returns `{ pid: 0 }` if occupied, `null` if free.
+ *
+ * Uses net.createServer().listen() instead of lsof or net.connect because:
+ * - lsof is blocked by macOS hardened runtime in packaged Electron apps
+ * - net.connect conflicts with probePort (both use createConnection)
+ */
 async function detectPortOccupier(
   port: number,
 ): Promise<{ pid: number } | null> {
-  try {
-    const { stdout } = await execFileAsync("lsof", [
-      `-iTCP:${port}`,
-      "-sTCP:LISTEN",
-      "-t",
-    ]);
-    const pid = Number.parseInt(stdout.trim(), 10);
-    return Number.isNaN(pid) ? null : { pid };
-  } catch {
-    return null;
-  }
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => {
+      // EADDRINUSE or other bind failure — port is occupied
+      resolve({ pid: 0 });
+    });
+    server.listen(port, "127.0.0.1", () => {
+      // Successfully bound — port is free. Close immediately.
+      server.close(() => resolve(null));
+    });
+  });
 }
 
 /**
@@ -332,11 +563,12 @@ async function cleanupStalePlists(
 export async function bootstrapWithLaunchd(
   env: LaunchdBootstrapEnv,
 ): Promise<LaunchdBootstrapResult> {
+  const log = env.log ?? console.log;
   const logDir = await ensureLogDir(env.nexuHome);
   const plistDir = env.plistDir ?? getDefaultPlistDir(env.isDev);
 
   // Create launchd manager
-  const launchd = platform.supervisor.createLaunchdSupervisor({
+  const launchd = new LaunchdManager({
     plistDir,
   });
 
@@ -376,6 +608,7 @@ export async function bootstrapWithLaunchd(
     skillNodePath: env.skillNodePath,
     openclawTmpDir: env.openclawTmpDir,
     proxyEnv: env.proxyEnv,
+    amplitudeApiKey: env.amplitudeApiKey,
   };
   await cleanupStalePlists(launchd, plistDir, labels, cleanupPlistEnv);
 
@@ -395,7 +628,7 @@ export async function bootstrapWithLaunchd(
 
   // --- Recover ports from previous session if available ---
   // Single read — used for both stale session detection and port recovery.
-  let recovered = await readLaunchdRuntimeSession(plistDir);
+  let recovered = await readRuntimePorts(plistDir);
 
   // Detect and clean up stale sessions from a Force Quit.
   // When the user Force Quits Electron, the quit handler doesn't run and
@@ -403,28 +636,72 @@ export async function bootstrapWithLaunchd(
   // by checking if the previous Electron PID is dead and the metadata is
   // older than 5 minutes.
   if (recovered) {
-    const staleSession = detectStaleLaunchdSession({
-      metadata: recovered,
-      isElectronAlive: isProcessAlive(recovered.electronPid),
-    });
-    if (staleSession.stale) {
-      console.log(staleSession.reason);
-      await Promise.allSettled([
-        launchd.bootoutService(labels.controller),
-        launchd.bootoutService(labels.openclaw),
-      ]);
+    const STALE_SESSION_THRESHOLD_MS = 5 * 60 * 1000;
+    const previousElectronDead = !isProcessAlive(recovered.electronPid);
+    const metadataAgeMs = Date.now() - new Date(recovered.writtenAt).getTime();
+    if (previousElectronDead && metadataAgeMs > STALE_SESSION_THRESHOLD_MS) {
+      console.log(
+        `Stale session detected: previous Electron pid=${recovered.electronPid} is dead, ` +
+          `metadata age=${Math.round(metadataAgeMs / 1000)}s. Cleaning up launchd services.`,
+      );
+      await bootoutServicesAndWait({
+        launchd,
+        labels,
+        controllerRunning: true,
+        openclawRunning: true,
+      });
       await deleteRuntimePorts(plistDir);
       recovered = null; // Force fresh start
     }
   }
-  const [controllerStatus, openclawStatus] = await Promise.all([
+  let [controllerStatus, openclawStatus] = await Promise.all([
     launchd.getServiceStatus(labels.controller),
     launchd.getServiceStatus(labels.openclaw),
   ]);
 
-  const controllerRunning = controllerStatus.status === "running";
-  const openclawRunning = openclawStatus.status === "running";
-  const anyRunning = controllerRunning || openclawRunning;
+  let controllerRunning = controllerStatus.status === "running";
+  let openclawRunning = openclawStatus.status === "running";
+  let anyRunning = controllerRunning || openclawRunning;
+
+  // Partial attach state is unsafe: one launchd service survived but the other
+  // did not. In practice this leaves controller attached to stale OpenClaw
+  // metadata, and OpenClaw may still exist as an orphaned process on the old
+  // gateway port. Tear everything down and force a clean cold start.
+  if (recovered && anyRunning && controllerRunning !== openclawRunning) {
+    console.warn(
+      `[bootstrap] partial launchd state detected (controller=${controllerRunning ? "running" : "stopped"} openclaw=${openclawRunning ? "running" : "stopped"}); forcing clean cold start`,
+    );
+
+    const staleOpenclawPort = recovered.openclawPort;
+    const staleOccupier = await detectPortOccupier(staleOpenclawPort);
+    if (staleOccupier && staleOccupier.pid !== openclawStatus.pid) {
+      console.warn(
+        `[bootstrap] stale openclaw port occupier detected port=${staleOpenclawPort} pid=${staleOccupier.pid}`,
+      );
+    }
+
+    await bootoutServicesAndWait({
+      launchd,
+      labels,
+      controllerRunning,
+      openclawRunning,
+    });
+
+    await killOrphanOpenclawProcesses({
+      registeredPid: openclawStatus.pid,
+      extraPids: staleOccupier ? [staleOccupier.pid] : [],
+    });
+    await deleteRuntimePorts(plistDir).catch(() => {});
+
+    recovered = null;
+    [controllerStatus, openclawStatus] = await Promise.all([
+      launchd.getServiceStatus(labels.controller),
+      launchd.getServiceStatus(labels.openclaw),
+    ]);
+    controllerRunning = controllerStatus.status === "running";
+    openclawRunning = openclawStatus.status === "running";
+    anyRunning = controllerRunning || openclawRunning;
+  }
 
   // If we have a previous session and at least one service is still running,
   // validate and reuse the recovered ports. Otherwise use fresh ports.
@@ -435,46 +712,108 @@ export async function bootstrapWithLaunchd(
     webPort: env.webPort,
   };
 
-  const recoveryDecision = decideLaunchdRecovery({
-    recovered,
-    env: {
-      isDev: env.isDev,
-      appVersion: env.appVersion,
-      nexuHome: env.nexuHome,
-      openclawStateDir: env.openclawStateDir,
-      userDataPath: env.userDataPath,
-      buildSource: env.buildSource,
-    },
-    anyRunning,
-    runningNexuHome:
-      controllerStatus.env?.NEXU_HOME ?? openclawStatus.env?.NEXU_HOME,
-    defaultWebPort: env.webPort,
-    previousElectronAlive:
-      recovered != null ? isProcessAlive(recovered.electronPid) : undefined,
-  });
-
-  if (recoveryDecision.action === "teardown-stale-services") {
-    console.log(recoveryDecision.reason);
-    await Promise.allSettled([
-      controllerRunning
-        ? launchd.bootoutService(labels.controller)
-        : Promise.resolve(),
-      openclawRunning
-        ? launchd.bootoutService(labels.openclaw)
-        : Promise.resolve(),
-    ]);
-    if (recoveryDecision.deleteSession) {
-      await deleteRuntimePorts(plistDir).catch(() => {});
-    }
-  } else if (recoveryDecision.action === "reuse-ports") {
-    if (!recoveryDecision.previousElectronAlive && recovered) {
-      console.log(
-        `Previous Electron (pid=${recovered.electronPid}) is dead, web port ${recovered.webPort} likely stale`,
+  if (recovered && anyRunning && recovered.isDev === env.isDev) {
+    // Detect reinstall / version upgrade: if the app version changed (or
+    // the previous session has no version stamp — e.g. upgrading from an
+    // older release), the running services are from a stale binary and
+    // must be torn down. Treat missing recovered.appVersion as a mismatch
+    // (conservative: forces fresh start on first upgrade to version-aware code).
+    const versionMismatch =
+      env.appVersion != null && recovered.appVersion !== env.appVersion;
+    // Check identity fields beyond version: if any of openclawStateDir,
+    // userDataPath, or buildSource are present in both recovered metadata
+    // and current env, they must match. A mismatch means two different
+    // builds share the same version (e.g. stable vs beta), and we must
+    // not cross-attach.
+    const identityMismatch =
+      !versionMismatch &&
+      (
+        [
+          [
+            "openclawStateDir",
+            recovered.openclawStateDir,
+            env.openclawStateDir,
+          ],
+          ["userDataPath", recovered.userDataPath, env.userDataPath],
+          ["buildSource", recovered.buildSource, env.buildSource],
+        ] as const
+      ).some(
+        ([, recoveredVal, envVal]) =>
+          recoveredVal != null && envVal != null && recoveredVal !== envVal,
       );
-    }
-    effectivePorts = recoveryDecision.effectivePorts;
-    useRecoveredPorts = true;
-    console.log(recoveryDecision.reason);
+
+    if (versionMismatch || identityMismatch) {
+      const reason = versionMismatch
+        ? `App version changed (${recovered.appVersion} → ${env.appVersion})`
+        : "Build identity mismatch (openclawStateDir, userDataPath, or buildSource differ)";
+      console.log(
+        `[bootstrap] teardown: ${reason} (controller=${controllerRunning ? "running" : "stopped"} openclaw=${openclawRunning ? "running" : "stopped"})`,
+      );
+      await bootoutServicesAndWait({
+        launchd,
+        labels,
+        controllerRunning,
+        openclawRunning,
+      });
+      await deleteRuntimePorts(plistDir).catch(() => {});
+      // Fall through to fresh start below (useRecoveredPorts remains false)
+    } else {
+      // Detect stale session: if the previous Electron process is dead, the web
+      // server port won't be listening. We can still reuse controller/openclaw
+      // ports since launchd keeps those running, but we'll need a fresh web port.
+      const previousElectronAlive = isProcessAlive(recovered.electronPid);
+      if (!previousElectronAlive) {
+        console.log(
+          `Previous Electron (pid=${recovered.electronPid}) is dead, web port ${recovered.webPort} likely stale`,
+        );
+      }
+
+      // Validate NEXU_HOME matches (don't attach to wrong environment)
+      const runningNexuHome =
+        controllerStatus.env?.NEXU_HOME ?? openclawStatus.env?.NEXU_HOME;
+      const expectedNexuHome = env.nexuHome;
+
+      if (
+        !expectedNexuHome ||
+        !runningNexuHome ||
+        runningNexuHome === expectedNexuHome
+      ) {
+        effectivePorts = {
+          controllerPort: recovered.controllerPort,
+          openclawPort: recovered.openclawPort,
+          // Keep controller/openclaw ports but use fresh web port if Electron died
+          webPort: previousElectronAlive ? recovered.webPort : env.webPort,
+        };
+        useRecoveredPorts = true;
+        console.log(
+          `Recovering ports from previous session (controller=${effectivePorts.controllerPort} openclaw=${effectivePorts.openclawPort} web=${effectivePorts.webPort})`,
+        );
+      } else {
+        // NEXU_HOME mismatch — tear down stale services
+        console.log(
+          `NEXU_HOME mismatch (expected=${expectedNexuHome} actual=${runningNexuHome}), tearing down stale services`,
+        );
+        await bootoutServicesAndWait({
+          launchd,
+          labels,
+          controllerRunning,
+          openclawRunning,
+        });
+      }
+    } // end: version match — proceed with attach
+  } else if (anyRunning && !recovered) {
+    // Services running but no runtime-ports.json (e.g. file was deleted or
+    // corrupted). We can't know the ports they're using, so tear them down
+    // and do a clean cold start with fresh ports.
+    console.log(
+      `[bootstrap] teardown: no runtime-ports.json but services running (controller=${controllerRunning ? "running" : "stopped"} openclaw=${openclawRunning ? "running" : "stopped"})`,
+    );
+    await bootoutServicesAndWait({
+      launchd,
+      labels,
+      controllerRunning,
+      openclawRunning,
+    });
   }
 
   // --- Per-service: validate running ones, start missing ones ---
@@ -505,7 +844,23 @@ export async function bootstrapWithLaunchd(
   }
 
   if (openclawRunning && useRecoveredPorts) {
-    openclawHealthy = await probePort(effectivePorts.openclawPort);
+    const portListening = await probePort(effectivePorts.openclawPort);
+    // Port listening isn't enough — verify it's OUR openclaw by checking
+    // that the launchd service env matches our expected token/state dir.
+    // This prevents attaching to a global openclaw or ClawX on the same port.
+    if (portListening) {
+      const ocEnv = (await launchd.getServiceStatus(labels.openclaw)).env;
+      const expectedToken = env.gatewayToken;
+      const runningToken = ocEnv?.OPENCLAW_GATEWAY_TOKEN;
+      if (expectedToken && runningToken && runningToken !== expectedToken) {
+        console.log(
+          "OpenClaw port is listening but gateway token mismatch — not our instance",
+        );
+        openclawHealthy = false;
+      } else {
+        openclawHealthy = true;
+      }
+    }
     if (openclawHealthy) {
       console.log("OpenClaw already running and healthy");
     } else {
@@ -532,17 +887,25 @@ export async function bootstrapWithLaunchd(
     }
   }
   if (!openclawHealthy) {
+    const preOccupier = await detectPortOccupier(effectivePorts.openclawPort);
+    log(
+      `[bootstrap] pre-findFreePort: openclawPort=${effectivePorts.openclawPort} occupier=${preOccupier ? `PID ${preOccupier.pid}` : "none"}`,
+    );
     const freePort = await findFreePort(effectivePorts.openclawPort);
     if (freePort !== effectivePorts.openclawPort) {
       console.log(
         `OpenClaw port ${effectivePorts.openclawPort} occupied, using ${freePort}`,
       );
       effectivePorts.openclawPort = freePort;
+    } else {
+      log(
+        `[bootstrap] openclawPort ${effectivePorts.openclawPort} appears free, keeping`,
+      );
     }
   }
 
   // Build plistEnv with final resolved ports
-  const plistEnv: PlistEnv = {
+  let plistEnv: PlistEnv = {
     ...cleanupPlistEnv,
     controllerPort: effectivePorts.controllerPort,
     openclawPort: effectivePorts.openclawPort,
@@ -576,15 +939,167 @@ export async function bootstrapWithLaunchd(
     }
   };
 
+  const formatControllerRecoveryFailure = (details: {
+    originalPort: number;
+    retryPort?: number;
+    reason: ControllerStartupFailureReason;
+    launchdStatus: ServiceStatus;
+    probeUrl: string;
+    probeStatus?: number;
+  }): string => {
+    const runtimePortsValue = JSON.stringify({
+      controllerPort: details.retryPort ?? effectivePorts.controllerPort,
+      openclawPort: effectivePorts.openclawPort,
+      webPort: effectivePorts.webPort,
+    });
+
+    return [
+      "Controller startup recovery failed",
+      `originalPort=${details.originalPort}`,
+      details.retryPort != null ? `retryPort=${details.retryPort}` : null,
+      `reason=${details.reason}`,
+      `launchdStatus=${details.launchdStatus.status}`,
+      `launchdPid=${details.launchdStatus.pid ?? "none"}`,
+      details.probeStatus != null ? `probeStatus=${details.probeStatus}` : null,
+      `finalProbeUrl=${details.probeUrl}`,
+      `runtimePortsValue=${runtimePortsValue}`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  const validateOrRecoverController = async (): Promise<void> => {
+    const originalPort = effectivePorts.controllerPort;
+    const validation = await waitForControllerStartupValidation({
+      launchd,
+      label: labels.controller,
+      port: effectivePorts.controllerPort,
+      timeoutMs: env.controllerStartupValidationTimeoutMs ?? 15000,
+      probeTimeoutMs: 3000,
+    });
+
+    if (validation.ok) {
+      return;
+    }
+
+    console.warn(
+      `[bootstrap] controller post-start validation failed originalPort=${originalPort} reason=${validation.reason} launchdStatus=${validation.launchdStatus.status} launchdPid=${validation.launchdStatus.pid ?? "none"} probeUrl=${validation.probeUrl}${validation.probeStatus != null ? ` probeStatus=${validation.probeStatus}` : ""}`,
+    );
+
+    await launchd
+      .bootoutAndWaitForExit(labels.controller, 5000)
+      .catch(() => {});
+
+    const retryStartPort = Math.min(originalPort + 1, 65535);
+    const retryPort = await findFreePort(retryStartPort);
+    effectivePorts.controllerPort = retryPort;
+    plistEnv = {
+      ...plistEnv,
+      controllerPort: retryPort,
+    };
+
+    console.warn(
+      `[bootstrap] retrying controller startup originalPort=${originalPort} retryPort=${retryPort}`,
+    );
+
+    const retryPlist = generatePlist("controller", plistEnv);
+    await launchd.installService(labels.controller, retryPlist);
+    await launchd.startService(labels.controller);
+    await ensureRunning(labels.controller, "controller");
+
+    const retryValidation = await waitForControllerStartupValidation({
+      launchd,
+      label: labels.controller,
+      port: retryPort,
+      timeoutMs: env.controllerStartupValidationTimeoutMs ?? 15000,
+      probeTimeoutMs: 3000,
+    });
+    if (retryValidation.ok) {
+      return;
+    }
+
+    const message = formatControllerRecoveryFailure({
+      originalPort,
+      retryPort,
+      reason: retryValidation.reason,
+      launchdStatus: retryValidation.launchdStatus,
+      probeUrl: retryValidation.probeUrl,
+      probeStatus: retryValidation.probeStatus,
+    });
+    console.error(`[bootstrap] ${message}`);
+    throw new Error(message);
+  };
+
   if (!controllerHealthy) {
     await ensureService(labels.controller, "controller");
     await ensureRunning(labels.controller, "controller");
+    await validateOrRecoverController();
   } else {
     console.log("[bootstrap] controller already healthy, skipping");
   }
   if (!openclawHealthy) {
     await ensureService(labels.openclaw, "openclaw");
     await ensureRunning(labels.openclaw, "openclaw");
+
+    // Verify our openclaw actually owns the port. Another launchd service
+    // (e.g. global `ai.openclaw.gateway` with KeepAlive=true) may have
+    // raced us and grabbed the port first. If so, pick a new port and
+    // re-bootstrap our service.
+    // Wait briefly for the port to be bound (our openclaw needs time to start).
+    await new Promise((r) => setTimeout(r, 2000));
+    const occupier = await detectPortOccupier(effectivePorts.openclawPort);
+    const ocStatus = await launchd.getServiceStatus(labels.openclaw);
+    log(
+      `[bootstrap] post-launch check: port=${effectivePorts.openclawPort} occupied=${!!occupier} ocStatus=${JSON.stringify({ pid: ocStatus.pid, status: ocStatus.status })}`,
+    );
+    // Port is stolen if someone is listening but our service crashed or
+    // isn't running. We can't compare PIDs (lsof blocked by hardened
+    // runtime), so check if our service is healthy instead.
+    const portStolen =
+      occupier && (ocStatus.pid == null || ocStatus.status !== "running");
+    log(`[bootstrap] portStolen=${portStolen}`);
+    if (portStolen) {
+      log(
+        `[bootstrap] OpenClaw port ${effectivePorts.openclawPort} stolen by PID ${occupier.pid} (ours is ${ocStatus.pid}), reassigning`,
+      );
+      // Bootout crashed openclaw and wait for launchd to fully release it.
+      // Use bootoutAndWaitForExit which captures the PID before bootout
+      // so waitForExit can SIGKILL if needed (plain waitForExit without
+      // knownPid exits early on "unknown" status).
+      await launchd
+        .bootoutAndWaitForExit(labels.openclaw, 5000)
+        .catch(() => {});
+
+      const newPort = await findFreePort(effectivePorts.openclawPort + 1);
+      effectivePorts.openclawPort = newPort;
+
+      // Regenerate plists with new port for both openclaw and controller
+      const retryPlistEnv: PlistEnv = {
+        ...plistEnv,
+        openclawPort: newPort,
+      };
+
+      // Re-bootstrap openclaw on new port
+      const retryPlist = generatePlist("openclaw", retryPlistEnv);
+      await launchd.installService(labels.openclaw, retryPlist);
+      await launchd.startService(labels.openclaw);
+      await ensureRunning(labels.openclaw, "openclaw");
+
+      // Controller needs the new port — re-bootstrap it too
+      await launchd
+        .bootoutAndWaitForExit(labels.controller, 5000)
+        .catch(() => {});
+      const retryControllerPlist = generatePlist("controller", retryPlistEnv);
+      await launchd.installService(labels.controller, retryControllerPlist);
+      await launchd.startService(labels.controller);
+      await ensureRunning(labels.controller, "controller");
+      // Controller was restarted — must wait for readiness again even if
+      // it was previously healthy (attach path sets needsControllerReady=false).
+      needsControllerReady = true;
+      log(
+        `[bootstrap] OpenClaw reassigned to port ${newPort}, controller restarted`,
+      );
+    }
   } else {
     console.log("[bootstrap] openclaw already healthy, skipping");
   }
@@ -658,7 +1173,7 @@ export async function bootstrapWithLaunchd(
     : Promise.resolve({ ok: true });
 
   // Persist port metadata (including identity fields for cross-build validation)
-  await writeLaunchdRuntimeSession(plistDir, {
+  await writeRuntimePorts(plistDir, {
     writtenAt: new Date().toISOString(),
     electronPid: process.pid,
     controllerPort: effectivePorts.controllerPort,
@@ -780,14 +1295,97 @@ async function killOrphanNexuProcesses(): Promise<void> {
  * Shared between killOrphanNexuProcesses and ensureNexuProcessesDead so
  * they agree on what constitutes a "Nexu process".
  */
-// Patterns must be specific enough to avoid matching unrelated processes
-// (e.g. an editor with the file open, or a grep searching for these paths).
-// Prefix with "node" to only match actual Node.js processes.
-const NEXU_PROCESS_PATTERNS = [
-  "node.*controller/dist/index.js",
-  "node.*openclaw.mjs gateway",
-  "openclaw-gateway",
-] as const;
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getNexuProcessPatterns(): string[] {
+  const repoRoot = getWorkspaceRoot();
+  const nexuHome = path.join(os.homedir(), ".nexu");
+  const patterns = new Set<string>([
+    escapeRegexLiteral(
+      path.join(nexuHome, "runtime", "controller-sidecar", "dist", "index.js"),
+    ),
+    "\\.nexu/(runtime/)?openclaw-sidecar",
+    escapeRegexLiteral(
+      path.join(repoRoot, "apps", "controller", "dist", "index.js"),
+    ),
+    escapeRegexLiteral(
+      path.join(
+        repoRoot,
+        "openclaw-runtime",
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      ),
+    ),
+    ...getNexuOpenclawProcessPatterns(),
+  ]);
+
+  if (process.resourcesPath) {
+    patterns.add(
+      escapeRegexLiteral(
+        path.join(
+          process.resourcesPath,
+          "runtime",
+          "controller",
+          "dist",
+          "index.js",
+        ),
+      ),
+    );
+  }
+
+  return Array.from(patterns);
+}
+
+function getNexuOpenclawProcessPatterns(): string[] {
+  const repoRoot = getWorkspaceRoot();
+  const patterns = new Set<string>([
+    "\\.nexu/(runtime/)?openclaw-sidecar",
+    "\\.nexu/(runtime/)?openclaw-sidecar/.*/openclaw-gateway",
+    escapeRegexLiteral(
+      path.join(
+        repoRoot,
+        "openclaw-runtime",
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      ),
+    ),
+    escapeRegexLiteral(
+      path.join(repoRoot, "openclaw-runtime", "bin", "openclaw-gateway"),
+    ),
+  ]);
+
+  if (process.resourcesPath) {
+    patterns.add(
+      escapeRegexLiteral(
+        path.join(
+          process.resourcesPath,
+          "runtime",
+          "openclaw",
+          "node_modules",
+          "openclaw",
+          "openclaw.mjs",
+        ),
+      ),
+    );
+    patterns.add(
+      escapeRegexLiteral(
+        path.join(
+          process.resourcesPath,
+          "runtime",
+          "openclaw",
+          "bin",
+          "openclaw-gateway",
+        ),
+      ),
+    );
+  }
+
+  return Array.from(patterns);
+}
 
 /**
  * Collect the current process tree PIDs (current PID + all descendants) so
@@ -850,7 +1448,7 @@ async function findNexuProcessPidsByLabel(): Promise<number[]> {
   // Also check runtime-ports.json in both dev and production plist dirs
   for (const isDev of [true, false]) {
     const plistDir = getDefaultPlistDir(isDev);
-    const recovered = await readLaunchdRuntimeSession(plistDir);
+    const recovered = await readRuntimePorts(plistDir);
     if (recovered?.electronPid && recovered.electronPid > 0) {
       // Only include the stored electron PID if it's still alive but is NOT
       // our current process — it's a stale leftover from a previous session.
@@ -880,7 +1478,8 @@ async function findNexuProcessPidsByLabel(): Promise<number[]> {
  *   tree (not just the current PID). Used by killOrphanNexuProcesses to
  *   avoid killing our own child processes. Default: false.
  */
-async function findNexuProcessPids(
+async function findProcessPidsByPatterns(
+  patterns: readonly string[],
   excludeProcessTree = false,
 ): Promise<number[]> {
   const allPids = new Set<number>();
@@ -888,7 +1487,7 @@ async function findNexuProcessPids(
     ? await getCurrentProcessTreePids()
     : new Set([process.pid]);
 
-  for (const pattern of NEXU_PROCESS_PATTERNS) {
+  for (const pattern of patterns) {
     try {
       const { stdout } = await execFileAsync("pgrep", ["-f", pattern]);
       for (const line of stdout.trim().split("\n")) {
@@ -903,6 +1502,63 @@ async function findNexuProcessPids(
   }
 
   return Array.from(allPids);
+}
+
+async function findNexuProcessPids(
+  excludeProcessTree = false,
+): Promise<number[]> {
+  return findProcessPidsByPatterns(
+    getNexuProcessPatterns(),
+    excludeProcessTree,
+  );
+}
+
+async function killOrphanOpenclawProcesses(opts: {
+  registeredPid?: number;
+  extraPids?: number[];
+}): Promise<number[]> {
+  const pids = await findProcessPidsByPatterns(
+    getNexuOpenclawProcessPatterns(),
+    true,
+  );
+  const candidatePids = new Set(pids);
+  for (const pid of opts.extraPids ?? []) {
+    if (pid > 0) {
+      candidatePids.add(pid);
+    }
+  }
+  const orphanPids = Array.from(candidatePids).filter(
+    (pid) => pid !== opts.registeredPid,
+  );
+
+  for (const pid of orphanPids) {
+    console.warn(`bootstrap: killing stale openclaw process pid=${pid}`);
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // ESRCH — already gone
+    }
+  }
+
+  return orphanPids;
+}
+
+async function bootoutServicesAndWait(opts: {
+  launchd: LaunchdManager;
+  labels: { controller: string; openclaw: string };
+  controllerRunning: boolean;
+  openclawRunning: boolean;
+  timeoutMs?: number;
+}): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  await Promise.allSettled([
+    opts.controllerRunning
+      ? opts.launchd.bootoutAndWaitForExit(opts.labels.controller, timeoutMs)
+      : Promise.resolve(),
+    opts.openclawRunning
+      ? opts.launchd.bootoutAndWaitForExit(opts.labels.openclaw, timeoutMs)
+      : Promise.resolve(),
+  ]);
 }
 
 /**
@@ -1053,6 +1709,25 @@ export async function ensureNexuProcessesDead(opts?: {
 }
 
 /**
+ * Check if launchd bootstrap is enabled.
+ * Currently controlled by environment variable.
+ */
+export function isLaunchdBootstrapEnabled(): boolean {
+  // Explicitly disabled
+  if (process.env.NEXU_USE_LAUNCHD === "0") return false;
+  // Explicitly enabled (dev scripts)
+  if (process.env.NEXU_USE_LAUNCHD === "1") return true;
+  // CI environments should use orchestrator mode
+  if (process.env.CI) return false;
+  // Packaged app on macOS: default to launchd
+  // ELECTRON_IS_PACKAGED is not a real env var — check if running from
+  // an .app bundle by looking at the executable path.
+  const isPackaged = !process.execPath.includes("node_modules");
+  if (isPackaged && process.platform === "darwin") return true;
+  return false;
+}
+
+/**
  * Get default plist directory based on environment.
  */
 export function getDefaultPlistDir(isDev: boolean): string {
@@ -1062,4 +1737,360 @@ export function getDefaultPlistDir(isDev: boolean): string {
   }
   // Production: use standard LaunchAgents directory
   return path.join(os.homedir(), "Library", "LaunchAgents");
+}
+
+// ---------------------------------------------------------------------------
+// External node runner — clone Electron binary + frameworks outside .app
+// ---------------------------------------------------------------------------
+
+/**
+ * Safety guard: refuse to rm -rf paths that are too shallow.
+ * Prevents catastrophic deletion if nexuHome is accidentally empty/root.
+ */
+function assertSafeRmTarget(targetPath: string): void {
+  const segments = targetPath.split(path.sep).filter(Boolean);
+  if (segments.length < 3) {
+    throw new Error(
+      `Refusing rm -rf on shallow path: ${targetPath} (need ≥3 segments)`,
+    );
+  }
+}
+
+/**
+ * Read CFBundleExecutable from Info.plist to get the actual binary name.
+ * Falls back to "Nexu" if the plist cannot be parsed.
+ */
+function readBundleExecutableName(appContentsPath: string): string {
+  const fallback = "Nexu";
+  try {
+    const plistPath = path.join(appContentsPath, "Info.plist");
+    const raw = readFileSync(plistPath, "utf8");
+    const match = raw.match(
+      /<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/,
+    );
+    return match?.[1] ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Ensure a standalone Electron-as-Node runner exists outside the .app bundle.
+ *
+ * Problem: launchd services that use the Electron binary from inside the .app
+ * bundle cause macOS Finder to report "app is in use", blocking reinstall /
+ * drag-and-drop updates. The Electron Framework (~250 MB) is mmap'd into the
+ * process address space, holding file references to the bundle.
+ *
+ * Solution: clone the packaged app bundle to
+ * `~/.nexu/runtime/nexu-runner.app/`. On APFS (all modern macOS), `cp -Rc`
+ * creates copy-on-write clones that occupy near-zero additional disk space.
+ * The launchd plist then references this external runner instead of
+ * `/Applications/Nexu.app`.
+ *
+ * The runner is version-stamped so it re-clones when the app is updated.
+ *
+ * @returns The path to the external binary (the node runner).
+ */
+export async function ensureExternalNodeRunner(
+  appContentsPath: string,
+  nexuHome: string,
+  appVersion: string,
+): Promise<string> {
+  const binaryName = readBundleExecutableName(appContentsPath);
+  const runnerRoot = path.join(nexuHome, "runtime", "nexu-runner.app");
+  const stagingRoot = `${runnerRoot}.staging`;
+  const binaryPath = path.join(runnerRoot, "Contents", "MacOS", binaryName);
+  // Version stamp lives OUTSIDE the .app bundle so it does not break the
+  // code signature's sealed-resources check.  Writing any file into the
+  // bundle root causes `codesign --verify` to fail with
+  // "unsealed contents present in the bundle root".
+  const stampPath = path.join(nexuHome, "runtime", ".nexu-runner-version");
+
+  assertSafeRmTarget(runnerRoot);
+  assertSafeRmTarget(stagingRoot);
+
+  // Clean up leftover staging directory from an interrupted extraction
+  if (existsSync(stagingRoot)) {
+    assertSafeRmTarget(stagingRoot);
+    await execFileAsync("rm", ["-rf", stagingRoot]).catch(() => {});
+  }
+
+  // Fast path: already extracted for this version
+  try {
+    if (
+      existsSync(stampPath) &&
+      existsSync(binaryPath) &&
+      readFileSync(stampPath, "utf8").trim() === appVersion
+    ) {
+      return binaryPath;
+    }
+  } catch {
+    // stamp unreadable — re-extract
+  }
+
+  console.log(
+    `Extracting external node runner for v${appVersion} to ${runnerRoot}`,
+  );
+
+  // Atomic extraction: build in staging directory, then rename into place.
+  // If the process is killed mid-extraction, only the staging directory is
+  // left behind and will be cleaned up on next startup (see above).
+  const appBundlePath = path.dirname(appContentsPath);
+  const stagingBinaryPath = path.join(
+    stagingRoot,
+    "Contents",
+    "MacOS",
+    binaryName,
+  );
+  await fs.mkdir(path.dirname(stagingRoot), { recursive: true });
+
+  // Clone the full app bundle so the runner keeps a valid macOS app layout,
+  // including signed resources like _CodeSignature and Resources.
+  try {
+    await execFileAsync("cp", ["-Rc", appBundlePath, stagingRoot]);
+  } catch {
+    // APFS clone unavailable (e.g. non-APFS volume) — regular copy
+    console.warn(
+      "APFS clone not available for runner bundle, falling back to regular copy",
+    );
+    await execFileAsync("cp", ["-R", appBundlePath, stagingRoot]);
+  }
+
+  if (!existsSync(stagingBinaryPath)) {
+    throw new Error(
+      `Runner extraction failed: ${stagingBinaryPath} not found after clone`,
+    );
+  }
+
+  // Atomic swap: remove old directory, then rename staging into place.
+  // mv (rename) is atomic on the same filesystem (POSIX guarantee).
+  await execFileAsync("rm", ["-rf", runnerRoot]).catch(() => {});
+  await fs.rename(stagingRoot, runnerRoot);
+
+  // Write version stamp AFTER the swap so it is only visible when the
+  // runner bundle is fully in place.  The stamp file is a sibling of the
+  // .app bundle, not inside it, to preserve the code signature.
+  writeFileSync(stampPath, appVersion, "utf8");
+
+  console.log(`External node runner ready at ${binaryPath}`);
+  return binaryPath;
+}
+
+// ---------------------------------------------------------------------------
+// External controller sidecar — clone controller dist outside .app
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure the controller sidecar is available outside the .app bundle.
+ *
+ * Clones `Contents/Resources/runtime/controller/` to
+ * `~/.nexu/runtime/controller-sidecar/` so launchd services don't hold
+ * file descriptors (native addons via dlopen, require'd modules) to files
+ * inside the .app bundle.
+ *
+ * @returns The path to the external controller sidecar root.
+ */
+async function ensureExternalControllerSidecar(
+  appContentsPath: string,
+  nexuHome: string,
+  appVersion: string,
+): Promise<{ controllerRoot: string; entryPath: string }> {
+  const controllerRoot = path.join(nexuHome, "runtime", "controller-sidecar");
+  const stagingRoot = `${controllerRoot}.staging`;
+  const entryPath = path.join(controllerRoot, "dist", "index.js");
+  const stampPath = path.join(controllerRoot, ".version-stamp");
+
+  // Clean up leftover staging directory from an interrupted extraction
+  if (existsSync(stagingRoot)) {
+    assertSafeRmTarget(stagingRoot);
+    await execFileAsync("rm", ["-rf", stagingRoot]).catch(() => {});
+  }
+
+  // Fast path: already extracted for this version
+  try {
+    if (
+      existsSync(stampPath) &&
+      existsSync(entryPath) &&
+      readFileSync(stampPath, "utf8").trim() === appVersion
+    ) {
+      return { controllerRoot, entryPath };
+    }
+  } catch {
+    // stamp unreadable — re-extract
+  }
+
+  console.log(
+    `Extracting controller sidecar for v${appVersion} to ${controllerRoot}`,
+  );
+
+  const srcControllerDir = path.join(
+    appContentsPath,
+    "Resources",
+    "runtime",
+    "controller",
+  );
+
+  // Atomic extraction: clone to staging directory, then rename into place.
+  // If the process is killed mid-extraction, only the staging directory is
+  // left behind and will be cleaned up on next startup (see above).
+  try {
+    await execFileAsync("cp", ["-Rc", srcControllerDir, stagingRoot]);
+  } catch {
+    console.warn(
+      "APFS clone not available for controller sidecar (~28MB), falling back to regular copy",
+    );
+    await execFileAsync("cp", ["-R", srcControllerDir, stagingRoot]);
+  }
+
+  // Verify critical entry point exists after clone
+  const stagingEntryPath = path.join(stagingRoot, "dist", "index.js");
+  if (!existsSync(stagingEntryPath)) {
+    throw new Error(
+      `Controller sidecar extraction failed: ${stagingEntryPath} not found after clone`,
+    );
+  }
+
+  // Write version stamp inside staging directory
+  const stagingStampPath = path.join(stagingRoot, ".version-stamp");
+  writeFileSync(stagingStampPath, appVersion, "utf8");
+
+  // Atomic swap: remove old directory, then rename staging into place.
+  // mv (rename) is atomic on the same filesystem (POSIX guarantee).
+  assertSafeRmTarget(controllerRoot);
+  await execFileAsync("rm", ["-rf", controllerRoot]).catch(() => {});
+  await fs.rename(stagingRoot, controllerRoot);
+
+  return { controllerRoot, entryPath };
+}
+
+/**
+ * Resolve paths for launchd bootstrap based on whether app is packaged.
+ *
+ * For packaged apps, all paths are resolved OUTSIDE the .app bundle so that
+ * launchd services do not hold file references into the bundle. This allows
+ * Finder to replace the .app during reinstall / drag-and-drop updates.
+ */
+export async function resolveLaunchdPaths(
+  isPackaged: boolean,
+  resourcesPath: string,
+  appVersion?: string,
+): Promise<{
+  nodePath: string;
+  controllerEntryPath: string;
+  openclawPath: string;
+  controllerCwd: string;
+  openclawCwd: string;
+  openclawBinPath: string;
+  openclawExtensionsDir: string;
+}> {
+  if (isPackaged) {
+    const runtimeDir = path.join(resourcesPath, "runtime");
+    const nexuHome = path.join(os.homedir(), ".nexu");
+    const version = appVersion ?? "unknown";
+
+    // Extract runner + controller sidecar outside .app so launchd services
+    // don't lock the bundle. If extraction fails (disk full, permissions,
+    // etc.), fall back to in-bundle paths — the app will work but Finder
+    // will report "app is in use" during reinstall.
+    const appContentsPath = path.dirname(resourcesPath); // .app/Contents
+    let nodePath = process.execPath;
+    let controllerEntryPath = path.join(
+      runtimeDir,
+      "controller",
+      "dist",
+      "index.js",
+    );
+    let controllerRoot = path.join(runtimeDir, "controller");
+
+    try {
+      // 1. Extract Electron runner outside .app (APFS clone, ~0 disk overhead)
+      nodePath = await ensureExternalNodeRunner(
+        appContentsPath,
+        nexuHome,
+        version,
+      );
+
+      // 2. Extract controller sidecar outside .app
+      const result = await ensureExternalControllerSidecar(
+        appContentsPath,
+        nexuHome,
+        version,
+      );
+      controllerEntryPath = result.entryPath;
+      controllerRoot = result.controllerRoot;
+    } catch (err) {
+      console.error(
+        "Failed to extract external runner/sidecar, falling back to in-bundle paths.",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
+    // 3. OpenClaw sidecar is already extracted to ~/.nexu/ by existing logic
+    const openclawSidecarRoot = ensurePackagedOpenclawSidecar(
+      runtimeDir,
+      nexuHome,
+    );
+
+    return {
+      nodePath,
+      controllerEntryPath,
+      openclawPath: path.join(
+        openclawSidecarRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      ),
+      // Use nexuHome as cwd instead of .app paths so launchd services
+      // don't hold directory file-descriptors inside the bundle.
+      controllerCwd: controllerRoot,
+      openclawCwd: openclawSidecarRoot,
+      openclawBinPath: path.join(openclawSidecarRoot, "bin", "openclaw"),
+      openclawExtensionsDir: path.join(
+        openclawSidecarRoot,
+        "node_modules",
+        "openclaw",
+        "extensions",
+      ),
+    };
+  }
+
+  // Development: use local paths
+  const repoRoot = getWorkspaceRoot();
+  return {
+    nodePath: process.execPath,
+    controllerEntryPath: path.join(
+      repoRoot,
+      "apps",
+      "controller",
+      "dist",
+      "index.js",
+    ),
+    openclawPath: path.join(
+      repoRoot,
+      "openclaw-runtime",
+      "node_modules",
+      "openclaw",
+      "openclaw.mjs",
+    ),
+    controllerCwd: path.join(repoRoot, "apps", "controller"),
+    openclawCwd: repoRoot,
+    openclawBinPath: path.join(
+      repoRoot,
+      ".tmp",
+      "sidecars",
+      "openclaw",
+      "bin",
+      "openclaw",
+    ),
+    openclawExtensionsDir: path.join(
+      repoRoot,
+      ".tmp",
+      "sidecars",
+      "openclaw",
+      "node_modules",
+      "openclaw",
+      "extensions",
+    ),
+  };
 }

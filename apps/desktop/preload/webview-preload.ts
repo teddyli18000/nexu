@@ -17,7 +17,6 @@ const runtimeConfig = getDesktopRuntimeConfig(process.env, {
   resourcesPath: process.defaultApp ? undefined : process.resourcesPath,
   useBuildConfig: !process.defaultApp,
 });
-const webviewPreloadUrl = new URL("./webview-preload.js", import.meta.url).href;
 
 function reportStartupProbe(payload: StartupProbePayload): void {
   try {
@@ -32,7 +31,11 @@ const hostBridge: HostBridge = {
     buildInfo: runtimeConfig.buildInfo,
     sentryDsn: runtimeConfig.sentryDsn,
     isPackaged: !process.defaultApp,
-    webviewPreloadUrl,
+    needsSetupAnimation: false,
+    webviewPreloadUrl: new URL(
+      "./webview-preload.js",
+      import.meta.url,
+    ).toString(),
   },
 
   invoke<TChannel extends HostInvokeChannel>(

@@ -14,28 +14,56 @@ import {
   session,
   shell,
 } from "electron";
+import { getOpenclawSkillsDir } from "../shared/desktop-paths";
 import type { DesktopChromeMode, DesktopSurface } from "../shared/host";
+import { buildChildProcessProxyEnv } from "../shared/proxy-config";
 import { getDesktopRuntimeConfig } from "../shared/runtime-config";
 import { getDesktopSentryBuildMetadata } from "../shared/sentry-build-metadata";
-import { getDesktopAppRoot } from "../shared/workspace-paths";
+import { getDesktopAppRoot, getWorkspaceRoot } from "../shared/workspace-paths";
 import { DesktopDiagnosticsReporter } from "./desktop-diagnostics";
 import { exportDiagnostics } from "./diagnostics-export";
 import {
   registerIpcHandlers,
   setComponentUpdater,
+  setQuitFallback,
+  setQuitHandlerOpts,
   setUpdateManager,
 } from "./ipc";
 import { getDesktopRuntimePlatformAdapter } from "./platforms";
-import { resolveRuntimePlatform } from "./platforms/platform-resolver";
-import type { DesktopRuntimeResidencyContext } from "./platforms/types";
+import { resolveLaunchdPaths } from "./platforms/mac/launchd-paths";
+import type { PrepareForUpdateInstallArgs } from "./platforms/types";
 import { RuntimeOrchestrator } from "./runtime/daemon-supervisor";
-import { createRuntimeUnitManifests } from "./runtime/manifests";
+import {
+  buildSkillNodePath,
+  checkOpenclawExtractionNeeded,
+  createRuntimeUnitManifests,
+  extractOpenclawSidecarAsync,
+} from "./runtime/manifests";
+import {
+  type PortAllocation,
+  PortAllocationError,
+  allocateDesktopRuntimePorts,
+} from "./runtime/port-allocation";
 import {
   flushRuntimeLoggers,
   rotateDesktopLogSession,
   writeDesktopMainLog,
 } from "./runtime/runtime-logger";
+import {
+  type LaunchdBootstrapResult,
+  SERVICE_LABELS,
+  bootstrapWithLaunchd,
+  getDefaultPlistDir,
+  getLogDir,
+  installLaunchdQuitHandler,
+  teardownLaunchdServices,
+} from "./services";
+import { isLaunchdBootstrapEnabled } from "./services/launchd-bootstrap";
 import { ProxyManager } from "./services/proxy-manager";
+import {
+  getLegacyNexuHomeStateDir,
+  migrateOpenclawState,
+} from "./services/state-migration";
 import { SleepGuard, type SleepGuardLogEntry } from "./sleep-guard";
 import { ComponentUpdater } from "./updater/component-updater";
 import { StartupHealthCheck } from "./updater/rollback";
@@ -43,36 +71,6 @@ import { UpdateManager } from "./updater/update-manager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const startupEpochMs = Date.now();
-let mainWindow: BrowserWindow | null = null;
-let diagnosticsReporter: DesktopDiagnosticsReporter | null = null;
-/** When true, the Develop menu and reload shortcuts are visible in production. */
-let productionDebugMode = false;
-let sleepGuard: SleepGuard | null = null;
-let residencyContext: DesktopRuntimeResidencyContext = null;
-let proxyManager: ProxyManager | null = null;
-
-let resolveColdStartReady: () => void;
-const coldStartReady = new Promise<void>((resolve) => {
-  resolveColdStartReady = resolve;
-});
-
-async function refreshProxyDiagnostics(): Promise<void> {
-  if (!proxyManager) {
-    return;
-  }
-
-  const targets = [
-    { label: "controller", url: runtimeConfig.urls.controllerBase },
-    { label: "openclaw", url: runtimeConfig.urls.openclawBase },
-    { label: "external", url: "https://nexu.io" },
-  ];
-  const snapshot = await proxyManager.collectDiagnostics(
-    runtimeConfig.proxy,
-    targets,
-  );
-  diagnosticsReporter?.setProxySnapshot(snapshot);
-}
 
 // Set display name early (matches productName in package.json).
 app.setName("nexu");
@@ -94,38 +92,53 @@ void app.dock?.show();
 const electronRoot = app.isPackaged
   ? process.resourcesPath
   : getDesktopAppRoot();
-logStartupStep(
-  `electron root resolved packaged=${String(app.isPackaged)} path=${electronRoot}`,
-);
 const baseRuntimeConfig = getDesktopRuntimeConfig(process.env, {
   appVersion: app.getVersion(),
   resourcesPath: app.isPackaged ? electronRoot : undefined,
   useBuildConfig: app.isPackaged,
 });
-logStartupStep("base runtime config created");
-const runtimePlatform = getDesktopRuntimePlatformAdapter(baseRuntimeConfig);
-const runtimeLifecycle = runtimePlatform.lifecycle;
-const { allocations: runtimePortAllocations, runtimeConfig } =
-  await runtimeLifecycle.prepareRuntimeConfig({
-    baseRuntimeConfig,
-    env: process.env,
-    logStartupStep,
-  });
-logStartupStep(
-  `runtime config ready platform=${runtimePlatform.id} residency=${runtimeLifecycle.residency} runtimeMode=${runtimeConfig.runtimeMode}`,
+// In launchd mode, skip port probing — the bootstrap has its own port
+// recovery via runtime-ports.json and handles leftover processes gracefully.
+// Probing here would waste time and the results get overridden by attach anyway.
+const useLaunchdMode = isLaunchdBootstrapEnabled();
+const runtimeLifecycle =
+  getDesktopRuntimePlatformAdapter(baseRuntimeConfig).lifecycle;
+const { allocations: runtimePortAllocations, runtimeConfig } = useLaunchdMode
+  ? {
+      allocations: [] as PortAllocation[],
+      runtimeConfig: baseRuntimeConfig,
+    }
+  : await allocateDesktopRuntimePorts(process.env, baseRuntimeConfig).catch(
+      (error: unknown) => {
+        if (error instanceof PortAllocationError) {
+          throw new Error(
+            `[desktop:ports] ${error.code} purpose=${error.purpose} ` +
+              `preferredPort=${error.preferredPort ?? "n/a"} ${error.message}`,
+          );
+        }
+
+        throw error;
+      },
+    );
+const needsSetupExtraction = checkOpenclawExtractionNeeded(
+  electronRoot,
+  app.getPath("userData"),
+  app.isPackaged,
 );
+
+// Set env var BEFORE window creation so the preload can read it for bootstrap data.
+if (needsSetupExtraction) {
+  process.env.NEXU_NEEDS_SETUP_ANIMATION = "1";
+}
+
 const orchestrator = new RuntimeOrchestrator(
-  await measureStartupStep("createRuntimeUnitManifests", () =>
-    createRuntimeUnitManifests(
-      electronRoot,
-      app.getPath("userData"),
-      app.isPackaged,
-      runtimeConfig,
-      runtimePlatform.capabilities,
-    ),
+  createRuntimeUnitManifests(
+    electronRoot,
+    app.getPath("userData"),
+    app.isPackaged,
+    runtimeConfig,
   ),
 );
-logStartupStep("runtime orchestrator created");
 
 // Disable Chromium's popup blocker.  window.open() inside webviews can lose
 // "transient user activation" after async work (fetch → response → open),
@@ -250,6 +263,93 @@ if (sentryDsn) {
   });
 }
 
+let mainWindow: BrowserWindow | null = null;
+let diagnosticsReporter: DesktopDiagnosticsReporter | null = null;
+
+/** When true, the Develop menu and reload shortcuts are visible in production. */
+let productionDebugMode = false;
+let sleepGuard: SleepGuard | null = null;
+let launchdResult: LaunchdBootstrapResult | null = null;
+let proxyManager: ProxyManager | null = null;
+
+async function refreshProxyDiagnostics(): Promise<void> {
+  if (!proxyManager) {
+    return;
+  }
+  const targets = [
+    { label: "controller", url: runtimeConfig.urls.controllerBase },
+    { label: "openclaw", url: runtimeConfig.urls.openclawBase },
+    { label: "external", url: "https://nexu.io" },
+  ];
+  const snapshot = await proxyManager.collectDiagnostics(
+    runtimeConfig.proxy,
+    targets,
+  );
+  diagnosticsReporter?.setProxySnapshot(snapshot);
+}
+
+// ---------------------------------------------------------------------------
+// Unified graceful shutdown — single authoritative teardown path.
+// Called by: before-quit, SIGTERM, SIGINT, quit-handler, system shutdown.
+// Idempotent: safe to call multiple times (second call is a no-op).
+// ---------------------------------------------------------------------------
+
+let shutdownInProgress = false;
+const SHUTDOWN_HARD_TIMEOUT_MS = 8_000;
+
+async function gracefulShutdown(reason: string): Promise<void> {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+
+  writeDesktopMainLog({
+    source: "shutdown",
+    stream: "system",
+    kind: "lifecycle",
+    message: `graceful shutdown started: ${reason}`,
+    logFilePath: null,
+    windowId: null,
+  });
+
+  // Hard timeout: if teardown hangs, force exit after 8 seconds.
+  const hardTimer = setTimeout(() => {
+    writeDesktopMainLog({
+      source: "shutdown",
+      stream: "system",
+      kind: "lifecycle",
+      message: `graceful shutdown hard timeout (${SHUTDOWN_HARD_TIMEOUT_MS}ms), forcing exit`,
+      logFilePath: null,
+      windowId: null,
+    });
+    process.exit(1);
+  }, SHUTDOWN_HARD_TIMEOUT_MS);
+
+  try {
+    sleepGuard?.dispose(reason);
+    await diagnosticsReporter?.flushNow().catch(() => undefined);
+    flushRuntimeLoggers();
+
+    if (launchdResult) {
+      await teardownLaunchdServices({
+        launchd: launchdResult.launchd,
+        labels: launchdResult.labels,
+        plistDir: getDefaultPlistDir(!app.isPackaged),
+      });
+    }
+
+    await orchestrator.dispose().catch(() => undefined);
+  } finally {
+    clearTimeout(hardTimer);
+  }
+}
+
+// Cold-start gate: IPC handler for `env:get-runtime-config` waits for this
+// promise to resolve before returning, ensuring the renderer always gets the
+// final config with correct ports (not the pre-cold-start defaults).
+let resolveColdStartReady: () => void;
+const coldStartReady = new Promise<void>((r) => {
+  resolveColdStartReady = r;
+});
+
 logLaunchTimeline(
   `runtime ports ${runtimePortAllocations
     .map(
@@ -281,7 +381,6 @@ function triggerUpdateCheck(): void {
 }
 
 function installApplicationMenu(): void {
-  const runtimePlatform = resolveRuntimePlatform();
   const developMenu: MenuItemConstructorOptions = {
     label: "Develop",
     submenu: [
@@ -329,7 +428,7 @@ function installApplicationMenu(): void {
   };
 
   const template: MenuItemConstructorOptions[] = [
-    ...(runtimePlatform === "mac"
+    ...(process.platform === "darwin"
       ? ([
           {
             role: "appMenu",
@@ -417,26 +516,6 @@ function logLaunchTimeline(message: string): void {
   });
 }
 
-function logStartupStep(message: string): void {
-  logLaunchTimeline(`[startup +${Date.now() - startupEpochMs}ms] ${message}`);
-}
-
-async function measureStartupStep<T>(
-  name: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  logStartupStep(`${name}:start`);
-  try {
-    const result = await operation();
-    logStartupStep(`${name}:done`);
-    return result;
-  } catch (error) {
-    logStartupStep(
-      `${name}:fail ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw error;
-  }
-}
 function logRendererEvent({
   source,
   stream,
@@ -506,6 +585,169 @@ async function waitForControllerReadiness(): Promise<void> {
   );
 }
 
+async function runDesktopColdStart(): Promise<void> {
+  diagnosticsReporter?.markColdStartRunning("starting controller");
+  logColdStart("starting controller");
+  await orchestrator.startOne("controller");
+
+  diagnosticsReporter?.markColdStartRunning("waiting for controller readiness");
+  logColdStart("waiting for controller readiness");
+  await waitForControllerReadiness();
+
+  diagnosticsReporter?.markColdStartRunning("starting web");
+  logColdStart("starting web");
+  await orchestrator.startOne("web");
+
+  const sessionId = rotateDesktopLogSession();
+  logColdStart(`cold start session ready sessionId=${sessionId}`);
+
+  logColdStart("cold start complete");
+  diagnosticsReporter?.markColdStartSucceeded();
+}
+
+async function runLaunchdColdStart(): Promise<void> {
+  diagnosticsReporter?.markColdStartRunning("launchd bootstrap");
+  logColdStart("starting launchd bootstrap");
+
+  const isDev = !app.isPackaged;
+  const paths = await resolveLaunchdPaths(
+    app.isPackaged,
+    electronRoot,
+    app.getVersion(),
+  );
+
+  const nexuHome = runtimeConfig.paths.nexuHome.replace(
+    /^~/,
+    process.env.HOME ?? "",
+  );
+
+  // In packaged mode, keep openclaw state under Electron userData (matches v0.1.5).
+  // In dev mode, derive from nexuHome for repo-local isolation.
+  const openclawRuntimeRoot = isDev
+    ? resolve(nexuHome, "runtime", "openclaw")
+    : resolve(app.getPath("userData"), "runtime", "openclaw");
+  const openclawStateDir = resolve(openclawRuntimeRoot, "state");
+  const openclawConfigPath = resolve(openclawStateDir, "openclaw.json");
+
+  // Migrate any state created under ~/.nexu during v0.1.6 back to userData path
+  if (!isDev) {
+    const legacyStateDir = getLegacyNexuHomeStateDir(
+      runtimeConfig.paths.nexuHome,
+    );
+    if (legacyStateDir !== openclawStateDir) {
+      migrateOpenclawState({
+        targetStateDir: openclawStateDir,
+        sourceStateDir: legacyStateDir,
+        log: (msg) => logColdStart(`state-migration: ${msg}`),
+      });
+    }
+  }
+
+  // In dev mode, serve web app from apps/web/dist
+  // In packaged mode, serve from resources/web
+  const webRoot = isDev
+    ? resolve(getWorkspaceRoot(), "apps", "web", "dist")
+    : resolve(electronRoot, "runtime", "web", "dist");
+
+  const repoRoot = getWorkspaceRoot();
+  const userDataPath = app.getPath("userData");
+  const openclawSkillsDir = getOpenclawSkillsDir(userDataPath);
+  const openclawTmpDir = resolve(openclawRuntimeRoot, "tmp");
+  const openclawBinPath =
+    process.env.NEXU_OPENCLAW_BIN ?? paths.openclawBinPath;
+  const openclawExtensionsDir = paths.openclawExtensionsDir;
+  const skillhubStaticSkillsDir = app.isPackaged
+    ? resolve(electronRoot, "static/bundled-skills")
+    : resolve(repoRoot, "apps/desktop/static/bundled-skills");
+  const platformTemplatesDir = app.isPackaged
+    ? resolve(electronRoot, "static/platform-templates")
+    : resolve(repoRoot, "apps/controller/static/platform-templates");
+  const skillNodePath = buildSkillNodePath(electronRoot, app.isPackaged);
+  const proxyEnv = buildChildProcessProxyEnv(runtimeConfig.proxy);
+
+  launchdResult = await bootstrapWithLaunchd({
+    isDev,
+    controllerPort: runtimeConfig.ports.controller,
+    openclawPort: Number(
+      new URL(runtimeConfig.urls.openclawBase).port || 18789,
+    ),
+    nexuHome,
+    gatewayToken: isDev ? undefined : runtimeConfig.tokens.gateway,
+    webPort: runtimeConfig.ports.web,
+    webRoot,
+    plistDir: getDefaultPlistDir(isDev),
+    ...paths,
+    openclawConfigPath,
+    openclawStateDir,
+    // Controller-specific env vars
+    webUrl: runtimeConfig.urls.web,
+    openclawSkillsDir,
+    skillhubStaticSkillsDir,
+    platformTemplatesDir,
+    openclawBinPath,
+    openclawExtensionsDir,
+    skillNodePath,
+    openclawTmpDir,
+    proxyEnv,
+    amplitudeApiKey:
+      process.env.AMPLITUDE_API_KEY ??
+      runtimeConfig.amplitudeApiKey ??
+      undefined,
+    log: (message: string) => logColdStart(message),
+    appVersion: app.getVersion(),
+    userDataPath: app.getPath("userData"),
+    buildSource:
+      process.env.NEXU_DESKTOP_BUILD_SOURCE ??
+      (app.isPackaged ? "packaged" : "local-dev"),
+  });
+
+  // Wire launchd-managed units into the orchestrator so the control plane
+  // shows correct status, and Start/Stop buttons work via launchd.
+  const launchdLogDir = getLogDir(isDev ? nexuHome : undefined);
+  orchestrator.enableLaunchdMode(
+    launchdResult.launchd,
+    {
+      controller: SERVICE_LABELS.controller(isDev),
+      openclaw: SERVICE_LABELS.openclaw(isDev),
+    },
+    launchdLogDir,
+  );
+
+  // Always sync runtimeConfig with actual effective ports — these may differ
+  // from the initial config if ports were recovered from a previous session or
+  // OS-assigned due to conflicts.
+  const { controllerPort, openclawPort, webPort } =
+    launchdResult.effectivePorts;
+  runtimeConfig.ports.controller = controllerPort;
+  runtimeConfig.ports.web = webPort;
+  runtimeConfig.urls.controllerBase = `http://127.0.0.1:${controllerPort}`;
+  runtimeConfig.urls.web = `http://127.0.0.1:${webPort}`;
+  runtimeConfig.urls.openclawBase = `http://127.0.0.1:${openclawPort}`;
+
+  if (launchdResult.isAttach) {
+    logColdStart(
+      `attached to running services (controller=${controllerPort} openclaw=${openclawPort} web=${webPort})`,
+    );
+  } else {
+    logColdStart("launchd services started, waiting for controller readiness");
+    diagnosticsReporter?.markColdStartRunning(
+      "waiting for controller readiness",
+    );
+  }
+
+  const controllerReady = await launchdResult.controllerReady;
+  if (!controllerReady.ok) {
+    throw controllerReady.error;
+  }
+  if (!launchdResult.isAttach) {
+    logColdStart("controller ready");
+  }
+
+  const sessionId = rotateDesktopLogSession();
+  logColdStart(`launchd cold start complete sessionId=${sessionId}`);
+  diagnosticsReporter?.markColdStartSucceeded();
+}
+
 function focusMainWindow(): void {
   if (!mainWindow) {
     return;
@@ -522,21 +764,24 @@ function focusMainWindow(): void {
 }
 
 app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+    return;
+  }
+
   focusMainWindow();
 });
 
 function createMainWindow(): BrowserWindow {
   logLaunchTimeline("main window creation requested");
-  logStartupStep("createMainWindow:start");
-  const isMacOS = resolveRuntimePlatform() === "mac";
+  const isMacOS = process.platform === "darwin";
   const window = new BrowserWindow({
-    width: 1400,
-    height: 920,
-    minWidth: 1120,
-    minHeight: 760,
+    width: 1280,
+    height: 720,
+    minWidth: needsSetupExtraction ? 1280 : 1120,
+    minHeight: 720,
     backgroundColor: isMacOS ? "#00000000" : "#0B1020",
     title: "nexu",
-    autoHideMenuBar: !isMacOS,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 18 },
     ...(isMacOS
@@ -591,6 +836,12 @@ function createMainWindow(): BrowserWindow {
   window.webContents.on(
     "did-fail-load",
     (_event, errorCode, errorDescription, validatedUrl) => {
+      diagnosticsReporter?.recordStartupProbe({
+        source: "main",
+        stage: "main:renderer-did-fail-load",
+        status: "error",
+        detail: `${errorCode} ${errorDescription} ${validatedUrl}`,
+      });
       diagnosticsReporter?.recordRendererDidFailLoad({
         errorCode,
         errorDescription,
@@ -607,9 +858,12 @@ function createMainWindow(): BrowserWindow {
   );
 
   window.webContents.on("did-finish-load", () => {
-    logStartupStep(
-      `main window did-finish-load url=${window.webContents.getURL()}`,
-    );
+    diagnosticsReporter?.recordStartupProbe({
+      source: "main",
+      stage: "main:renderer-did-finish-load",
+      status: "ok",
+      detail: window.webContents.getURL(),
+    });
     diagnosticsReporter?.recordRendererDidFinishLoad(
       window.webContents.getURL(),
     );
@@ -623,6 +877,12 @@ function createMainWindow(): BrowserWindow {
   });
 
   window.webContents.on("render-process-gone", (_event, details) => {
+    diagnosticsReporter?.recordStartupProbe({
+      source: "main",
+      stage: "main:renderer-process-gone",
+      status: "error",
+      detail: `reason=${details.reason} exitCode=${details.exitCode}`,
+    });
     diagnosticsReporter?.recordRendererProcessGone({
       reason: details.reason,
       exitCode: details.exitCode,
@@ -637,19 +897,24 @@ function createMainWindow(): BrowserWindow {
   });
 
   window.once("ready-to-show", () => {
+    diagnosticsReporter?.recordStartupProbe({
+      source: "main",
+      stage: "main:window-ready-to-show",
+      status: "ok",
+      detail: window.webContents.getURL(),
+    });
     logLaunchTimeline("main window ready-to-show");
-    logStartupStep("main window ready-to-show");
-    if (isMacOS) {
+    if (isMacOS && !needsSetupExtraction) {
+      // Only apply vibrancy after ready-to-show when NOT in setup mode.
+      // During setup, vibrancy is applied after the animation finishes
+      // to avoid the transparent background showing through the video.
       window.setBackgroundColor("#00000000");
       window.setVibrancy("sidebar");
     }
-    window.show();
-    if (!isMacOS) {
-      window.setMenuBarVisibility(false);
+    if (!window.isVisible()) {
+      window.show();
+      focusMainWindow();
     }
-    logStartupStep("main window show called");
-    focusMainWindow();
-    logStartupStep("main window focus requested");
   });
 
   window.on("closed", () => {
@@ -658,19 +923,26 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
-  const desktopDevServerUrl = process.env.NEXU_DESKTOP_DEV_SERVER_URL;
-
-  if (desktopDevServerUrl) {
-    void window.loadURL(desktopDevServerUrl);
-    logLaunchTimeline(
-      `main window loadURL dispatched url=${desktopDevServerUrl}`,
-    );
-    logStartupStep("createMainWindow:loadURL-dispatched");
-  } else {
-    void window.loadFile(resolve(__dirname, "../../dist/index.html"));
-    logLaunchTimeline("main window loadFile dispatched");
-    logStartupStep("createMainWindow:loadFile-dispatched");
+  // During first install / post-update, show the window IMMEDIATELY with a
+  // white background — before loadFile, before React, before anything.
+  // This eliminates the 10-20s blank screen while the Electron main process
+  // is doing sidecar extraction / launchd bootstrap in the background.
+  // The white background matches the animation overlay seamlessly.
+  if (needsSetupExtraction) {
+    logLaunchTimeline("setup animation: showing window immediately");
+    window.setBackgroundColor("#ffffff");
+    window.show();
+    focusMainWindow();
   }
+
+  void window.loadFile(resolve(__dirname, "../../dist/index.html"));
+  diagnosticsReporter?.recordStartupProbe({
+    source: "main",
+    stage: "main:window-load-dispatched",
+    status: "ok",
+    detail: resolve(__dirname, "../../dist/index.html"),
+  });
+  logLaunchTimeline("main window loadFile dispatched");
   mainWindow = window;
   return window;
 }
@@ -790,16 +1062,12 @@ app.on("web-contents-created", (_event, contents) => {
 });
 
 logLaunchTimeline("electron main module evaluated");
-logStartupStep("electron main module evaluated");
 
 app.whenReady().then(async () => {
   logLaunchTimeline("app.whenReady resolved");
-  logStartupStep("app.whenReady resolved");
   proxyManager = new ProxyManager(session.defaultSession);
   await proxyManager.applyPolicy(runtimeConfig.proxy);
-  logStartupStep("installApplicationMenu:start");
   installApplicationMenu();
-  logStartupStep("installApplicationMenu:done");
 
   // Hidden shortcut to toggle debug mode in production (Develop menu + reload).
   // Harmless in dev since those items are always visible.
@@ -810,7 +1078,6 @@ app.whenReady().then(async () => {
     });
   }
   diagnosticsReporter = new DesktopDiagnosticsReporter(orchestrator);
-  logStartupStep("DesktopDiagnosticsReporter:created");
   await refreshProxyDiagnostics();
   diagnosticsReporter.recordStartupProbe({
     source: "main",
@@ -818,16 +1085,21 @@ app.whenReady().then(async () => {
     status: "ok",
     detail: app.getVersion(),
   });
-  logStartupStep("registerIpcHandlers:start");
   registerIpcHandlers(
     orchestrator,
     runtimeConfig,
     diagnosticsReporter,
     coldStartReady,
   );
-  logStartupStep("registerIpcHandlers:done");
+  // Provide orchestrator-mode quit fallback for app:quit IPC when launchd
+  // quit handler is not available (e.g. CI, orchestrator mode).
+  setQuitFallback(() =>
+    gracefulShutdown("ipc-quit").finally(() => {
+      (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
+      app.exit(0);
+    }),
+  );
   const unsubscribeDiagnostics = diagnosticsReporter.start();
-  logStartupStep("DesktopDiagnosticsReporter:started");
   sleepGuard = new SleepGuard({
     powerMonitor,
     powerSaveBlocker,
@@ -836,11 +1108,8 @@ app.whenReady().then(async () => {
       diagnosticsReporter?.setSleepGuardSnapshot(snapshot);
     },
   });
-  logStartupStep("SleepGuard:created");
   const win = createMainWindow();
-  logStartupStep(`main window created id=${win.webContents.id}`);
   sleepGuard.start("desktop-runtime-active");
-  logStartupStep("SleepGuard:started");
 
   void (async () => {
     const healthCheck = new StartupHealthCheck();
@@ -853,36 +1122,27 @@ app.whenReady().then(async () => {
     }
 
     try {
-      const recoveredSession = await runtimeLifecycle.recoverSession?.({
-        app,
-        electronRoot,
-        runtimeConfig,
-        logLifecycleStep: logColdStart,
-      });
-      if (recoveredSession?.snapshot) {
-        const bindings = recoveredSession.snapshot.bindings;
-        logColdStart(
-          `recovery snapshot store=${recoveredSession.snapshot.store} controller=${bindings.controllerPort ?? "n/a"} web=${bindings.webPort ?? "n/a"} openclaw=${bindings.openclawPort ?? "n/a"}`,
+      if (needsSetupExtraction) {
+        logColdStart("starting async openclaw sidecar extraction");
+        diagnosticsReporter?.markColdStartRunning(
+          "extracting openclaw sidecar",
         );
+        await extractOpenclawSidecarAsync(
+          electronRoot,
+          app.getPath("userData"),
+        );
+        logColdStart("openclaw sidecar extraction complete");
       }
 
-      logColdStart(`bootstrap residency: ${runtimeLifecycle.residency}`);
-      logColdStart(`runtime mode: ${runtimeConfig.runtimeMode}`);
       logColdStart(
-        `runtime targets controller=${runtimeConfig.urls.controllerBase} web=${runtimeConfig.urls.web} openclaw=${runtimeConfig.urls.openclawBase}`,
+        `bootstrap mode: ${useLaunchdMode ? "launchd" : "orchestrator"}`,
       );
-      const coldStartResult = await runtimeLifecycle.coldStartOrAttach({
-        app,
-        electronRoot,
-        runtimeConfig,
-        orchestrator,
-        diagnosticsReporter,
-        logColdStart,
-        logStartupStep,
-        rotateDesktopLogSession,
-        waitForControllerReadiness,
-      });
-      residencyContext = coldStartResult.residencyContext;
+
+      if (useLaunchdMode) {
+        await runLaunchdColdStart();
+      } else {
+        await runDesktopColdStart();
+      }
       await refreshProxyDiagnostics();
       healthCheck.recordSuccess();
     } catch (error) {
@@ -904,21 +1164,40 @@ app.whenReady().then(async () => {
       resolveColdStartReady();
     }
 
-    runtimeLifecycle.installShutdownCoordinator({
-      app,
-      mainWindow: win,
-      residencyContext,
-      orchestrator,
-      diagnosticsReporter,
-      sleepGuardDispose: (reason) => sleepGuard?.dispose(reason),
-      flushRuntimeLoggers,
-    });
+    // Install launchd quit handler regardless of cold-start success/failure
+    // so services can always be stopped cleanly on quit.
+    if (launchdResult) {
+      const quitOpts = {
+        launchd: launchdResult.launchd,
+        labels: launchdResult.labels,
+        webServer: launchdResult.webServer,
+        plistDir: getDefaultPlistDir(!app.isPackaged),
+        onBeforeQuit: async () => {
+          sleepGuard?.dispose("launchd-quit");
+          await diagnosticsReporter?.flushNow().catch(() => undefined);
+          flushRuntimeLoggers();
+        },
+      };
+      installLaunchdQuitHandler(quitOpts);
+      setQuitHandlerOpts(quitOpts);
+    }
 
     if (app.isPackaged && runtimeConfig.updates.autoUpdateEnabled) {
       const updateMgr = new UpdateManager(win, orchestrator, {
         channel: runtimeConfig.updates.channel,
         feedUrl: runtimeConfig.urls.updateFeed,
-        prepareForUpdateInstall: runtimeLifecycle.prepareForUpdateInstall,
+        prepareForUpdateInstall: runtimeLifecycle.prepareForUpdateInstall
+          ? async (args: PrepareForUpdateInstallArgs) => {
+              await runtimeLifecycle.prepareForUpdateInstall?.(args);
+            }
+          : undefined,
+        launchd: launchdResult
+          ? {
+              manager: launchdResult.launchd,
+              labels: launchdResult.labels,
+              plistDir: getDefaultPlistDir(!app.isPackaged),
+            }
+          : undefined,
       });
       setUpdateManager(updateMgr);
       updateMgr.startPeriodicCheck();
@@ -945,11 +1224,47 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  switch (resolveRuntimePlatform()) {
-    case "mac":
-      return;
-    case "win":
-      app.quit();
-      return;
+  if (process.platform !== "darwin") {
+    app.quit();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Signal handlers — route to unified gracefulShutdown.
+// SIGTERM: sent by launchctl stop, systemd, Docker, Activity Monitor "Quit".
+// SIGINT: sent by Ctrl+C in terminal.
+// ---------------------------------------------------------------------------
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    void gracefulShutdown(`signal:${signal}`).finally(() => {
+      (app as unknown as Record<string, unknown>).__nexuForceQuit = true;
+      app.exit(0);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// before-quit handler — uses gracefulShutdown for non-launchd mode.
+// In launchd mode, quit-handler.ts intercepts window close and calls
+// gracefulShutdown via teardownLaunchdServices directly.
+// ---------------------------------------------------------------------------
+
+const beforeQuitHandler = (event: Electron.Event) => {
+  // If using launchd mode, the quit handler (quit-handler.ts) manages
+  // the quit flow via window close dialog. This handler only does
+  // lightweight cleanup.
+  if (launchdResult) {
+    return;
+  }
+
+  // Legacy orchestrator mode: run unified shutdown, then quit.
+  event.preventDefault();
+  void gracefulShutdown("before-quit").finally(() => {
+    // P1-2: Remove only this specific handler (not all before-quit listeners).
+    app.removeListener("before-quit", beforeQuitHandler);
+    app.quit();
+  });
+};
+
+app.on("before-quit", beforeQuitHandler);

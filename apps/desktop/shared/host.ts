@@ -36,6 +36,8 @@ export const hostInvokeChannels = [
   "update:set-source",
   "component:check",
   "component:install",
+  "setup:animation-complete",
+  "app:quit",
 ] as const;
 
 export type HostInvokeChannel = (typeof hostInvokeChannels)[number];
@@ -141,6 +143,8 @@ export type HostInvokePayloadMap = {
   "update:set-source": { source: UpdateSource };
   "component:check": undefined;
   "component:install": { id: string };
+  "setup:animation-complete": undefined;
+  "app:quit": { decision: "quit-completely" | "run-in-background" };
 };
 
 export type HostInvokeResultMap = {
@@ -401,6 +405,8 @@ export type HostInvokeResultMap = {
     }>;
   };
   "component:install": { ok: boolean };
+  "setup:animation-complete": undefined;
+  "app:quit": undefined;
 };
 
 export type AppInfo = {
@@ -447,6 +453,9 @@ export type HostDesktopCommand =
     }
   | {
       type: "desktop:check-for-updates";
+    }
+  | {
+      type: "setup:complete";
     };
 
 export type RuntimeUnitSnapshot = Omit<RuntimeUnitState, "logTail">;
@@ -469,9 +478,9 @@ export type RuntimeUnitKind = "surface" | "service" | "runtime";
 export type RuntimeUnitLaunchStrategy =
   | "embedded"
   | "managed"
-  | "external"
   | "delegated"
-  | "launchd";
+  | "launchd"
+  | "external";
 
 export type RuntimeUnitPhase =
   | "idle"
@@ -562,6 +571,7 @@ export type HostBootstrap = {
   buildInfo: DesktopBuildInfo;
   sentryDsn: string | null;
   isPackaged: boolean;
+  needsSetupAnimation: boolean;
   webviewPreloadUrl: string;
 };
 

@@ -53,3 +53,43 @@ export function resolveLaunchdRuntimeRoots({
     logsRoot: resolve(nexuHome, "logs"),
   };
 }
+
+export function resolveRuntimeManifestsRoots({
+  app,
+  electronRoot,
+  runtimeConfig,
+}: PlatformCapabilitiesArgs): {
+  runtimeSidecarBaseRoot: string;
+  runtimeRoot: string;
+  openclawSidecarRoot: string;
+  openclawRuntimeRoot: string;
+  openclawConfigDir: string;
+  openclawStateDir: string;
+  openclawTempDir: string;
+  logsDir: string;
+} {
+  const nexuHome = expandHomePath(runtimeConfig.paths.nexuHome);
+  const runtimeRoot = app.isPackaged
+    ? resolve(app.getPath("userData"), "runtime")
+    : resolve(nexuHome, "runtime");
+  const runtimeSidecarBaseRoot = app.isPackaged
+    ? resolve(electronRoot, "runtime")
+    : resolve(resolve(electronRoot, "..", "..", ".."), ".tmp/sidecars");
+  const openclawRuntimeRoot = resolve(runtimeRoot, "openclaw");
+  const openclawSidecarRoot = app.isPackaged
+    ? resolve(runtimeSidecarBaseRoot, "openclaw")
+    : resolve(runtimeSidecarBaseRoot, "openclaw");
+
+  return {
+    runtimeSidecarBaseRoot,
+    runtimeRoot,
+    openclawSidecarRoot,
+    openclawRuntimeRoot,
+    openclawConfigDir: resolve(openclawRuntimeRoot, "config"),
+    openclawStateDir: resolve(openclawRuntimeRoot, "state"),
+    openclawTempDir: resolve(openclawRuntimeRoot, "tmp"),
+    logsDir: app.isPackaged
+      ? resolve(app.getPath("userData"), "logs", "runtime-units")
+      : resolve(app.getPath("userData"), "logs", "runtime-units"),
+  };
+}

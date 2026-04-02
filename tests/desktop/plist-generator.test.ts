@@ -181,6 +181,8 @@ describe("generatePlist", () => {
       "/app/openclaw/openclaw.mjs",
       "gateway",
       "run",
+      "--port",
+      String(mockEnv.openclawPort),
     ]);
   });
 
@@ -203,6 +205,8 @@ describe("generatePlist", () => {
       "/app/openclaw/openclaw.mjs",
       "gateway",
       "run",
+      "--port",
+      String(mockEnv.openclawPort),
       "--auth",
       "none",
     ]);
