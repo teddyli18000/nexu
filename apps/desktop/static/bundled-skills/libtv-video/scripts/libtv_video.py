@@ -97,7 +97,7 @@ def _get_pending_sessions():
 # ── URL extraction ──
 
 LIBTV_RES_PATTERN = re.compile(
-    r"https://libtv-res\.liblib\.art/[^\s\"'<>)]+\.(?:png|jpg|jpeg|webp|mp4|mov|webm)"
+    r"https://libtv-res\.liblib\.art/sd-gen-save-img/[^\s\"'<>)]+"
 )
 
 def extract_result_urls(messages):
