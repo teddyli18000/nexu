@@ -17,6 +17,8 @@ import type { ControllerBindings } from "../types.js";
 const errorResponseSchema = z.object({
   message: z.string(),
 });
+const GITHUB_STAR_REWARD_DISABLED_MESSAGE =
+  "GitHub star reward is temporarily unavailable";
 
 export function registerDesktopRewardsRoutes(
   app: OpenAPIHono<ControllerBindings>,
@@ -91,13 +93,16 @@ export function registerDesktopRewardsRoutes(
           },
           description: "Prepare a GitHub star verification session",
         },
+        400: {
+          content: {
+            "application/json": { schema: errorResponseSchema },
+          },
+          description: "GitHub star verification is temporarily unavailable",
+        },
       },
     }),
     async (c) => {
-      return c.json(
-        await container.githubStarVerificationService.prepareSession(),
-        200,
-      );
+      return c.json({ message: GITHUB_STAR_REWARD_DISABLED_MESSAGE }, 400);
     },
   );
 
@@ -141,26 +146,7 @@ export function registerDesktopRewardsRoutes(
       }
 
       if (rewardTaskRequiresGithubStarSession(body.taskId)) {
-        const sessionId = body.proof?.githubSessionId?.trim();
-        if (!sessionId) {
-          return c.json(
-            { message: "Missing GitHub star verification session" },
-            400,
-          );
-        }
-
-        const verification =
-          await container.githubStarVerificationService.verifySession(
-            sessionId,
-          );
-
-        if (!verification.ok) {
-          const message =
-            verification.reason === "not_increased"
-              ? "GitHub star count did not increase during verification"
-              : "GitHub star verification session is invalid or expired";
-          return c.json({ message }, 400);
-        }
+        return c.json({ message: GITHUB_STAR_REWARD_DISABLED_MESSAGE }, 400);
       }
 
       return c.json(

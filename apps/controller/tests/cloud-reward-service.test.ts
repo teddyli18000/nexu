@@ -182,6 +182,42 @@ describe("createCloudRewardService", () => {
       expect(result.reason).toBe("parse_error");
     });
 
+    it("returns ok:false reason:parse_error when cloud returns unknown task enum values", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                ...mockRewardStatusResponse,
+                tasks: [
+                  {
+                    ...mockRewardStatusResponse.tasks[0],
+                    id: "new_reward",
+                    groupId: "new_group",
+                    repeatMode: "monthly",
+                    shareMode: "qr",
+                  },
+                ],
+              }),
+              {
+                status: 200,
+              },
+            ),
+        ),
+      );
+
+      const service = createCloudRewardService({
+        cloudUrl: CLOUD_URL,
+        apiKey: API_KEY,
+      });
+      const result = await service.getRewardsStatus();
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("unreachable");
+      expect(result.reason).toBe("parse_error");
+    });
+
     it("strips trailing slash from cloudUrl", async () => {
       let calledUrl = "";
       vi.stubGlobal(

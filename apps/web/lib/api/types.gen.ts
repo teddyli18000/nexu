@@ -1060,6 +1060,17 @@ export type PostApiInternalDesktopRewardsGithubStarSessionData = {
     url: '/api/internal/desktop/rewards/github-star-session';
 };
 
+export type PostApiInternalDesktopRewardsGithubStarSessionErrors = {
+    /**
+     * GitHub star verification is temporarily unavailable
+     */
+    400: {
+        message: string;
+    };
+};
+
+export type PostApiInternalDesktopRewardsGithubStarSessionError = PostApiInternalDesktopRewardsGithubStarSessionErrors[keyof PostApiInternalDesktopRewardsGithubStarSessionErrors];
+
 export type PostApiInternalDesktopRewardsGithubStarSessionResponses = {
     /**
      * Prepare a GitHub star verification session

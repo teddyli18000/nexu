@@ -325,7 +325,7 @@ describe("NexuConfigStore", () => {
     expect(status.viewer.usingManagedModel).toBe(true);
   });
 
-  it("getDesktopRewardsStatus returns cloudConnected:false when cloud returns 401 auth_failed", async () => {
+  it("getDesktopRewardsStatus preserves connected state when cloud returns 401 auth_failed", async () => {
     await mkdir(path.join(rootDir, ".nexu"), { recursive: true });
     await writeFile(
       path.join(rootDir, ".nexu", "config.json"),
@@ -366,7 +366,7 @@ describe("NexuConfigStore", () => {
 
     try {
       const status = await store.getDesktopRewardsStatus();
-      expect(status.viewer.cloudConnected).toBe(false);
+      expect(status.viewer.cloudConnected).toBe(true);
       expect(status.tasks).toHaveLength(0);
     } finally {
       vi.unstubAllGlobals();

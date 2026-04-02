@@ -112,30 +112,9 @@ describe("registerDesktopRewardsRoutes", () => {
     expect(claimDesktopReward).not.toHaveBeenCalled();
   });
 
-  it("verifies GitHub star sessions before forwarding the claim", async () => {
-    const claimDesktopReward = vi.fn().mockResolvedValue({
-      ok: true,
-      alreadyClaimed: false,
-      status: {
-        viewer: {
-          cloudConnected: true,
-          activeModelId: "link/gemini-2.5-flash",
-          activeModelProviderId: "link",
-          usingManagedModel: true,
-        },
-        progress: {
-          claimedCount: 1,
-          totalCount: 11,
-          earnedCredits: 300,
-        },
-        tasks: [],
-        cloudBalance: null,
-      },
-    });
-    const verifySession = vi.fn().mockResolvedValue({
-      ok: true,
-      currentStars: 1640,
-    });
+  it("rejects GitHub star claims while the verification flow is disabled", async () => {
+    const claimDesktopReward = vi.fn();
+    const verifySession = vi.fn();
     const app = new OpenAPIHono<ControllerBindings>();
     registerDesktopRewardsRoutes(app, {
       configStore: {
@@ -162,19 +141,16 @@ describe("registerDesktopRewardsRoutes", () => {
       }),
     });
 
-    expect(response.status).toBe(200);
-    expect(verifySession).toHaveBeenCalledWith("github-session-1");
-    expect(claimDesktopReward).toHaveBeenCalledWith("github_star", {
-      githubSessionId: "github-session-1",
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      message: "GitHub star reward is temporarily unavailable",
     });
+    expect(verifySession).not.toHaveBeenCalled();
+    expect(claimDesktopReward).not.toHaveBeenCalled();
   });
 
-  it("starts a GitHub star verification session from the dedicated route", async () => {
-    const prepareSession = vi.fn().mockResolvedValue({
-      sessionId: "github-session-1",
-      baselineStars: 1638,
-      expiresAt: "2026-04-02T12:00:00.000Z",
-    });
+  it("rejects creating GitHub star verification sessions while the flow is disabled", async () => {
+    const prepareSession = vi.fn();
     const app = new OpenAPIHono<ControllerBindings>();
     registerDesktopRewardsRoutes(app, {
       configStore: {
@@ -199,12 +175,10 @@ describe("registerDesktopRewardsRoutes", () => {
       },
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      sessionId: "github-session-1",
-      baselineStars: 1638,
-      expiresAt: "2026-04-02T12:00:00.000Z",
+      message: "GitHub star reward is temporarily unavailable",
     });
-    expect(prepareSession).toHaveBeenCalledTimes(1);
+    expect(prepareSession).not.toHaveBeenCalled();
   });
 });

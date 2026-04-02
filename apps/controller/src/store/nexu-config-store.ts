@@ -1377,7 +1377,7 @@ export class NexuConfigStore {
       if (cloudResult.reason === "auth_failed") {
         return {
           viewer: {
-            cloudConnected: false,
+            cloudConnected: cloud.connected,
             activeModelId,
             activeModelProviderId:
               activeManagedModel?.provider ??

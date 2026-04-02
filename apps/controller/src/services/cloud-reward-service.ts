@@ -1,4 +1,10 @@
-import type { DesktopRewardClaimProof } from "@nexu/shared";
+import {
+  type DesktopRewardClaimProof,
+  rewardGroupSchema,
+  rewardRepeatModeSchema,
+  rewardShareModeSchema,
+  rewardTaskIdSchema,
+} from "@nexu/shared";
 import { z } from "zod";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 
@@ -8,12 +14,12 @@ type CloudRewardServiceOptions = {
 };
 
 const cloudRewardTaskSchema = z.object({
-  id: z.string(),
+  id: rewardTaskIdSchema,
   displayName: z.string(),
-  groupId: z.string(),
+  groupId: rewardGroupSchema,
   rewardPoints: z.number(),
-  repeatMode: z.string(),
-  shareMode: z.string(),
+  repeatMode: rewardRepeatModeSchema,
+  shareMode: rewardShareModeSchema,
   icon: z.string().nullable(),
   url: z.string().nullable(),
   isClaimed: z.boolean(),
