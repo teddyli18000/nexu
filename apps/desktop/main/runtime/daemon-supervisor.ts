@@ -503,6 +503,7 @@ export class RuntimeOrchestrator {
       if (this.children.has(id)) {
         setRecordPhase(record, "running");
         record.autoRestartAttempts = 0;
+        record.lastError = null;
         this.logStateChange(record, {
           kind: "lifecycle",
           actionId,
