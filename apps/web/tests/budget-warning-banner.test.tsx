@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("BudgetWarningBanner", () => {
-  it("renders warning copy with BYOK and upgrade actions only", () => {
+  it("renders warning copy with earn credits and BYOK actions only", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter>
         <BudgetWarningBanner status="warning" onDismiss={vi.fn()} />
@@ -19,9 +19,8 @@ describe("BudgetWarningBanner", () => {
 
     expect(markup).toContain('data-budget-banner-status="warning"');
     expect(markup).toContain("budget.banner.warningHeadline");
+    expect(markup).toContain("budget.banner.earnCredits");
     expect(markup).toContain("budget.banner.byok");
-    expect(markup).toContain("budget.banner.upgrade");
-    expect(markup).not.toContain("budget.banner.earnCredits");
     expect(markup).not.toContain("budget.banner.depletedHeadline");
   });
 
@@ -34,8 +33,8 @@ describe("BudgetWarningBanner", () => {
 
     expect(markup).toContain('data-budget-banner-status="depleted"');
     expect(markup).toContain("budget.banner.depletedHeadline");
+    expect(markup).toContain("budget.banner.earnCredits");
     expect(markup).toContain("budget.banner.byok");
-    expect(markup).toContain("budget.banner.upgrade");
     expect(markup).not.toContain("budget.banner.warningHeadline");
   });
 });

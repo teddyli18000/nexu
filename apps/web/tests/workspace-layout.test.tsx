@@ -180,6 +180,7 @@ function renderWorkspaceLayout(
               path="/workspace/rewards"
               element={<div>Rewards body</div>}
             />
+            <Route path="/workspace/home" element={<div>Home body</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -284,6 +285,64 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain('data-sidebar-growth-card="rewards"');
     expect(markup).toContain("layout.sidebar.rewardsTitle");
     expect(markup).toContain("0 layout.sidebar.balanceUnit");
+  });
+
+  it("renders a global warning banner on non-remediation pages", () => {
+    const markup = renderWorkspaceLayout(
+      "/workspace/sessions/sess-1",
+      {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 6,
+          totalCount: 11,
+          earnedCredits: 1200,
+        },
+        cloudBalance: {
+          totalBalance: 5,
+          totalRecharged: 1205,
+          totalConsumed: 1200,
+        },
+      },
+      {
+        connected: true,
+      },
+    );
+
+    expect(markup).toContain('data-budget-banner-status="warning"');
+  });
+
+  it("does not render the global budget banner on rewards pages", () => {
+    const markup = renderWorkspaceLayout(
+      "/workspace/rewards",
+      {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 6,
+          totalCount: 11,
+          earnedCredits: 1200,
+        },
+        cloudBalance: {
+          totalBalance: 0,
+          totalRecharged: 1200,
+          totalConsumed: 1200,
+        },
+      },
+      {
+        connected: true,
+      },
+    );
+
+    expect(markup).not.toContain('data-budget-banner-status="depleted"');
   });
 
   it("renders the logged-in rewards card with a separate balance entry", () => {

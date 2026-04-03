@@ -1,49 +1,69 @@
 import { rewardTasks } from "@nexu/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HomePage } from "#web/pages/home";
+import { WorkspaceLayout } from "#web/layouts/workspace-layout";
 
 vi.mock("@/lib/api", () => ({}));
+vi.mock("@/lib/tracking", () => ({
+  track: vi.fn(),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
 }));
-vi.mock("#web/lib/api", () => ({
-  client: {
-    get: vi.fn(),
-    post: vi.fn(),
+
+vi.mock("@/hooks/use-auto-update", () => ({
+  useAutoUpdate: () => ({
+    phase: "idle",
+    percent: 0,
+    version: null,
+    download: vi.fn(),
+    install: vi.fn(),
+  }),
+}));
+
+vi.mock("@/hooks/use-community-catalog", () => ({
+  useCommunitySkills: () => ({
+    data: {
+      installedSkills: [],
+    },
+  }),
+}));
+
+vi.mock("@/hooks/use-locale", () => ({
+  useLocale: () => ({
+    locale: "en",
+    setLocale: vi.fn(),
+  }),
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  authClient: {
+    useSession: () => ({
+      data: {
+        user: {
+          email: "alice@example.com",
+          name: "Alice",
+        },
+      },
+    }),
+    signOut: vi.fn(),
   },
 }));
 
 vi.mock("@web-gen/api/sdk.gen", () => ({
-  getApiV1Channels: vi.fn(async () => ({
-    data: {
-      channels: [],
-    },
-  })),
-  getApiInternalDesktopReady: vi.fn(async () => ({
-    data: {
-      status: "active",
-    },
-  })),
-  getApiV1ChannelsLiveStatus: vi.fn(async () => ({
-    data: {
-      gatewayConnected: true,
-      channels: [],
-      agent: {
-        modelId: "link/gemini",
-        modelName: "Gemini",
-        alive: true,
-      },
-    },
-  })),
   getApiV1Sessions: vi.fn(async () => ({
     data: {
       sessions: [],
+    },
+  })),
+  getApiV1Me: vi.fn(async () => ({
+    data: {
+      email: "alice@example.com",
+      name: "Alice",
     },
   })),
 }));
@@ -76,7 +96,14 @@ class StorageMock implements Storage {
   }
 }
 
-function renderHomePage(rewardsStatus: {
+function installBrowserStubs(localStorage: Storage) {
+  vi.stubGlobal("localStorage", localStorage);
+  vi.stubGlobal("navigator", {
+    userAgent: "Mozilla/5.0",
+  });
+}
+
+function renderWorkspaceLayout(rewardsStatus: {
   viewer: {
     cloudConnected: boolean;
     activeModelId: string | null;
@@ -103,31 +130,54 @@ function renderHomePage(rewardsStatus: {
     },
   });
 
-  queryClient.setQueryData(["runtime-ready"], {
-    status: "active",
-  });
-  queryClient.setQueryData(["channels"], {
-    channels: [],
-  });
-  queryClient.setQueryData(["sessions"], {
-    sessions: [],
+  queryClient.setQueryData(
+    ["sidebar-sessions"],
+    [
+      {
+        id: "sess-1",
+        title: "Design sync thread",
+        channelType: "slack",
+        lastTime: "2026-03-20T08:57:00.000Z",
+        status: "active",
+      },
+    ],
+  );
+  queryClient.setQueryData(["me"], {
+    email: "alice@example.com",
+    name: "Alice",
   });
   queryClient.setQueryData(["desktop-rewards"], {
     ...rewardsStatus,
-    tasks: rewardTasks.map((task) => ({
-      ...task,
-      isClaimed: false,
-      lastClaimedAt: null,
-      claimCount: 0,
-    })),
+    tasks: [],
+  });
+  queryClient.setQueryData(["desktop-cloud-status"], {
+    connected: rewardsStatus.viewer.cloudConnected,
+    cloudUrl: "http://localhost:5176",
+    linkUrl: "http://localhost:8080",
+    activeProfileName: "Local",
+    profiles: [],
+  });
+  queryClient.setQueryData(["bot-quota"], {
+    available: true,
+    resetsAt: null,
+    usingByok: false,
+    byokAvailable: false,
+    autoFallbackTriggered: false,
   });
 
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(MemoryRouter, null, createElement(HomePage)),
-    ),
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/workspace/sessions/sess-1"]}>
+        <Routes>
+          <Route element={<WorkspaceLayout />}>
+            <Route
+              path="/workspace/sessions/:id"
+              element={<div>Session body</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -147,9 +197,10 @@ describe("budget banner dismissal persistence", () => {
     );
 
     vi.stubGlobal("sessionStorage", sessionStorage);
-    vi.stubGlobal("localStorage", localStorage);
+    installBrowserStubs(localStorage);
+    localStorage.setItem("nexu_setup_complete", "1");
 
-    const markup = renderHomePage({
+    const markup = renderWorkspaceLayout({
       viewer: {
         cloudConnected: true,
         activeModelId: "link/gemini",
@@ -178,9 +229,10 @@ describe("budget banner dismissal persistence", () => {
     sessionStorage.setItem("nexu_budget_banner_dismissed", "depleted");
 
     vi.stubGlobal("sessionStorage", sessionStorage);
-    vi.stubGlobal("localStorage", localStorage);
+    installBrowserStubs(localStorage);
+    localStorage.setItem("nexu_setup_complete", "1");
 
-    const markup = renderHomePage({
+    const markup = renderWorkspaceLayout({
       viewer: {
         cloudConnected: true,
         activeModelId: "link/gemini",
@@ -210,9 +262,10 @@ describe("budget banner dismissal persistence", () => {
     sessionStorage.setItem(currentDismissStorageKey, "warning");
 
     vi.stubGlobal("sessionStorage", sessionStorage);
-    vi.stubGlobal("localStorage", localStorage);
+    installBrowserStubs(localStorage);
+    localStorage.setItem("nexu_setup_complete", "1");
 
-    const warningMarkup = renderHomePage({
+    const warningMarkup = renderWorkspaceLayout({
       viewer: {
         cloudConnected: true,
         activeModelId: "link/gemini",
@@ -231,7 +284,7 @@ describe("budget banner dismissal persistence", () => {
         totalConsumed: 0,
       },
     });
-    const depletedMarkup = renderHomePage({
+    const depletedMarkup = renderWorkspaceLayout({
       viewer: {
         cloudConnected: true,
         activeModelId: "link/gemini",

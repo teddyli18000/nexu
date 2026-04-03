@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 export interface BudgetWarningBannerProps {
   status: "warning" | "depleted";
   onDismiss: () => void;
+  dismissible?: boolean;
 }
 
 const statusConfig = {
@@ -28,6 +29,7 @@ const statusConfig = {
 export function BudgetWarningBanner({
   status,
   onDismiss,
+  dismissible = true,
 }: BudgetWarningBannerProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -44,14 +46,16 @@ export function BudgetWarningBanner({
         config.bg,
       )}
     >
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-black/8 hover:text-text-secondary"
-        aria-label="Dismiss"
-      >
-        <X size={12} />
-      </button>
+      {dismissible ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-black/8 hover:text-text-secondary"
+          aria-label="Dismiss"
+        >
+          <X size={12} />
+        </button>
+      ) : null}
 
       <div className="pr-4">
         <div className="flex items-start gap-3">

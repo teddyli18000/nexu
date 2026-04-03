@@ -1,8 +1,10 @@
 import { BrandMark } from "@/components/brand-mark";
+import { BudgetWarningBanner } from "@/components/budget-warning-banner";
 import { PlatformIcon } from "@/components/platform-icons";
 import { useAutoUpdate } from "@/hooks/use-auto-update";
 import { useCloudConnect } from "@/hooks/use-cloud-connect";
 import { useCommunitySkills } from "@/hooks/use-community-catalog";
+import { useDesktopBudgetGuard } from "@/hooks/use-desktop-budget-guard";
 import { useDesktopCloudStatus } from "@/hooks/use-desktop-cloud-status";
 import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { type Locale, useLocale } from "@/hooks/use-locale";
@@ -551,6 +553,11 @@ function WorkspaceLayoutInner() {
     rewardsStatus.progress.claimedCount < rewardsStatus.progress.totalCount;
   const rewardsCardLoading =
     cloudStatusLoading && desktopCloudStatus === undefined;
+  const { bannerDismissible, budgetStatus, dismissBanner, shouldShowPrompt } =
+    useDesktopBudgetGuard({
+      pathname: location.pathname,
+      cloudConnected,
+    });
 
   const showEmptyState =
     sessions.length === 0 &&
@@ -1450,6 +1457,15 @@ function WorkspaceLayoutInner() {
           </div>
 
           <main className="flex-1 overflow-y-auto min-h-0">
+            {shouldShowPrompt && budgetStatus !== "healthy" ? (
+              <div className="mx-auto max-w-4xl px-4 pb-0 pt-4 sm:px-6 md:px-8">
+                <BudgetWarningBanner
+                  status={budgetStatus}
+                  dismissible={bannerDismissible}
+                  onDismiss={dismissBanner}
+                />
+              </div>
+            ) : null}
             {showEmptyState ? (
               <EmptyState onGoConfig={() => navigate("/workspace/settings")} />
             ) : (

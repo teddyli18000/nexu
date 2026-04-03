@@ -180,7 +180,7 @@ describe("HomePage", () => {
     expect(markup).toContain('loop=""');
   });
 
-  it("renders the low-credit warning banner below the running hero block", () => {
+  it("does not render the global low-credit warning banner from the home page component itself", () => {
     const markup = renderHomePage({
       channels: [
         {
@@ -237,13 +237,11 @@ describe("HomePage", () => {
       },
     });
 
-    expect(markup.indexOf("nexu alpha")).toBeLessThan(
-      markup.indexOf('data-budget-banner-status="warning"'),
-    );
+    expect(markup).not.toContain('data-budget-banner-status="warning"');
     expect(markup).not.toContain('data-budget-dialog-status="depleted"');
   });
 
-  it("renders a depleted credits banner when balance is exhausted", () => {
+  it("does not render the global depleted credits banner from the home page component itself", () => {
     const markup = renderHomePage({
       channels: [
         {
@@ -300,7 +298,7 @@ describe("HomePage", () => {
       },
     });
 
-    expect(markup).toContain('data-budget-banner-status="depleted"');
+    expect(markup).not.toContain('data-budget-banner-status="depleted"');
     expect(markup).not.toContain('data-budget-dialog-status="depleted"');
   });
 });

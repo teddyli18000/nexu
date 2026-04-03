@@ -1,5 +1,4 @@
 import { ActivityFeed } from "@/components/activity-feed";
-import { BudgetWarningBanner } from "@/components/budget-warning-banner";
 import { ChannelConnectModal } from "@/components/channel-connect-modal";
 import { DingtalkSetupView } from "@/components/channel-setup/dingtalk-setup-view";
 import { QqbotSetupView } from "@/components/channel-setup/qqbot-setup-view";
@@ -22,7 +21,6 @@ import {
   SeedancePromoBanner,
   SeedancePromoModal,
 } from "@/components/seedance-promo";
-import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { useGitHubStars } from "@/hooks/use-github-stars";
 import { getChannelChatUrl } from "@/lib/channel-links";
 import { normalizeChannel, track } from "@/lib/tracking";
@@ -81,7 +79,6 @@ type BudgetBannerStatus = "healthy" | "warning" | "depleted";
 type BudgetBannerDebugMode = "actual" | Exclude<BudgetBannerStatus, "healthy">;
 
 const budgetBannerDebugStorageKey = "nexu_budget_banner_debug_mode";
-const budgetBannerDismissStorageKey = "nexu_budget_banner_dismissed_v2";
 const showBudgetBannerDebugPanel = import.meta.env.DEV;
 
 function formatRelativeTime(
@@ -340,48 +337,6 @@ export function HomePage() {
       return "actual";
     });
 
-  const [dismissedBudgetBannerStatus, setDismissedBudgetBannerStatus] =
-    useState<Exclude<BudgetBannerStatus, "healthy"> | null>(() => {
-      try {
-        const stored = sessionStorage.getItem(budgetBannerDismissStorageKey);
-        if (stored === "warning" || stored === "depleted") {
-          return stored;
-        }
-      } catch {
-        // ignore storage errors
-      }
-      return null;
-    });
-
-  const { status: rewardsStatus } = useDesktopRewardsStatus();
-
-  const budgetBannerStatus = useMemo((): BudgetBannerStatus => {
-    if (!rewardsStatus.viewer.cloudConnected) return "healthy";
-    if (!rewardsStatus.viewer.usingManagedModel) return "healthy";
-    const { cloudBalance } = rewardsStatus;
-    if (cloudBalance === null) return "healthy";
-    if (cloudBalance.totalBalance === 0) return "depleted";
-    const { earnedCredits } = rewardsStatus.progress;
-    const total = cloudBalance.totalBalance + earnedCredits;
-    if (total > 0 && earnedCredits / total >= 0.8) return "warning";
-    return "healthy";
-  }, [rewardsStatus]);
-
-  const handleBannerDismiss = useCallback(
-    (status: Exclude<BudgetBannerStatus, "healthy">) => {
-      if (budgetBannerDebugMode !== "actual") {
-        return;
-      }
-
-      setDismissedBudgetBannerStatus(status);
-      try {
-        sessionStorage.setItem(budgetBannerDismissStorageKey, status);
-      } catch {
-        // ignore storage errors
-      }
-    },
-    [budgetBannerDebugMode],
-  );
   const handleBudgetBannerDebugModeChange = useCallback(
     (mode: BudgetBannerDebugMode) => {
       setBudgetBannerDebugMode(mode);
@@ -594,23 +549,6 @@ export function HomePage() {
   const hasChannel = connectedCount > 0;
   const shouldPollLiveStatus =
     hasChannel || pendingChannelId !== null || hasSessionHistory;
-  const resolvedBudgetBannerStatus =
-    budgetBannerDebugMode === "actual"
-      ? budgetBannerStatus
-      : budgetBannerDebugMode;
-  const shouldShowBudgetStatusCta =
-    resolvedBudgetBannerStatus !== "healthy" &&
-    (budgetBannerDebugMode !== "actual" ||
-      dismissedBudgetBannerStatus !== resolvedBudgetBannerStatus);
-  const activeBudgetBannerStatus: Exclude<
-    BudgetBannerStatus,
-    "healthy"
-  > | null =
-    shouldShowBudgetStatusCta && resolvedBudgetBannerStatus === "warning"
-      ? "warning"
-      : shouldShowBudgetStatusCta && resolvedBudgetBannerStatus === "depleted"
-        ? "depleted"
-        : null;
 
   const { data: liveStatus } = useQuery({
     queryKey: ["channels-live-status"],
@@ -673,7 +611,7 @@ export function HomePage() {
   }, [hasOperationalContext, liveStatus, t]);
   const budgetBannerDebugPanel = showBudgetBannerDebugPanel ? (
     <BudgetBannerDebugPanel
-      actualStatus={budgetBannerStatus}
+      actualStatus="healthy"
       mode={budgetBannerDebugMode}
       onModeChange={handleBudgetBannerDebugModeChange}
     />
@@ -831,13 +769,6 @@ export function HomePage() {
               </span>
             </div>
           </div>
-
-          {activeBudgetBannerStatus !== null && (
-            <BudgetWarningBanner
-              status={activeBudgetBannerStatus}
-              onDismiss={() => handleBannerDismiss(activeBudgetBannerStatus)}
-            />
-          )}
 
           {/* ═══ MIDDLE: Channels — default open, Feishu highlighted ═══ */}
           <div className="card card-static overflow-visible">
@@ -1072,13 +1003,6 @@ export function HomePage() {
             </div>
           </div>
         </div>
-
-        {activeBudgetBannerStatus !== null && (
-          <BudgetWarningBanner
-            status={activeBudgetBannerStatus}
-            onDismiss={() => handleBannerDismiss(activeBudgetBannerStatus)}
-          />
-        )}
 
         {showSeedancePromo ? (
           <SeedancePromoBanner

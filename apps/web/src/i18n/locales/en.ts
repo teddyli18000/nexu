@@ -386,6 +386,8 @@ const en = {
   "budget.banner.byok": "Use your API key",
   "budget.autoFallback.toast":
     "Cloud credits depleted — automatically switched to your API key to keep things running.",
+  "budget.autoFallback.failed":
+    "Cloud credits are depleted and auto-switch to BYOK failed. Add your API key or earn more credits to continue.",
   "rewards.action.claimed": "Claimed",
   "rewards.action.checkIn": "Check in",
   "rewards.action.download": "Download",

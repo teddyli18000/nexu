@@ -368,6 +368,8 @@ const zhCN = {
   "budget.banner.byok": "自带 API Key",
   "budget.autoFallback.toast":
     "云端额度已用尽，已自动切换到你的 API Key 继续运行。",
+  "budget.autoFallback.failed":
+    "云端额度已用尽，自动切换到 BYOK 失败。请配置 API Key 或先去赚取积分后继续使用。",
   "rewards.action.claimed": "已领取",
   "rewards.action.checkIn": "打卡",
   "rewards.action.download": "下载",
