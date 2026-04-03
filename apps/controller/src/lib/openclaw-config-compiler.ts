@@ -424,12 +424,17 @@ function compilePlugins(
         .filter((pluginId): pluginId is string => pluginId !== null),
     ),
   ];
+  const platformPluginIds = [
+    "nexu-runtime-model",
+    "nexu-platform-bootstrap",
+    ...(hasMiniMaxOauth ? ["minimax-portal-auth"] : []),
+  ];
 
   return {
     load: {
       paths: [env.openclawExtensionsDir],
     },
-    ...(connectedPluginIds.length > 0 ? { allow: connectedPluginIds } : {}),
+    allow: [...connectedPluginIds, ...platformPluginIds],
     entries: {
       feishu: {
         enabled: true,

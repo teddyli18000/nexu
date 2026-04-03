@@ -147,6 +147,57 @@ const FEISHU_PRE_REPLY_FINAL_REPLACEMENT = [
   '\t\t\tpayload: { text: isContextOverflow ? "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model." : isRoleOrderingError ? "⚠️ Message ordering conflict - please try again. If this persists, use /new to start a fresh session." : `⚠️ Agent failed before reply: ${trimmedMessage}.\\nLogs: openclaw logs --follow` }',
   "\t\t};",
 ].join("\n");
+const CONTEXT_OVERFLOW_PATCHES = [
+  {
+    search:
+      '⚠️ Context limit exceeded. I\'ve reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.',
+    zhReplace:
+      "⚠️ 本次提交的内容过多，系统暂时无法处理。请缩短消息内容、减少附件或分几次发送后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact",
+    enReplace:
+      "⚠️ The request is too large. Please shorten your message, reduce attachments, or split into multiple messages. If the issue persists, see https://docs.nexu.io/guide/contact",
+  },
+  {
+    search:
+      '⚠️ Context limit exceeded during compaction. I\'ve reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.',
+    zhReplace:
+      "⚠️ 本次提交的内容过多，系统暂时无法处理。请缩短消息内容、减少附件或分几次发送后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact",
+    enReplace:
+      "⚠️ The request is too large. Please shorten your message, reduce attachments, or split into multiple messages. If the issue persists, see https://docs.nexu.io/guide/contact",
+  },
+];
+const FORMATTED_ASSISTANT_ERROR_PRIORITY_SEARCH =
+  'const assistantErrorText = lastAssistant?.stopReason === "error" ? lastAssistant.errorMessage?.trim() || formattedAssistantErrorText : void 0;';
+const FORMATTED_ASSISTANT_ERROR_PRIORITY_REPLACEMENT =
+  'const assistantErrorText = lastAssistant?.stopReason === "error" ? formattedAssistantErrorText || lastAssistant.errorMessage?.trim() : void 0;';
+const FAILOVER_ERROR_PRIORITY_SEARCH =
+  '}) : void 0) || lastAssistant?.errorMessage?.trim() || (timedOut ? "LLM request timed out." : rateLimitFailure ? "LLM request rate limited." : billingFailure ? formatBillingErrorMessage(activeErrorContext.provider, activeErrorContext.model) : authFailure ? "LLM request unauthorized." : "LLM request failed.");';
+const FAILOVER_ERROR_PRIORITY_REPLACEMENT =
+  '}) : void 0) || (timedOut ? "LLM request timed out." : rateLimitFailure ? "LLM request rate limited." : billingFailure ? formatBillingErrorMessage(activeErrorContext.provider, activeErrorContext.model) : authFailure ? "LLM request unauthorized." : lastAssistant?.errorMessage?.trim() || "LLM request failed.");';
+// Locale reader: reads nexu-credit-guard-state.json from OPENCLAW_STATE_DIR.
+// Cached by mtime. Falls back to "zh-CN" if file missing or unreadable.
+const LOCALE_READER_LINES = [
+  'const _nexuLocale = (() => { try { const _fs = require("node:fs"); const _path = require("node:path"); const _stateDir = process.env.OPENCLAW_STATE_DIR; if (!_stateDir) return "zh-CN"; const _fp = _path.join(_stateDir, "nexu-credit-guard-state.json"); const _mt = _fs.statSync(_fp).mtimeMs; if (globalThis.__nexuCgMt === _mt) return globalThis.__nexuCgLocale || "zh-CN"; const _d = JSON.parse(_fs.readFileSync(_fp, "utf8")); globalThis.__nexuCgMt = _mt; globalThis.__nexuCgLocale = _d.locale || "zh-CN"; return globalThis.__nexuCgLocale; } catch { return globalThis.__nexuCgLocale || "zh-CN"; } })();',
+];
+// i18n error messages: each line checks error code and returns localised text.
+// _nexuLocale is resolved above; "en" → English, anything else → Chinese.
+const KNOWN_LINK_ERROR_MAPPING_LINES = [
+  ...LOCALE_READER_LINES,
+  "const lowered = trimmed.toLowerCase();",
+  'if (lowered.includes("[code=missing_api_key]") || lowered.includes("missing api key")) return _nexuLocale === "en" ? "⚠️ No access credentials detected. Please check that you are logged in or that you have entered your API key. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 未检测到访问凭证，暂时无法继续使用。请先检查是否已经完成账号登录，或是否已经填写访问密钥（用于连接模型服务的凭证）。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=invalid_api_key]") || lowered.includes("invalid api key")) return _nexuLocale === "en" ? "⚠️ The API key you entered is invalid. Please check it for typos or try a different key. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 你填写的访问密钥无效，暂时无法使用。请检查是否复制完整、是否填错，或换一个新的密钥后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=forbidden_api_key]") || lowered.includes("api key is forbidden")) return _nexuLocale === "en" ? "⚠️ Your API key is no longer usable — it may have expired or been revoked. Please replace it and try again. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前访问密钥不可用，可能已经过期、被停用或被撤销。请更换一个可用的密钥后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=insufficient_credits]") || lowered.includes("insufficient credits")) return _nexuLocale === "en" ? "⚠️ Insufficient credits. You can earn credits by completing tasks, or switch to using your own API key (BYOK). If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前可用积分不足，暂时无法继续使用。你可以通过完成任务赚取积分，或切换到自带密钥（BYOK）的方式继续使用。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=usage_limit_exceeded]") || lowered.includes("usage limit")) return _nexuLocale === "en" ? "⚠️ You\\u2019ve reached the usage limit for this period. Please try again later. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前请求过于频繁，已达到本时段的使用上限，请稍后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=invalid_json]") || lowered.includes("request body is not valid json")) return _nexuLocale === "en" ? "⚠️ The submitted content has an invalid format. Please check and resubmit. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 提交的内容格式不正确，系统暂时无法识别。请检查后重新提交。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=invalid_model]") || lowered.includes("model field is missing or empty")) return _nexuLocale === "en" ? "⚠️ The current model is temporarily unavailable. Please try again later. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前模型暂不可用，请稍后重试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=invalid_request]") || lowered.includes("invalid request parameters")) return _nexuLocale === "en" ? "⚠️ The request is invalid. Please check that all fields are filled in correctly and try again. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 本次提交的内容有误，系统暂时无法处理。请检查填写内容是否完整、格式是否正确，然后再试一次。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=model_not_found]") || lowered.includes("the requested model was not found")) return _nexuLocale === "en" ? "⚠️ The selected model is not available. It may not be configured yet or is temporarily inaccessible. Please switch to another model or check your settings. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 你选择的模型当前不可用，可能尚未配置成功，或暂时无法访问。请更换其他模型，或检查相关设置后重试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=request_too_large]") || lowered.includes("request body exceeds maximum size") || lowered.includes("request is too large")) return _nexuLocale === "en" ? "⚠️ The request is too large. Please shorten your message, reduce attachments, or split into multiple messages. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 本次提交的内容过多，系统暂时无法处理。请缩短消息内容、减少附件或分几次发送后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=internal_error]") || lowered.includes("internal error")) return _nexuLocale === "en" ? "⚠️ Something went wrong on our end. Please try again later. If this keeps happening, see https://docs.nexu.io/guide/contact" : "⚠️ 服务暂时出了点问题，请稍后再试一次。如多次出现同样的问题，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=streaming_unsupported]") || lowered.includes("streaming unsupported")) return _nexuLocale === "en" ? "⚠️ Streaming is not supported for this request. Please try a different approach or try again later. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前暂不支持这种返回方式，请换一种方式再试，或稍后重试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+  'if (lowered.includes("[code=upstream_error]") || lowered.includes("upstream provider is unavailable") || lowered.includes("upstream_error")) return _nexuLocale === "en" ? "⚠️ The upstream model service is temporarily unavailable. Please try again later or switch to a different model. If the issue persists, see https://docs.nexu.io/guide/contact" : "⚠️ 当前连接的模型服务暂时不可用，请稍后重试，或更换其他模型后再试。如仍无法解决，请查看 https://docs.nexu.io/zh/guide/contact";',
+];
+const HELPER_BUNDLE_PATTERNS = [/^pi-embedded-helpers-.*\.js$/u];
 const PLUGIN_SDK_BUNDLE_PATTERNS = [/^reply-.*\.js$/u, /^dispatch-.*\.js$/u];
 const CORE_DIST_REPLY_BUNDLE_PATTERNS = [/^reply-.*\.js$/u];
 const FEISHU_PRE_LLM_SINGLE_AGENT_SEARCH = `
@@ -839,6 +890,32 @@ function countOccurrences(source, search) {
   }
 }
 
+function injectKnownLinkErrorMappings(source, bundleName) {
+  if (source.includes("https://docs.nexu.io/zh/guide/contact")) {
+    return source;
+  }
+
+  const helperPrefixPattern =
+    /function formatRawAssistantErrorForUi\(raw\) \{\n([\t ]*)const trimmed = \(raw \?\? ""\)\.trim\(\);\n\1if \(!trimmed\) return "LLM request failed with an unknown error\.";/u;
+
+  const match = source.match(helperPrefixPattern);
+  if (!match) {
+    throw new Error(
+      `Unable to locate helper formatter anchor for ${bundleName}.`,
+    );
+  }
+
+  const indent = match[1] ?? "\t";
+  const injectedBlock = [
+    "function formatRawAssistantErrorForUi(raw) {",
+    `${indent}const trimmed = (raw ?? "").trim();`,
+    `${indent}if (!trimmed) return "LLM request failed with an unknown error.";`,
+    ...KNOWN_LINK_ERROR_MAPPING_LINES.map((line) => `${indent}${line}`),
+  ].join("\n");
+
+  return source.replace(helperPrefixPattern, injectedBlock);
+}
+
 async function patchReplyOutcomeBridge(openclawPackageRoot) {
   const patchedFiles = new Map();
   const feishuBotPath = resolve(
@@ -988,6 +1065,41 @@ async function patchReplyOutcomeBridge(openclawPackageRoot) {
         );
       }
 
+      if (source.includes(FORMATTED_ASSISTANT_ERROR_PRIORITY_SEARCH)) {
+        source = applyExactReplacement(
+          source,
+          FORMATTED_ASSISTANT_ERROR_PRIORITY_SEARCH,
+          FORMATTED_ASSISTANT_ERROR_PRIORITY_REPLACEMENT,
+          `${bundleName}: formatted assistant error priority`,
+        );
+
+        console.log(
+          `[openclaw-sidecar] patched formatted assistant error priority in ${bundleName}`,
+        );
+      }
+
+      if (source.includes(FAILOVER_ERROR_PRIORITY_SEARCH)) {
+        source = applyExactReplacement(
+          source,
+          FAILOVER_ERROR_PRIORITY_SEARCH,
+          FAILOVER_ERROR_PRIORITY_REPLACEMENT,
+          `${bundleName}: failover error priority`,
+        );
+
+        console.log(
+          `[openclaw-sidecar] patched failover error priority in ${bundleName}`,
+        );
+      }
+
+      for (const overflow of CONTEXT_OVERFLOW_PATCHES) {
+        if (source.includes(overflow.search)) {
+          source = source.replaceAll(overflow.search, overflow.zhReplace);
+          console.log(
+            `[openclaw-sidecar] patched context overflow message in ${bundleName}`,
+          );
+        }
+      }
+
       patchedFiles.set(relative(openclawPackageRoot, bundlePath), source);
     }
   };
@@ -1001,6 +1113,43 @@ async function patchReplyOutcomeBridge(openclawPackageRoot) {
     resolve(openclawPackageRoot, "dist"),
     CORE_DIST_REPLY_BUNDLE_PATTERNS,
     "core dist reply",
+  );
+
+  const patchHelperBundleGroup = async (bundleDir, label) => {
+    const entries = await readdir(bundleDir);
+    const bundleNames = entries.filter((entry) =>
+      HELPER_BUNDLE_PATTERNS.some((pattern) => pattern.test(entry)),
+    );
+
+    if (bundleNames.length === 0) {
+      throw new Error(`Unable to locate OpenClaw ${label} helper bundles.`);
+    }
+
+    for (const bundleName of bundleNames) {
+      const bundlePath = resolve(bundleDir, bundleName);
+      const source = await readFile(bundlePath, "utf8");
+      const patchedSource = injectKnownLinkErrorMappings(source, bundleName);
+
+      if (patchedSource !== source) {
+        console.log(
+          `[openclaw-sidecar] patched known link error formatter in ${bundleName}`,
+        );
+      }
+
+      patchedFiles.set(
+        relative(openclawPackageRoot, bundlePath),
+        patchedSource,
+      );
+    }
+  };
+
+  await patchHelperBundleGroup(
+    resolve(openclawPackageRoot, "dist"),
+    "core dist",
+  );
+  await patchHelperBundleGroup(
+    resolve(openclawPackageRoot, "dist", "plugin-sdk"),
+    "plugin-sdk",
   );
 
   return patchedFiles;

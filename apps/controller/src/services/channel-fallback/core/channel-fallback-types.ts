@@ -5,6 +5,18 @@ export type FallbackLang = "en" | "zh-CN";
 export type FallbackErrorCode =
   | "unknown"
   | "internal_error"
+  | "missing_api_key"
+  | "invalid_api_key"
+  | "forbidden_api_key"
+  | "insufficient_credits"
+  | "usage_limit_exceeded"
+  | "invalid_json"
+  | "invalid_model"
+  | "invalid_request"
+  | "model_not_found"
+  | "request_too_large"
+  | "streaming_unsupported"
+  | "upstream_error"
   | "reply_delivery_failed"
   | "no_final_reply"
   | "synthetic_pre_llm_failure";

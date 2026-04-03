@@ -18,6 +18,254 @@ const RESTART_WINDOW_MS = 120_000;
 const CONTROLLED_RESTART_GRACE_MS = 45_000;
 const CONTROLLED_RESTART_PROBE_INTERVAL_MS = 500;
 const NEXU_EVENT_MARKER = "NEXU_EVENT ";
+const FEISHU_PROVIDER_ERROR_CODES = [
+  "missing_api_key",
+  "invalid_api_key",
+  "forbidden_api_key",
+  "insufficient_credits",
+  "usage_limit_exceeded",
+  "invalid_json",
+  "invalid_model",
+  "invalid_request",
+  "model_not_found",
+  "request_too_large",
+  "internal_error",
+  "streaming_unsupported",
+  "upstream_error",
+] as const;
+
+type FeishuProviderErrorCode = (typeof FEISHU_PROVIDER_ERROR_CODES)[number];
+
+interface FeishuReplyContext {
+  accountId: string | null;
+  chatId: string | null;
+  sessionKey: string | null;
+  messageId: string | null;
+  actionId: string | null;
+  runId: string | null;
+  observedAtMs: number;
+}
+
+interface SyntheticReplyOutcomePayload {
+  channel: "feishu";
+  status: "failed";
+  accountId: string | null;
+  chatId: string | null;
+  sessionKey: string | null;
+  messageId: string | null;
+  actionId: string | null;
+  reasonCode: "synthetic_pre_llm_failure";
+  error: string;
+  ts: string;
+}
+
+export interface OpenClawLogEventSink {
+  emitRuntimeEvent(event: OpenClawRuntimeEvent): void;
+}
+
+export function createOpenClawLogEventProcessor(
+  sink: OpenClawLogEventSink,
+): (line: string) => void {
+  const feishuContextsByRunId = new Map<string, FeishuReplyContext>();
+  const latestInboundByAccount = new Map<string, FeishuReplyContext>();
+  let latestFeishuContext: FeishuReplyContext | null = null;
+
+  return (line: string) => {
+    const observedAtMs = Date.now();
+    const receivedContext = parseFeishuInboundContext(line, observedAtMs);
+    if (receivedContext) {
+      latestFeishuContext = receivedContext;
+      if (receivedContext.accountId) {
+        latestInboundByAccount.set(receivedContext.accountId, receivedContext);
+      }
+      if (receivedContext.runId) {
+        feishuContextsByRunId.set(receivedContext.runId, receivedContext);
+      }
+      return;
+    }
+
+    const dispatchedContext = parseFeishuDispatchContext(
+      line,
+      latestFeishuContext,
+      latestInboundByAccount,
+      observedAtMs,
+    );
+    if (dispatchedContext) {
+      latestFeishuContext = dispatchedContext;
+      if (dispatchedContext.runId) {
+        feishuContextsByRunId.set(dispatchedContext.runId, dispatchedContext);
+      }
+      return;
+    }
+
+    const failure = parseFeishuSyntheticFailure(
+      line,
+      latestFeishuContext,
+      feishuContextsByRunId,
+      observedAtMs,
+    );
+    if (!failure) {
+      return;
+    }
+
+    sink.emitRuntimeEvent({ event: "channel.reply_outcome", payload: failure });
+  };
+}
+
+function parseFeishuInboundContext(
+  line: string,
+  observedAtMs: number,
+): FeishuReplyContext | null {
+  if (!line.includes("[feishu]") || !line.includes("received message from")) {
+    return null;
+  }
+
+  const match = line.match(
+    /\[feishu\]\s+feishu\[([^\]]+)\]: received message from .* in ([^ ]+)/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const [, accountId, chatId] = match;
+  const actionId = null;
+
+  return {
+    accountId: accountId ?? null,
+    chatId: chatId ?? null,
+    sessionKey: null,
+    messageId: null,
+    actionId,
+    runId: null,
+    observedAtMs,
+  };
+}
+
+function parseFeishuDispatchContext(
+  line: string,
+  previous: FeishuReplyContext | null,
+  latestInboundByAccount: Map<string, FeishuReplyContext>,
+  observedAtMs: number,
+): FeishuReplyContext | null {
+  if (!line.includes("[feishu]") || !line.includes("dispatching to agent")) {
+    return null;
+  }
+
+  const match = line.match(
+    /\[feishu\]\s+feishu\[([^\]]+)\]: dispatching to agent \(session=([^\)]+)\)/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const [, accountIdFromLine, sessionKeyFromLine] = match;
+  const inbound =
+    latestInboundByAccount.get(accountIdFromLine ?? "") ?? previous;
+  const accountId = accountIdFromLine ?? inbound?.accountId ?? null;
+  const chatId = inbound?.chatId ?? null;
+  const sessionKey = sessionKeyFromLine ?? inbound?.sessionKey ?? null;
+  const messageId = inbound?.messageId ?? null;
+  const runId = previous?.runId ?? null;
+  const actionId = runId
+    ? `feishu:${runId}`
+    : (previous?.actionId ?? (messageId ? `feishu:${messageId}` : null));
+
+  if (!accountId && !chatId && !sessionKey) {
+    return null;
+  }
+
+  return {
+    accountId,
+    chatId,
+    sessionKey,
+    messageId,
+    actionId,
+    runId,
+    observedAtMs,
+  };
+}
+
+function parseFeishuSyntheticFailure(
+  line: string,
+  latestContext: FeishuReplyContext | null,
+  contextsByRunId: Map<string, FeishuReplyContext>,
+  observedAtMs: number,
+): SyntheticReplyOutcomePayload | null {
+  const errorCode = extractFeishuProviderErrorCode(line);
+  if (!errorCode) {
+    return null;
+  }
+  if (isIgnoredFeishuErrorLine(line)) {
+    return null;
+  }
+
+  const runId =
+    matchLineValue(line, /runId[:=]\s*([\w:-]+)/i) ??
+    latestContext?.runId ??
+    null;
+  const context = (runId ? contextsByRunId.get(runId) : null) ?? latestContext;
+  if (!context) {
+    return null;
+  }
+  if (observedAtMs - context.observedAtMs > 30_000) {
+    return null;
+  }
+
+  const actionId = runId ? `feishu:${runId}` : context.actionId;
+  return {
+    channel: "feishu",
+    status: "failed",
+    accountId: context.accountId,
+    chatId: context.chatId,
+    sessionKey: context.sessionKey,
+    messageId: context.messageId ?? actionId,
+    actionId,
+    reasonCode: "synthetic_pre_llm_failure",
+    error: line.trim(),
+    ts: new Date().toISOString(),
+  };
+}
+
+function extractFeishuProviderErrorCode(
+  line: string,
+): FeishuProviderErrorCode | null {
+  const codeTagMatch = line.match(/\[code=([^\]]+)\]/i);
+  const taggedCode = normalizeFeishuProviderErrorCode(codeTagMatch?.[1]);
+  if (taggedCode) {
+    return taggedCode;
+  }
+
+  for (const code of FEISHU_PROVIDER_ERROR_CODES) {
+    if (line.includes(code)) {
+      return code;
+    }
+  }
+
+  return null;
+}
+
+function normalizeFeishuProviderErrorCode(
+  value: string | undefined,
+): FeishuProviderErrorCode | null {
+  if (!value) {
+    return null;
+  }
+  return FEISHU_PROVIDER_ERROR_CODES.includes(value as FeishuProviderErrorCode)
+    ? (value as FeishuProviderErrorCode)
+    : null;
+}
+
+function isIgnoredFeishuErrorLine(line: string): boolean {
+  return (
+    line.toLowerCase().includes("context overflow") ||
+    line.toLowerCase().includes("message ordering")
+  );
+}
+
+function matchLineValue(line: string, pattern: RegExp): string | null {
+  const match = line.match(pattern);
+  return match?.[1] ?? null;
+}
 
 function findWorkspaceRoot(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
@@ -65,6 +313,23 @@ export class OpenClawProcessManager {
   private controlledRestartTimer: NodeJS.Timeout | null = null;
   private controlledRestartSuccessorPid: number | null = null;
   private eventListeners = new Set<(event: OpenClawRuntimeEvent) => void>();
+  private readonly logEventProcessor = createOpenClawLogEventProcessor({
+    emitRuntimeEvent: (event) => {
+      for (const listener of this.eventListeners) {
+        try {
+          listener(event);
+        } catch (error) {
+          logger.warn(
+            {
+              error: error instanceof Error ? error.message : String(error),
+              event: event.event,
+            },
+            "openclaw_runtime_event_listener_failed",
+          );
+        }
+      }
+    },
+  });
 
   constructor(private readonly env: ControllerEnv) {}
 
@@ -234,6 +499,7 @@ export class OpenClawProcessManager {
     if (child.stderr) {
       createInterface({ input: child.stderr }).on("line", (line) => {
         logger.warn({ stream: "stderr", source: "openclaw" }, line);
+        this.emitRuntimeEventFromLine(line);
       });
     }
 
@@ -421,50 +687,51 @@ export class OpenClawProcessManager {
 
   private emitRuntimeEventFromLine(line: string): void {
     const markerIndex = line.indexOf(NEXU_EVENT_MARKER);
-    if (markerIndex < 0) {
-      return;
-    }
+    if (markerIndex >= 0) {
+      const eventLine = line
+        .slice(markerIndex + NEXU_EVENT_MARKER.length)
+        .trim();
+      const firstSpaceIndex = eventLine.indexOf(" ");
+      const eventName =
+        firstSpaceIndex >= 0 ? eventLine.slice(0, firstSpaceIndex) : eventLine;
+      const rawPayload =
+        firstSpaceIndex >= 0 ? eventLine.slice(firstSpaceIndex + 1).trim() : "";
 
-    const eventLine = line.slice(markerIndex + NEXU_EVENT_MARKER.length).trim();
-    const firstSpaceIndex = eventLine.indexOf(" ");
-    const eventName =
-      firstSpaceIndex >= 0 ? eventLine.slice(0, firstSpaceIndex) : eventLine;
-    const rawPayload =
-      firstSpaceIndex >= 0 ? eventLine.slice(firstSpaceIndex + 1).trim() : "";
-
-    if (!eventName) {
-      return;
-    }
-
-    let payload: unknown;
-    if (rawPayload) {
-      try {
-        payload = JSON.parse(this.extractJsonPayload(rawPayload)) as unknown;
-      } catch (error) {
-        logger.warn(
-          {
-            error: error instanceof Error ? error.message : String(error),
-            event: eventName,
-          },
-          "openclaw_runtime_event_parse_failed",
-        );
+      if (!eventName) {
         return;
       }
-    }
 
-    for (const listener of this.eventListeners) {
-      try {
-        listener({ event: eventName, payload });
-      } catch (error) {
-        logger.warn(
-          {
-            error: error instanceof Error ? error.message : String(error),
-            event: eventName,
-          },
-          "openclaw_runtime_event_listener_failed",
-        );
+      let payload: unknown;
+      if (rawPayload) {
+        try {
+          payload = JSON.parse(this.extractJsonPayload(rawPayload)) as unknown;
+        } catch (error) {
+          logger.warn(
+            {
+              error: error instanceof Error ? error.message : String(error),
+              event: eventName,
+            },
+            "openclaw_runtime_event_parse_failed",
+          );
+          return;
+        }
+      }
+
+      for (const listener of this.eventListeners) {
+        try {
+          listener({ event: eventName, payload });
+        } catch (error) {
+          logger.warn(
+            {
+              error: error instanceof Error ? error.message : String(error),
+              event: eventName,
+            },
+            "openclaw_runtime_event_listener_failed",
+          );
+        }
       }
     }
+    this.logEventProcessor(line);
   }
 
   private extractJsonPayload(rawPayload: string): string {

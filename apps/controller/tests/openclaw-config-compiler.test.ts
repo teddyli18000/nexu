@@ -184,6 +184,7 @@ describe("compileOpenClawConfig", () => {
       tools: expect.anything(),
     });
     expect(result.plugins?.entries?.feishu?.enabled).toBe(true);
+    expect(result.plugins?.allow ?? []).not.toContain("nexu-credit-guard");
     expect(result.skills?.load?.extraDirs).toEqual([
       "/tmp/openclaw/skills",
       "/tmp/.agents/skills",
