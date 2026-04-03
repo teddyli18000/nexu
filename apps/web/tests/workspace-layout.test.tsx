@@ -206,6 +206,19 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain("Design sync thread");
   });
 
+  it("shows a syncing placeholder instead of zero balance while rewards are still loading", () => {
+    const markup = renderWorkspaceLayout(
+      "/workspace/sessions/sess-1",
+      undefined,
+      {
+        connected: true,
+      },
+    );
+
+    expect(markup).toContain("layout.sidebar.balancePlaceholder");
+    expect(markup).not.toContain("0 layout.sidebar.balanceUnit");
+  });
+
   it("keeps the rewards page route without rendering a main navigation tab", () => {
     const markup = renderWorkspaceLayout(
       "/workspace/rewards",
@@ -285,7 +298,8 @@ describe("WorkspaceLayout", () => {
     expect(markup).not.toContain('data-rewards-card-loading="true"');
     expect(markup).toContain('data-sidebar-growth-card="rewards"');
     expect(markup).toContain("layout.sidebar.rewardsTitle");
-    expect(markup).toContain("0 layout.sidebar.balanceUnit");
+    expect(markup).toContain("layout.sidebar.balancePlaceholder");
+    expect(markup).not.toContain("0 layout.sidebar.balanceUnit");
   });
 
   it("renders a global warning banner on non-remediation pages", () => {

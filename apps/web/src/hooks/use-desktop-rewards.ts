@@ -105,6 +105,8 @@ export function useDesktopRewardsStatus() {
   return {
     status: rewardsQuery.data ?? createFallbackRewardsStatus(),
     loading: rewardsQuery.isLoading,
+    resolved: rewardsQuery.isFetched,
+    refreshing: rewardsQuery.isFetching && !rewardsQuery.isLoading,
     refresh: rewardsQuery.refetch,
     claimTask: claimMutation.mutateAsync,
     prepareGithubStarSession: githubStarSessionMutation.mutateAsync,

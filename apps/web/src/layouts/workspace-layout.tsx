@@ -352,7 +352,11 @@ function WorkspaceLayoutInner() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showHelpMenu, setShowHelpMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
-  const { status: rewardsStatus } = useDesktopRewardsStatus();
+  const {
+    status: rewardsStatus,
+    loading: rewardsStatusLoading,
+    resolved: rewardsStatusResolved,
+  } = useDesktopRewardsStatus();
   const update = useAutoUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const hasUpdate =
@@ -542,10 +546,16 @@ function WorkspaceLayoutInner() {
   const userImage = me?.image ?? session?.user?.image ?? null;
   const userInitial = (userName[0] ?? userEmail[0] ?? "U").toUpperCase();
   const rewardTaskCountLabel = `${rewardsStatus.progress.claimedCount}/${rewardsStatus.progress.totalCount}`;
+  const rewardsBalancePending =
+    cloudConnected &&
+    !rewardsStatus.cloudBalance &&
+    (rewardsStatusLoading || !rewardsStatusResolved);
   const rewardBalanceValue = rewardsStatus.cloudBalance
     ? `${rewardsStatus.cloudBalance.totalBalance} ${t("layout.sidebar.balanceUnit")}`
     : cloudConnected
-      ? `0 ${t("layout.sidebar.balanceUnit")}`
+      ? rewardsBalancePending
+        ? t("layout.sidebar.balancePlaceholder")
+        : `0 ${t("layout.sidebar.balanceUnit")}`
       : t("layout.sidebar.balancePlaceholder");
   const shouldShowRewardsBanner =
     cloudConnected &&
