@@ -448,9 +448,42 @@ describe("WorkspaceLayout", () => {
     expect(markup).toContain("layout.sidebar.rewardsTitle");
     expect(markup).toContain("4/10");
     expect(markup).toContain('data-sidebar-rewards-balance="true"');
+    expect(markup).toContain('data-sidebar-rewards-balance-popup="true"');
+    expect(markup).toContain('data-sidebar-rewards-balance-detail="true"');
+    expect(markup).toContain('href="https://nexu.net/bill"');
     expect(markup).toContain("layout.sidebar.balanceLabel");
     expect(markup).toContain("200 layout.sidebar.balanceUnit");
     expect(markup).not.toContain("layout.sidebar.loginTitle");
+  });
+
+  it("routes the balance detail CTA to the test billing page for the test cloud profile", () => {
+    const markup = renderWorkspaceLayout(
+      "/workspace/sessions/sess-1",
+      {
+        viewer: {
+          cloudConnected: true,
+          activeModelId: "link/gemini",
+          activeModelProviderId: "link",
+          usingManagedModel: true,
+        },
+        progress: {
+          claimedCount: 4,
+          totalCount: 10,
+          earnedCredits: 700,
+        },
+        cloudBalance: {
+          totalBalance: 200,
+          totalRecharged: 900,
+          totalConsumed: 700,
+        },
+      },
+      {
+        connected: true,
+        cloudUrl: "https://nexu.powerformer.net",
+      },
+    );
+
+    expect(markup).toContain('href="https://nexu.powerformer.net/bill"');
   });
 
   it("renders zero balance when connected but cloud balance is null", () => {

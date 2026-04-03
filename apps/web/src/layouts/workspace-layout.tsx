@@ -193,6 +193,25 @@ function LanguageToggle({ collapsed }: { collapsed: boolean }) {
 
 const SETUP_COMPLETE_KEY = "nexu_setup_complete";
 const GITHUB_URL = "https://github.com/nexu-io/nexu";
+const PRODUCTION_BILLING_URL = "https://nexu.net/bill";
+const TEST_BILLING_URL = "https://nexu.powerformer.net/bill";
+
+function resolveBillingUrl(cloudUrl?: string | null): string {
+  if (!cloudUrl) {
+    return PRODUCTION_BILLING_URL;
+  }
+
+  try {
+    const { hostname } = new URL(cloudUrl);
+    if (hostname === "nexu.powerformer.net") {
+      return TEST_BILLING_URL;
+    }
+  } catch {
+    return PRODUCTION_BILLING_URL;
+  }
+
+  return PRODUCTION_BILLING_URL;
+}
 
 const GitHubIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -604,6 +623,7 @@ function WorkspaceLayoutInner() {
   const updateFloatWidth = Math.max(140, sidebarWidth - 20);
   const updateFloatLeft = 10;
   const updateFloatBottom = 52;
+  const billingUrl = resolveBillingUrl(desktopCloudStatus?.cloudUrl);
 
   return (
     <div className="flex h-screen relative">
@@ -943,7 +963,10 @@ function WorkspaceLayoutInner() {
                   </div>
                 </Link>
                 {rewardsStatus.cloudBalance ? (
-                  <div className="pointer-events-none absolute bottom-full left-3 right-3 z-30 mb-2 opacity-0 transition-opacity duration-150 group-hover/balance:pointer-events-auto group-hover/balance:opacity-100">
+                  <div
+                    data-sidebar-rewards-balance-popup="true"
+                    className="pointer-events-none absolute bottom-full left-3 right-3 z-30 pb-2 opacity-0 transition-opacity duration-150 group-hover/balance:pointer-events-auto group-hover/balance:opacity-100 group-focus-within/balance:pointer-events-auto group-focus-within/balance:opacity-100"
+                  >
                     <div className="rounded-xl border border-border bg-surface-1 p-3.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
                       <div className="mb-3 flex items-center justify-between">
                         <span className="text-[13px] font-semibold text-text-primary">
@@ -979,8 +1002,11 @@ function WorkspaceLayoutInner() {
                           </span>
                         </div>
                       </div>
-                      <Link
-                        to="/workspace/rewards"
+                      <a
+                        href={billingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-sidebar-rewards-balance-detail="true"
                         className="mt-2.5 flex items-center justify-between border-t border-border/60 pt-2.5 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
                         onClick={() => {
                           track("workspace_sidebar_click", {
@@ -990,7 +1016,7 @@ function WorkspaceLayoutInner() {
                       >
                         {t("layout.sidebar.balancePopup.viewDetail")}
                         <ChevronRight size={12} />
-                      </Link>
+                      </a>
                     </div>
                   </div>
                 ) : null}
