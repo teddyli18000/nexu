@@ -1152,6 +1152,30 @@ async function patchReplyOutcomeBridge(openclawPackageRoot) {
     "plugin-sdk",
   );
 
+  // Patch context overflow messages in ALL dist bundles that contain them.
+  const allDistFiles = await readdir(resolve(openclawPackageRoot, "dist"));
+  for (const fileName of allDistFiles) {
+    if (!fileName.endsWith(".js")) continue;
+    const filePath = resolve(openclawPackageRoot, "dist", fileName);
+    let source = patchedFiles.get(relative(openclawPackageRoot, filePath));
+    if (!source) {
+      source = await readFile(filePath, "utf8");
+    }
+    let patched = false;
+    for (const overflow of CONTEXT_OVERFLOW_PATCHES) {
+      if (source.includes(overflow.search)) {
+        source = source.replaceAll(overflow.search, overflow.zhReplace);
+        patched = true;
+      }
+    }
+    if (patched) {
+      patchedFiles.set(relative(openclawPackageRoot, filePath), source);
+      console.log(
+        `[openclaw-sidecar] patched context overflow message in ${fileName}`,
+      );
+    }
+  }
+
   return patchedFiles;
 }
 
