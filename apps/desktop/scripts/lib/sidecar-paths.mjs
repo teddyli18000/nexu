@@ -233,6 +233,7 @@ export async function copyRuntimeDependencyClosure({
   packageRoot,
   targetNodeModules,
   dependencyNames,
+  onPackageCopied,
 }) {
   const closureStartedAt = performance.now();
   let copiedPackageCount = 0;
@@ -267,6 +268,7 @@ export async function copyRuntimeDependencyClosure({
     }
     seen.add(seenKey);
     copiedPackageCount += 1;
+    onPackageCopied?.(copiedPackageCount);
 
     await mkdir(dirname(targetPackageRoot), { recursive: true });
     await rm(targetPackageRoot, { recursive: true, force: true });

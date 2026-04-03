@@ -203,6 +203,63 @@ describe("desktop runtime manifests", () => {
       expect(execFileSyncMock).not.toHaveBeenCalled();
     });
 
+    it("resolves packaged sidecar roots through archive metadata", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const runtimeRoot = "/Users/testuser/.nexu";
+      const archiveMetadataPath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "archive.json",
+      );
+      const archivePath = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+        "payload.zip",
+      );
+      const extractedRoot = absoluteRuntimePath(
+        runtimeRoot,
+        "openclaw-sidecar",
+      );
+      const entryPath = absoluteRuntimePath(
+        extractedRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
+
+      fsState.paths.add(archiveMetadataPath);
+      fsState.paths.add(archivePath);
+      fsState.paths.add(entryPath);
+      fsState.stampContents.set(
+        archiveMetadataPath,
+        JSON.stringify({ format: "zip", path: "payload.zip" }),
+      );
+
+      execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === "tar" && args[3] === `${extractedRoot}.staging`) {
+          fsState.paths.add(`${extractedRoot}.staging`);
+          fsState.paths.add(
+            entryPath.replace(extractedRoot, `${extractedRoot}.staging`),
+          );
+        }
+        if (cmd === "mv") {
+          fsState.paths.delete(`${extractedRoot}.staging`);
+          fsState.paths.add(extractedRoot);
+          fsState.paths.add(entryPath);
+        }
+      });
+
+      const result = ensurePackagedOpenclawSidecar(
+        runtimeSidecarBaseRoot,
+        runtimeRoot,
+      );
+
+      expect(normalizePathForAssertion(result)).toBe(
+        runtimePath("/Users/testuser/.nexu", "openclaw-sidecar"),
+      );
+    });
+
     it("extracts through staging, verifies entry, and atomically swaps into place", () => {
       const runtimeSidecarBaseRoot =
         "/Applications/Nexu.app/Contents/Resources/runtime";
@@ -266,6 +323,36 @@ describe("desktop runtime manifests", () => {
           absoluteRuntimePath(stagingRoot, ".archive-stamp"),
         ),
       ).toBe(fsState.archiveStamp);
+    });
+
+    it("skips extraction when the packaged sidecar is already unpacked", () => {
+      const runtimeSidecarBaseRoot =
+        "/Applications/Nexu.app/Contents/Resources/runtime";
+      const packagedSidecarRoot = absoluteRuntimePath(
+        runtimeSidecarBaseRoot,
+        "openclaw",
+      );
+      const entryPath = absoluteRuntimePath(
+        packagedSidecarRoot,
+        "node_modules",
+        "openclaw",
+        "openclaw.mjs",
+      );
+
+      fsState.paths.add(entryPath);
+
+      const result = ensurePackagedOpenclawSidecar(
+        runtimeSidecarBaseRoot,
+        "/Users/testuser/.nexu",
+      );
+
+      expect(normalizePathForAssertion(result)).toBe(
+        runtimePath(
+          "/Applications/Nexu.app/Contents/Resources/runtime",
+          "openclaw",
+        ),
+      );
+      expect(execFileSyncMock).not.toHaveBeenCalled();
     });
 
     it("cleans leftover staging directories before a fresh extraction", () => {

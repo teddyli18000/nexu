@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   cp,
   lstat,
@@ -7,6 +8,7 @@ import {
   readdir,
   realpath,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -45,6 +47,21 @@ const preferExistingRuntimeInstall =
 const preferExistingSidecars =
   process.env.NEXU_DESKTOP_USE_EXISTING_SIDECARS === "1" ||
   process.env.NEXU_DESKTOP_USE_EXISTING_SIDECARS?.toLowerCase() === "true";
+const preferExistingWinUnpacked =
+  process.env.NEXU_DESKTOP_USE_EXISTING_WIN_UNPACKED === "1" ||
+  process.env.NEXU_DESKTOP_USE_EXISTING_WIN_UNPACKED?.toLowerCase() === "true";
+const diagnosticsEnabled =
+  process.env.NEXU_DESKTOP_DIST_DIAGNOSTICS === "1" ||
+  process.env.NEXU_DESKTOP_DIST_DIAGNOSTICS?.toLowerCase() === "true";
+const defaultDiagnosticStepTimeoutMs = diagnosticsEnabled ? 10 * 60 * 1000 : 0;
+const stopAfterStep = process.env.NEXU_DESKTOP_DIST_STOP_AFTER_STEP ?? null;
+class StopAfterStepSignal extends Error {
+  constructor(stepName) {
+    super(`[dist:win] stopping after requested step ${stepName}`);
+    this.name = "StopAfterStepSignal";
+    this.stepName = stepName;
+  }
+}
 
 const rmWithRetriesOptions = {
   recursive: true,
@@ -57,16 +74,51 @@ function formatDurationMs(durationMs) {
   return `${(durationMs / 1000).toFixed(3)}s`;
 }
 
+function getStepTimeoutMs(stepName) {
+  const timeoutEnvName = `NEXU_DESKTOP_DIST_TIMEOUT_${stepName
+    .replace(/[^A-Z0-9]/giu, "_")
+    .toUpperCase()}`;
+  const timeoutMs = Number(process.env[timeoutEnvName]);
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs;
+  }
+  return diagnosticsEnabled ? defaultDiagnosticStepTimeoutMs : 0;
+}
+
 async function timedStep(stepName, fn, timings) {
   const startedAt = performance.now();
-  console.log(`[dist:win][timing] start ${stepName}`);
+  const stepTimeoutMs = getStepTimeoutMs(stepName);
+  console.log(
+    `[dist:win][step] start ${stepName} pid=${process.pid} cwd=${process.cwd()} diagnostics=${diagnosticsEnabled ? "on" : "off"} timeoutMs=${stepTimeoutMs || 0}`,
+  );
+  let stepTimeoutHandle = null;
   try {
-    return await fn();
+    const result = await (stepTimeoutMs > 0
+      ? Promise.race([
+          fn(),
+          new Promise((_, reject) => {
+            stepTimeoutHandle = setTimeout(() => {
+              reject(
+                new Error(
+                  `[dist:win] step ${stepName} timed out after ${stepTimeoutMs}ms`,
+                ),
+              );
+            }, stepTimeoutMs);
+          }),
+        ])
+      : fn());
+    if (stopAfterStep === stepName) {
+      throw new StopAfterStepSignal(stepName);
+    }
+    return result;
   } finally {
+    if (stepTimeoutHandle) {
+      clearTimeout(stepTimeoutHandle);
+    }
     const durationMs = performance.now() - startedAt;
     timings.push({ stepName, durationMs });
     console.log(
-      `[dist:win][timing] done ${stepName} duration=${formatDurationMs(durationMs)}`,
+      `[dist:win][step] done ${stepName} pid=${process.pid} duration=${formatDurationMs(durationMs)}`,
     );
   }
 }
@@ -76,6 +128,101 @@ async function ensureExistingPath(path, label) {
     await lstat(path);
   } catch {
     throw new Error(`[dist:win] Missing ${label}: ${path}`);
+  }
+}
+
+async function pathExists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hashString(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function hashFile(path) {
+  return hashString(await readFile(path, "utf8"));
+}
+
+async function createWinUnpackedManifest(releaseRoot) {
+  const desktopPackage = JSON.parse(
+    await readFile(desktopPackageJsonPath, "utf8"),
+  );
+  return {
+    platform: "win",
+    mode: "dir-only",
+    version:
+      typeof desktopPackage.version === "string" ? desktopPackage.version : "",
+    outputPath: resolve(releaseRoot, "win-unpacked"),
+    packageJsonHash: await hashFile(desktopPackageJsonPath),
+    lockfileHash: await hashFile(resolve(repoRoot, "pnpm-lock.yaml")),
+    scriptHash: await hashFile(resolve(scriptDir, "dist-win.mjs")),
+  };
+}
+
+async function writeWinUnpackedManifest(releaseRoot) {
+  const winUnpackedManifestDir = resolve(releaseRoot, ".cache", "dist-win");
+  const winUnpackedManifestPath = resolve(
+    winUnpackedManifestDir,
+    "win-unpacked-manifest.json",
+  );
+  await mkdir(winUnpackedManifestDir, { recursive: true });
+  const manifest = await createWinUnpackedManifest(releaseRoot);
+  await writeFile(
+    winUnpackedManifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+async function validateWinUnpackedReuse(releaseRoot) {
+  const winUnpackedManifestDir = resolve(releaseRoot, ".cache", "dist-win");
+  const winUnpackedManifestPath = resolve(
+    winUnpackedManifestDir,
+    "win-unpacked-manifest.json",
+  );
+  const outputPath = resolve(releaseRoot, "win-unpacked");
+  if (!(await pathExists(outputPath))) {
+    return { valid: false, reason: "win-unpacked output missing" };
+  }
+  if (!(await pathExists(winUnpackedManifestPath))) {
+    return { valid: false, reason: "win-unpacked manifest missing" };
+  }
+  try {
+    const manifest = JSON.parse(
+      await readFile(winUnpackedManifestPath, "utf8"),
+    );
+    const expected = await createWinUnpackedManifest(releaseRoot);
+    const mismatches = [];
+    for (const key of [
+      "platform",
+      "mode",
+      "version",
+      "outputPath",
+      "packageJsonHash",
+      "lockfileHash",
+      "scriptHash",
+    ]) {
+      if (manifest[key] !== expected[key]) {
+        mismatches.push(key);
+      }
+    }
+    if (mismatches.length > 0) {
+      return {
+        valid: false,
+        reason: `manifest mismatch: ${mismatches.join(", ")}`,
+      };
+    }
+    return { valid: true, reason: "valid" };
+  } catch (error) {
+    return {
+      valid: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -284,19 +431,93 @@ function run(command, args, options = {}) {
       env: options.env ?? process.env,
       platform: buildTargetPlatform === "win" ? "win32" : process.platform,
     });
+    const cwd = options.cwd ?? repoRoot;
+    const timeoutMs = options.timeoutMs ?? 0;
+    const label =
+      options.label ?? `${commandSpec.command} ${commandSpec.args.join(" ")}`;
+    const startedAt = performance.now();
+    console.log(
+      `[dist:win][command] start label=${JSON.stringify(label)} pid=pending cwd=${JSON.stringify(cwd)} timeoutMs=${timeoutMs || 0} command=${JSON.stringify(commandSpec.command)} args=${JSON.stringify(commandSpec.args)}`,
+    );
     const child = spawn(commandSpec.command, commandSpec.args, {
-      cwd: options.cwd ?? repoRoot,
+      cwd,
       env: options.env ?? process.env,
       stdio: "inherit",
     });
 
-    child.once("error", rejectRun);
-    child.once("exit", (code) => {
-      if (code === 0) {
-        resolveRun();
+    console.log(
+      `[dist:win][command] spawned label=${JSON.stringify(label)} pid=${child.pid ?? "unknown"}`,
+    );
+
+    let settled = false;
+    let killTimeoutHandle = null;
+    let forceKillTimeoutHandle = null;
+
+    const clearTimers = () => {
+      if (killTimeoutHandle) {
+        clearTimeout(killTimeoutHandle);
+      }
+      if (forceKillTimeoutHandle) {
+        clearTimeout(forceKillTimeoutHandle);
+      }
+    };
+
+    const rejectOnce = (error) => {
+      if (settled) {
         return;
       }
-      rejectRun(
+      settled = true;
+      clearTimers();
+      rejectRun(error);
+    };
+
+    const resolveOnce = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
+      resolveRun();
+    };
+
+    if (timeoutMs > 0) {
+      killTimeoutHandle = setTimeout(() => {
+        console.log(
+          `[dist:win][command] timeout label=${JSON.stringify(label)} pid=${child.pid ?? "unknown"} timeoutMs=${timeoutMs}`,
+        );
+        try {
+          child.kill();
+        } catch {}
+        forceKillTimeoutHandle = setTimeout(() => {
+          if (child.exitCode === null && !child.killed) {
+            try {
+              child.kill("SIGKILL");
+            } catch {}
+          }
+        }, 5000);
+        rejectOnce(
+          new Error(
+            `[dist:win] command timed out after ${timeoutMs}ms: ${label}`,
+          ),
+        );
+      }, timeoutMs);
+    }
+
+    child.once("error", (error) => {
+      console.log(
+        `[dist:win][command] error label=${JSON.stringify(label)} pid=${child.pid ?? "unknown"} duration=${formatDurationMs(performance.now() - startedAt)} message=${JSON.stringify(error.message)}`,
+      );
+      rejectOnce(error);
+    });
+    child.once("exit", (code) => {
+      console.log(
+        `[dist:win][command] exit label=${JSON.stringify(label)} pid=${child.pid ?? "unknown"} code=${code ?? "null"} duration=${formatDurationMs(performance.now() - startedAt)}`,
+      );
+      if (code === 0) {
+        resolveOnce();
+        return;
+      }
+      rejectOnce(
         new Error(
           `${commandSpec.command} ${commandSpec.args.join(" ")} exited with code ${code ?? "null"}.`,
         ),
@@ -309,7 +530,10 @@ async function runElectronBuilder(args, options = {}) {
   const electronBuilderCli = require.resolve("electron-builder/cli.js", {
     paths: [electronRoot, repoRoot],
   });
-  await run(process.execPath, [electronBuilderCli, ...args], options);
+  await run(process.execPath, [electronBuilderCli, ...args], {
+    ...options,
+    label: options.label ?? "electron-builder",
+  });
 }
 
 async function ensureWindowsPwdShim() {
@@ -459,6 +683,7 @@ async function main() {
   const localMode = rawArgs.has("--local");
   const dirOnly =
     localMode || rawArgs.has("--dir-only") || rawArgs.has("--target=dir");
+  const nsisFromExistingDir = rawArgs.has("--nsis-from-existing-dir");
   const timings = [];
   if (buildTargetPlatform !== "win") {
     throw new Error(
@@ -505,6 +730,8 @@ async function main() {
           }),
         "prepared runtime sidecars",
       )));
+  const shouldReuseExistingWinUnpacked =
+    preferExistingWinUnpacked || nsisFromExistingDir;
 
   if (localMode) {
     console.log(
@@ -512,9 +739,24 @@ async function main() {
     );
   }
 
+  if (nsisFromExistingDir) {
+    const reuseCheck = await validateWinUnpackedReuse(releaseRoot);
+    if (!reuseCheck.valid) {
+      throw new Error(
+        `[dist:win] --nsis-from-existing-dir requires a valid win-unpacked stage: ${reuseCheck.reason}`,
+      );
+    }
+  }
+
   await timedStep(
     "clean release directories",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] preserving release directory for --nsis-from-existing-dir",
+        );
+        return;
+      }
       await rm(releaseRoot, rmWithRetriesOptions);
       if (!shouldReuseExistingSidecars) {
         await rm(runtimeDistRoot, rmWithRetriesOptions);
@@ -526,6 +768,12 @@ async function main() {
   await timedStep(
     "build shared workspace steps",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping shared workspace steps for --nsis-from-existing-dir",
+        );
+        return;
+      }
       if (
         shouldReuseExistingBuildArtifacts &&
         shouldReuseExistingRuntimeInstall
@@ -547,14 +795,26 @@ async function main() {
         const isRuntimeInstallStep = args.includes("openclaw-runtime:install");
 
         if (isBuildStep && shouldReuseExistingBuildArtifacts) {
+          console.log(
+            `[dist:win] skipping shared build step due to reuse: ${args.join(" ")}`,
+          );
           continue;
         }
 
         if (isRuntimeInstallStep && shouldReuseExistingRuntimeInstall) {
+          console.log(
+            `[dist:win] skipping runtime install step due to reuse: ${args.join(" ")}`,
+          );
           continue;
         }
 
-        await run(command === "pnpm" ? pnpmCommand : command, args, { env });
+        await run(command === "pnpm" ? pnpmCommand : command, args, {
+          env,
+          timeoutMs: diagnosticsEnabled
+            ? getStepTimeoutMs("build shared workspace steps")
+            : 0,
+          label: `shared workspace: ${args.join(" ")}`,
+        });
       }
     },
     timings,
@@ -562,6 +822,12 @@ async function main() {
   await timedStep(
     "build @nexu/web",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping @nexu/web build for --nsis-from-existing-dir",
+        );
+        return;
+      }
       if (shouldReuseExistingBuildArtifacts) {
         return;
       }
@@ -571,7 +837,13 @@ async function main() {
           await run(
             pnpmCommand,
             ["--dir", repoRoot, "--filter", "@nexu/web", "exec", "tsc", "-b"],
-            { env: buildCapabilities.webBuildEnv },
+            {
+              env: buildCapabilities.webBuildEnv,
+              timeoutMs: diagnosticsEnabled
+                ? getStepTimeoutMs("build @nexu/web:tsc")
+                : 0,
+              label: "build @nexu/web:tsc",
+            },
           );
         },
         timings,
@@ -590,7 +862,13 @@ async function main() {
               "vite",
               "build",
             ],
-            { env: buildCapabilities.webBuildEnv },
+            {
+              env: buildCapabilities.webBuildEnv,
+              timeoutMs: diagnosticsEnabled
+                ? getStepTimeoutMs("build @nexu/web:vite")
+                : 0,
+              label: "build @nexu/web:vite",
+            },
           );
         },
         timings,
@@ -601,16 +879,35 @@ async function main() {
   await timedStep(
     "build @nexu/desktop",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping @nexu/desktop build for --nsis-from-existing-dir",
+        );
+        return;
+      }
       if (shouldReuseExistingBuildArtifacts) {
         return;
       }
-      await run(pnpmCommand, ["run", "build"], { cwd: electronRoot, env });
+      await run(pnpmCommand, ["run", "build"], {
+        cwd: electronRoot,
+        env,
+        timeoutMs: diagnosticsEnabled
+          ? getStepTimeoutMs("build @nexu/desktop")
+          : 0,
+        label: "build @nexu/desktop",
+      });
     },
     timings,
   );
   await timedStep(
     "prepare runtime sidecars",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping runtime sidecar preparation for --nsis-from-existing-dir",
+        );
+        return;
+      }
       if (shouldReuseExistingSidecars) {
         await ensureExistingSidecars(runtimeDistRoot, {
           allowUnarchivedOpenclaw: allowUnarchivedOpenclawSidecar,
@@ -624,6 +921,10 @@ async function main() {
         [resolve(scriptDir, "prepare-runtime-sidecars.mjs"), "--release"],
         {
           cwd: electronRoot,
+          timeoutMs: diagnosticsEnabled
+            ? getStepTimeoutMs("prepare runtime sidecars")
+            : 0,
+          label: "prepare runtime sidecars",
           env: {
             ...buildCapabilities.sidecarReleaseEnv,
             ...(localMode
@@ -640,6 +941,12 @@ async function main() {
   await timedStep(
     "generate build config",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping build config generation for --nsis-from-existing-dir",
+        );
+        return;
+      }
       await ensureBuildConfig();
     },
     timings,
@@ -647,6 +954,12 @@ async function main() {
   await timedStep(
     "dereference pnpm symlinks",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping pnpm symlink dereference for --nsis-from-existing-dir",
+        );
+        return;
+      }
       await dereferencePnpmSymlinks();
     },
     timings,
@@ -666,18 +979,35 @@ async function main() {
   await timedStep(
     "run electron-builder",
     async () => {
+      if (dirOnly && shouldReuseExistingWinUnpacked) {
+        const reuseCheck = await validateWinUnpackedReuse(releaseRoot);
+        if (reuseCheck.valid) {
+          console.log("[dist:win] reusing existing win-unpacked stage");
+          return;
+        }
+        console.log(
+          `[dist:win] win-unpacked reuse unavailable, rebuilding: ${reuseCheck.reason}`,
+        );
+      }
       const electronBuilderArgs = [
         ...buildCapabilities.createElectronBuilderArgs({
           electronVersion,
           buildVersion,
           dirOnly,
         }),
+        ...(nsisFromExistingDir
+          ? [`--prepackaged=${resolve(releaseRoot, "win-unpacked")}`]
+          : []),
         ...(localMode
           ? ["--config.npmRebuild=false", "--config.nodeGypRebuild=false"]
           : []),
       ];
       await runElectronBuilder(electronBuilderArgs, {
         cwd: electronRoot,
+        timeoutMs: diagnosticsEnabled
+          ? getStepTimeoutMs("run electron-builder")
+          : 0,
+        label: `electron-builder ${electronBuilderArgs.join(" ")}`,
         env: {
           ...electronBuilderEnv,
           DEBUG:
@@ -689,12 +1019,21 @@ async function main() {
             : {}),
         },
       });
+      if (dirOnly) {
+        await writeWinUnpackedManifest(releaseRoot);
+      }
     },
     timings,
   );
   await timedStep(
     "clean release intermediates",
     async () => {
+      if (nsisFromExistingDir) {
+        console.log(
+          "[dist:win] skipping release intermediate cleanup for --nsis-from-existing-dir",
+        );
+        return;
+      }
       await cleanupReleaseIntermediates(releaseRoot);
     },
     timings,
@@ -708,4 +1047,12 @@ async function main() {
   }
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  if (error instanceof StopAfterStepSignal) {
+    console.log(error.message);
+  } else {
+    throw error;
+  }
+}

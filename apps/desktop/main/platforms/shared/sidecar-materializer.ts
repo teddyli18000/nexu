@@ -218,12 +218,6 @@ export function createSyncTarSidecarMaterializer(): DesktopSidecarMaterializer {
       return resolved.extractedSidecarRoot;
     }
 
-    if (resolved.archiveMetadata?.format === "zip") {
-      throw new Error(
-        "Synchronous packaged OpenClaw extraction does not support zip archives.",
-      );
-    }
-
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt += 1) {
       try {
@@ -234,6 +228,11 @@ export function createSyncTarSidecarMaterializer(): DesktopSidecarMaterializer {
           });
         }
         mkdirSync(resolved.extractedSidecarRoot, { recursive: true });
+        if (resolved.archiveMetadata?.format === "zip") {
+          throw new Error(
+            "Synchronous packaged OpenClaw extraction does not support zip archives.",
+          );
+        }
         execFileSync("/usr/bin/tar", [
           "-xzf",
           resolved.archivePath,

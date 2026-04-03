@@ -412,6 +412,29 @@ export class OpenClawGatewayService {
             derivedStatus = "disconnected";
           }
 
+          if (
+            openclawChannelId === "openclaw-weixin" &&
+            derivedStatus !== "connected"
+          ) {
+            logger.info(
+              {
+                channelId: channel.id,
+                accountId: channel.accountId,
+                rawSnapshot: {
+                  running,
+                  configured,
+                  connected,
+                  enabled,
+                  restartPending: snapshot.restartPending === true,
+                  lastError,
+                  probeOk: hasProbeOk,
+                },
+                derivedStatus,
+              },
+              "openclaw_weixin_live_status_non_connected",
+            );
+          }
+
           return {
             channelType: channel.channelType,
             channelId: channel.id,

@@ -1,7 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -16,6 +13,7 @@ import { buildChildProcessProxyEnv } from "../../shared/proxy-config";
 import type { DesktopRuntimeConfig } from "../../shared/runtime-config";
 import { getWorkspaceRoot } from "../../shared/workspace-paths";
 import { resolveRuntimeManifestsRoots } from "../platforms/shared/runtime-roots";
+import { createAsyncArchiveSidecarMaterializer } from "../platforms/shared/sidecar-materializer";
 import type { RuntimeUnitManifest } from "./types";
 
 function ensureDir(path: string): string {
@@ -174,10 +172,18 @@ export function resolveOpenclawSidecarRoot(
   runtimeRoot: string,
 ): string {
   const packagedSidecarRoot = path.resolve(runtimeSidecarBaseRoot, "openclaw");
-  const archivePath = path.resolve(packagedSidecarRoot, "payload.tar.gz");
+  const archiveMetadataPath = path.resolve(packagedSidecarRoot, "archive.json");
+  const archivePath = existsSync(archiveMetadataPath)
+    ? path.resolve(
+        packagedSidecarRoot,
+        JSON.parse(readFileSync(archiveMetadataPath, "utf8")).path,
+      )
+    : path.resolve(packagedSidecarRoot, "payload.tar.gz");
+
   if (!existsSync(archivePath)) {
     return packagedSidecarRoot;
   }
+
   return path.resolve(runtimeRoot, "openclaw-sidecar");
 }
 
@@ -186,7 +192,22 @@ export function ensurePackagedOpenclawSidecar(
   runtimeRoot: string,
 ): string {
   const packagedSidecarRoot = path.resolve(runtimeSidecarBaseRoot, "openclaw");
-  const archivePath = path.resolve(packagedSidecarRoot, "payload.tar.gz");
+  const archiveMetadataPath = path.resolve(packagedSidecarRoot, "archive.json");
+  const packagedOpenclawEntry = path.resolve(
+    packagedSidecarRoot,
+    "node_modules/openclaw/openclaw.mjs",
+  );
+
+  if (existsSync(packagedOpenclawEntry)) {
+    return packagedSidecarRoot;
+  }
+
+  const archivePath = existsSync(archiveMetadataPath)
+    ? path.resolve(
+        packagedSidecarRoot,
+        JSON.parse(readFileSync(archiveMetadataPath, "utf8")).path,
+      )
+    : path.resolve(packagedSidecarRoot, "payload.tar.gz");
 
   if (!existsSync(archivePath)) {
     return packagedSidecarRoot;
@@ -274,7 +295,13 @@ export function checkOpenclawExtractionNeeded(
   const runtimeSidecarBaseRoot = path.resolve(electronRoot, "runtime");
   const runtimeRoot = path.resolve(userDataPath, "runtime");
   const packagedSidecarRoot = path.resolve(runtimeSidecarBaseRoot, "openclaw");
-  const archivePath = path.resolve(packagedSidecarRoot, "payload.tar.gz");
+  const archiveMetadataPath = path.resolve(packagedSidecarRoot, "archive.json");
+  const archivePath = existsSync(archiveMetadataPath)
+    ? path.resolve(
+        packagedSidecarRoot,
+        JSON.parse(readFileSync(archiveMetadataPath, "utf8")).path,
+      )
+    : path.resolve(packagedSidecarRoot, "payload.tar.gz");
 
   if (!existsSync(archivePath)) return false;
 
@@ -309,52 +336,11 @@ export async function extractOpenclawSidecarAsync(
 ): Promise<void> {
   const runtimeSidecarBaseRoot = path.resolve(electronRoot, "runtime");
   const runtimeRoot = path.resolve(userDataPath, "runtime");
-  const packagedSidecarRoot = path.resolve(runtimeSidecarBaseRoot, "openclaw");
-  const archivePath = path.resolve(packagedSidecarRoot, "payload.tar.gz");
-  const extractedSidecarRoot = path.resolve(runtimeRoot, "openclaw-sidecar");
-  const archiveStat = statSync(archivePath);
-  const archiveStamp = `${archiveStat.size}:${archiveStat.mtimeMs}`;
-  const stagingRoot = `${extractedSidecarRoot}.staging`;
-
-  // Clean up leftover staging from a previous interrupted extraction
-  if (existsSync(stagingRoot)) {
-    await execFileAsync("rm", ["-rf", stagingRoot]);
-  }
-
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      if (existsSync(stagingRoot)) {
-        await execFileAsync("rm", ["-rf", stagingRoot]);
-      }
-      mkdirSync(stagingRoot, { recursive: true });
-      await execFileAsync("tar", ["-xzf", archivePath, "-C", stagingRoot]);
-
-      // Verify critical entry point
-      const stagingEntry = path.resolve(
-        stagingRoot,
-        "node_modules/openclaw/openclaw.mjs",
-      );
-      if (!existsSync(stagingEntry)) {
-        throw new Error(
-          `Extraction verification failed: ${stagingEntry} not found`,
-        );
-      }
-
-      // Write stamp inside staging
-      writeFileSync(path.resolve(stagingRoot, ".archive-stamp"), archiveStamp);
-
-      // Atomic swap
-      if (existsSync(extractedSidecarRoot)) {
-        await execFileAsync("rm", ["-rf", extractedSidecarRoot]);
-      }
-      await execFileAsync("mv", [stagingRoot, extractedSidecarRoot]);
-      return;
-    } catch (err) {
-      if (attempt === MAX_RETRIES - 1) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  }
+  const materializer = createAsyncArchiveSidecarMaterializer();
+  await materializer.materializePackagedOpenclawSidecar({
+    runtimeSidecarBaseRoot,
+    runtimeRoot,
+  });
 }
 
 export function createRuntimeUnitManifests(
@@ -416,12 +402,15 @@ export function createRuntimeUnitManifests(
   const webModulePath = path.resolve(webSidecarRoot, "index.js");
   const openclawBinPath =
     process.env.NEXU_OPENCLAW_BIN ??
-    path.resolve(openclawSidecarRoot, "bin/openclaw");
+    path.resolve(
+      resolvedOpenclawSidecarRoot,
+      "node_modules/openclaw/openclaw.mjs",
+    );
   const controllerPort = runtimeConfig.ports.controller;
   const webPort = runtimeConfig.ports.web;
   const webUrl = runtimeConfig.urls.web;
   const electronNodeRunner = resolveElectronNodeRunner();
-  const openclawNodePath = buildOpenclawNodePath(openclawSidecarRoot);
+  const openclawNodePath = buildOpenclawNodePath(resolvedOpenclawSidecarRoot);
   const skillNodePath = buildSkillNodePath(electronRoot, isPackaged);
   const childProcessProxyEnv = buildChildProcessProxyEnv(runtimeConfig.proxy);
 

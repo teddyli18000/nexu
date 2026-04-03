@@ -233,6 +233,10 @@ Use this snapshot to confirm that local controller/OpenClaw URLs resolve to dire
   - Use this for packaged-app-only flags such as `NEXU_DESKTOP_AUTO_UPDATE_ENABLED=false` when you want a local build to skip update checks.
   - Use `NEXU_DESKTOP_RELEASE_DIR=/absolute/output/path` when you want packaged artifacts written somewhere other than `apps/desktop/release`.
 
+- `Windows installer build fails with symlink permission errors`
+  - When EXE resource editing or signing is enabled, run local Windows installer builds from an Administrator shell.
+  - Non-admin shells can fail in the legacy `winCodeSign` / `rcedit` path with symlink permission errors.
+
 - `desktop won't cold start`
   - Start with `pnpm dev logs desktop`.
   - Then inspect `cold-start.log`, `desktop-main.log`, and `logs/runtime-units/*.log` under the desktop logs directory.
