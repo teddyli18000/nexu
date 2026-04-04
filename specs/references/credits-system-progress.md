@@ -170,6 +170,9 @@ curl -X PUT http://localhost:50800/api/internal/desktop/default-model \
 - 但它 emit 的 `onAgentEvent({ stream: "compaction" })` **不会传到 `agent-runner-execution.ts`**（不同执行上下文）
 - **可行方案**：在 `handleAutoCompactionStart` 里 `console.error("NEXU_EVENT compaction.started <payload>")`，controller 的 `emitRuntimeEventFromLine` 捕获，然后通过 `gatewayService.sendChannelMessage()` 发独立消息
 - 需要两层改动：patch `handleAutoCompactionStart` + controller 加 `compaction.started` 事件处理
+- **已实现**：patch + controller handler 代码都已提交
+- **验证阻塞**：Pi tokenizer 自己估算 prompt token 数（不用 mock server 报的 usage），且 link provider 的 context window 由 catalog 决定（不受本地 config 覆盖）。本地 mock 无法触发 safeguard compaction。需要真实用户长对话自然触发来验证
+- **`openclaw agent` 命令用的是 agent 绑定的 model**，不是 runtime-model 的选择（即使通过 API 切了 model，agent 命令仍用 agent config 里的）
 
 ### 切换模型 API
 ```bash
