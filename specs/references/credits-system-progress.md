@@ -126,6 +126,20 @@ curl -X PUT http://localhost:50800/api/internal/desktop/default-model \
   -d '{"modelId": "link/gemini-3-flash-preview"}'
 ```
 
+## 下一步
+
+### Mock server 增强（用于 compaction 测试）
+- 采集真实 provider（如 gemini-3-flash-preview）的响应格式：`usage` 字段的真实 token 数、`content` 的真实长度、streaming chunk 格式
+- Mock server fill 模式：每条回复返回 **真实规模的 token 数**（prompt_tokens 累加、completion_tokens 2000-4000），让 Pi 框架的 tokenizer 估算和实际一致
+- Context window 设为 16000-32000（最小值），几轮对话就能触发 safeguard compaction
+- 加 `--mode compaction-test`：前 N 条正常回复（大段文字 + 真实 usage），第 N+1 条模拟 compaction LLM 调用（延迟 5s 返回摘要格式的 response）
+- 目标：稳定复现 safeguard compaction 的 start → LLM summarize → end 全流程
+
+### 测试覆盖
+- 单元测试：`createOpenClawLogEventProcessor` 的 error code 提取（已有 `openclaw-process.test.ts`）
+- E2E 测试：mock server + `pnpm start` → 飞书/web chat 发消息 → 验证错误文案、compaction 提示、无沉默
+- Patch 回归测试：`prepare-openclaw-sidecar.mjs --dry-run` 验证所有 patch anchor 仍然匹配
+
 ## 关键文件路径
 
 | 文件 | 用途 |
