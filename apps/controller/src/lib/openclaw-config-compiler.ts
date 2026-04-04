@@ -522,7 +522,7 @@ export function compileOpenClawConfig(
         model: { primary: defaultModelId },
         compaction: {
           mode: "safeguard",
-          maxHistoryShare: 0.5,
+          maxHistoryShare: 0.3,
           keepRecentTokens: 20000,
           recentTurnsPreserve: 5,
           qualityGuard: { enabled: true },
