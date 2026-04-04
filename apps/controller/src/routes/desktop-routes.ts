@@ -257,4 +257,49 @@ export function registerDesktopRoutes(
       return c.json({ locale }, 200);
     },
   );
+
+  // Compaction notification endpoint — called by OpenClaw patch when
+  // compaction starts, sends a status message to the user's channel.
+  app.post("/api/internal/compaction-notify", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const sessionKey = body.sessionKey as string | undefined;
+    if (!sessionKey) return c.json({ ok: false }, 400);
+
+    const parts = sessionKey.split(":");
+    const to = parts.length >= 4 ? parts.slice(3).join(":") : undefined;
+    if (!to) return c.json({ ok: false, reason: "no target" }, 400);
+
+    let channel = typeof body.channel === "string" ? body.channel : undefined;
+    if (!channel) {
+      const cfg = await container.configStore.getConfig();
+      channel = cfg.channels.find(
+        (ch) => ch.status === "connected",
+      )?.channelType;
+    }
+    if (!channel) return c.json({ ok: false, reason: "no channel" }, 400);
+
+    const locale = await container.configStore.getDesktopLocale();
+    const message =
+      locale === "en"
+        ? "⏳ Compacting conversation history, estimated ~30s..."
+        : "⏳ 正在整理对话记录，预计30秒内完成...";
+
+    try {
+      await container.gatewayService.sendChannelMessage({
+        to,
+        message,
+        channel,
+        sessionKey,
+      });
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json(
+        {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  });
 }

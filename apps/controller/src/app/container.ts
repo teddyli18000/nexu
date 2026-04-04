@@ -164,20 +164,34 @@ export async function createContainer(): Promise<ControllerContainer> {
 
     // Parse target from sessionKey: agent:<id>:direct:<userId>
     const parts = (payload.sessionKey as string).split(":");
-    const channel = payload.channel;
     const to = parts.length >= 4 ? parts.slice(3).join(":") : undefined;
-    if (!channel || !to) return;
+    if (!to) return;
 
-    const locale = configStore
-      .getDesktopLocale()
-      .then((l) => l)
-      .catch(() => "zh-CN" as const);
-    void locale.then((l) => {
+    // Resolve channel: prefer payload.channel, then infer from config
+    const resolveChannel = async (): Promise<string | undefined> => {
+      if (typeof payload.channel === "string" && payload.channel)
+        return payload.channel;
+      // Infer from first connected channel in config
+      try {
+        const cfg = await configStore.getConfig();
+        return cfg.channels.find((ch) => ch.status === "connected")
+          ?.channelType;
+      } catch {
+        return undefined;
+      }
+    };
+
+    void (async () => {
+      const channel = await resolveChannel();
+      if (!channel) return;
+      const l = await configStore
+        .getDesktopLocale()
+        .catch(() => "zh-CN" as const);
       const message =
         l === "en"
           ? "⏳ Compacting conversation history, estimated ~30s..."
           : "⏳ 正在整理对话记录，预计30秒内完成...";
-      void gatewayService
+      await gatewayService
         .sendChannelMessage({
           to,
           message,
@@ -190,7 +204,7 @@ export async function createContainer(): Promise<ControllerContainer> {
             "compaction_status_send_failed",
           );
         });
-    });
+    })();
   });
 
   return {
