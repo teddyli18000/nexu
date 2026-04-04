@@ -190,6 +190,12 @@ const EMPTY_PAYLOADS_FALLBACK_SEARCH =
   '\treturn {\n\t\tkind: "success",\n\t\trunId,\n\t\trunResult,';
 const EMPTY_PAYLOADS_FALLBACK_REPLACEMENT =
   '\tif (!runResult?.payloads?.length && runResult?.meta?.error) {\n\t\tconst _errMsg = runResult.meta.error.message || runResult.meta.error;\n\t\treturn {\n\t\t\tkind: "final",\n\t\t\tpayload: { text: typeof _errMsg === "string" ? _errMsg : "⚠️ An error occurred. Please try again." }\n\t\t};\n\t}\n\treturn {\n\t\tkind: "success",\n\t\trunId,\n\t\trunResult,';
+// Compaction NEXU_EVENT: emit a NEXU_EVENT from handleAutoCompactionStart
+// so the controller can send an independent channel message.
+const COMPACTION_NEXU_EVENT_SEARCH =
+  'function handleAutoCompactionStart(ctx) {';
+const COMPACTION_NEXU_EVENT_REPLACEMENT =
+  'function handleAutoCompactionStart(ctx) {\n\tconsole.error("NEXU_EVENT compaction.started " + JSON.stringify({ sessionKey: ctx.params.sessionKey || null, channel: ctx.params.messageChannel || null, runId: ctx.params.runId || null }));';
 // Compaction status feedback: send a typing delta to the channel when
 // compaction starts so the user sees "⏳ Compacting..." instead of silence.
 const COMPACTION_FEEDBACK_SEARCH =
@@ -1138,6 +1144,18 @@ async function patchReplyOutcomeBridge(openclawPackageRoot) {
 
         console.log(
           `[openclaw-sidecar] patched failover error priority in ${bundleName}`,
+        );
+      }
+
+      if (source.includes(COMPACTION_NEXU_EVENT_SEARCH) && !source.includes("NEXU_EVENT compaction.started")) {
+        source = applyExactReplacement(
+          source,
+          COMPACTION_NEXU_EVENT_SEARCH,
+          COMPACTION_NEXU_EVENT_REPLACEMENT,
+          `${bundleName}: compaction NEXU_EVENT`,
+        );
+        console.log(
+          `[openclaw-sidecar] patched compaction NEXU_EVENT in ${bundleName}`,
         );
       }
 

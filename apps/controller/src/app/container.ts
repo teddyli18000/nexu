@@ -151,6 +151,49 @@ export async function createContainer(): Promise<ControllerContainer> {
     }
   };
 
+  // Send compaction status message to channel when compaction starts
+  openclawProcess.onRuntimeEvent((event) => {
+    if (event.event !== "compaction.started") return;
+    const payload = event.payload as
+      | {
+          sessionKey?: string;
+          channel?: string;
+        }
+      | undefined;
+    if (!payload?.sessionKey) return;
+
+    // Parse channel target from sessionKey: agent:<id>:direct:<userId>
+    const parts = (payload.sessionKey as string).split(":");
+    const channel =
+      payload.channel ?? (parts.length >= 4 ? parts[2] : undefined);
+    const to = parts.length >= 4 ? parts.slice(3).join(":") : undefined;
+    if (!channel || channel === "direct" || !to) return;
+
+    const locale = configStore
+      .getDesktopLocale()
+      .then((l) => l)
+      .catch(() => "zh-CN" as const);
+    void locale.then((l) => {
+      const message =
+        l === "en"
+          ? "⏳ Compacting conversation history, estimated ~30s..."
+          : "⏳ 正在整理对话记录，预计30秒内完成...";
+      void gatewayService
+        .sendChannelMessage({
+          to,
+          message,
+          channel,
+          sessionKey: payload.sessionKey,
+        })
+        .catch((err) => {
+          logger.warn(
+            { error: err instanceof Error ? err.message : String(err) },
+            "compaction_status_send_failed",
+          );
+        });
+    });
+  });
+
   return {
     env,
     gatewayClient,
