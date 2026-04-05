@@ -521,7 +521,13 @@ export function compileOpenClawConfig(
       defaults: {
         model: { primary: defaultModelId },
         compaction: {
+          // "safeguard" mode: Pi framework auto-compacts when prompt
+          // approaches context window. The safeguard extension (compaction-
+          // safeguard.ts) handles LLM summarization with quality guards.
           mode: "safeguard",
+          // Max fraction of context window for retained history after
+          // compaction. 0.3 = 70% reserved for system prompt + response.
+          // Tested: 0.5 was too tight for models with large system prompts.
           maxHistoryShare: 0.3,
           keepRecentTokens: 20000,
           recentTurnsPreserve: 5,
@@ -530,6 +536,11 @@ export function compileOpenClawConfig(
             enabled: true,
           },
         },
+        // LLM call timeout. Default is 600s (10min) which causes the bot to
+        // appear unresponsive when the provider is down. 120s is enough for
+        // real LLM calls (including long reasoning chains) while giving users
+        // faster feedback on failures. Does NOT affect compaction timeout
+        // (which has its own 300s limit via EMBEDDED_COMPACTION_TIMEOUT_MS).
         timeoutSeconds: 120,
         humanDelay: {
           mode: "off",

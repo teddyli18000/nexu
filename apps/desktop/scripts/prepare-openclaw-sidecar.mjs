@@ -150,7 +150,7 @@ const FEISHU_PRE_REPLY_FINAL_REPLACEMENT = [
 const CONTEXT_OVERFLOW_PATCHES = [
   {
     search:
-      '⚠️ Context limit exceeded. I\'ve reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.',
+      "⚠️ Context limit exceeded. I've reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.",
     zhReplace:
       "⚠️ 当前对话内容已超出模型处理上限，自动整理未能成功，已为你重置会话。请重新发送消息继续使用。如反复出现，请尝试缩短单条消息或开启新对话。",
     enReplace:
@@ -158,7 +158,7 @@ const CONTEXT_OVERFLOW_PATCHES = [
   },
   {
     search:
-      '⚠️ Context limit exceeded during compaction. I\'ve reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.',
+      "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again.\\n\\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or higher in your config.",
     zhReplace:
       "⚠️ 当前对话内容已超出模型处理上限，自动整理未能成功，已为你重置会话。请重新发送消息继续使用。如反复出现，请尝试缩短单条消息或开启新对话。",
     enReplace:
@@ -180,9 +180,9 @@ const FAILOVER_ERROR_PRIORITY_REPLACEMENT =
 // to survive across loop iterations without needing a new variable declaration.
 // Universal fast-exit: break after 3 consecutive failures of ANY type.
 const FAST_EXIT_BILLING_AUTH_SEARCH =
-  'const authFailure = isAuthAssistantError(lastAssistant);';
+  "const authFailure = isAuthAssistantError(lastAssistant);";
 const FAST_EXIT_BILLING_AUTH_REPLACEMENT =
-  'const authFailure = isAuthAssistantError(lastAssistant);\n\t\t\t\tparams.__nexuNrCount = (params.__nexuNrCount || 0) + 1; if (params.__nexuNrCount >= 2) break;';
+  "const authFailure = isAuthAssistantError(lastAssistant);\n\t\t\t\tparams.__nexuNrCount = (params.__nexuNrCount || 0) + 1; if (params.__nexuNrCount >= 2) break;";
 // Fallback reply patch: when the outer agent-runner loop exits with
 // kind "success" but runResult has no payloads (all LLM calls failed),
 // convert to a "final" reply so the user always gets feedback.
@@ -196,7 +196,7 @@ const EMPTY_PAYLOADS_FALLBACK_REPLACEMENT =
 // so it can send a status message to the user's channel.
 // Uses HTTP because in launchd mode controller can't read OpenClaw stderr.
 const COMPACTION_NEXU_EVENT_SEARCH =
-  'function handleAutoCompactionStart(ctx) {';
+  "function handleAutoCompactionStart(ctx) {";
 const COMPACTION_NEXU_EVENT_REPLACEMENT =
   'function handleAutoCompactionStart(ctx) {\n\tfetch("http://127.0.0.1:" + (process.env.CONTROLLER_PORT || "50800") + "/api/internal/compaction-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionKey: ctx.params.sessionKey, channel: ctx.params.messageChannel, runId: ctx.params.runId }) }).catch(() => {});';
 // Compaction status feedback: send a typing delta to the channel when
@@ -209,7 +209,7 @@ const COMPACTION_FEEDBACK_REPLACEMENT =
 // an error in meta, push the error text as a fallback payload instead of
 // silently returning (which causes the bot to go silent).
 const EMPTY_PAYLOAD_ARRAY_SEARCH =
-  'const payloadArray = runResult.payloads ?? [];\n\t\t\tif (payloadArray.length === 0) return;';
+  "const payloadArray = runResult.payloads ?? [];\n\t\t\tif (payloadArray.length === 0) return;";
 const EMPTY_PAYLOAD_ARRAY_REPLACEMENT =
   'const payloadArray = runResult.payloads ?? [];\n\t\t\tif (payloadArray.length === 0) {\n\t\t\t\tconst _fallbackErr = runResult.meta?.error?.message || runResult.meta?.error;\n\t\t\t\tif (_fallbackErr) {\n\t\t\t\t\tpayloadArray.push({ text: typeof _fallbackErr === "string" ? _fallbackErr : "\\u26a0\\ufe0f An error occurred. Please try again.", isError: true });\n\t\t\t\t} else {\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t}';
 // Compaction independent message: when compaction starts in the followup
@@ -229,9 +229,9 @@ const COMPACTION_COMPLETE_VERBOSE_REPLACEMENT =
 // payloads are empty, just return instead of triggering a followup turn
 // which causes an infinite retry loop.
 const STOP_FOLLOWUP_ON_EMPTY_SEARCH =
-  'if (payloadArray.length === 0) return finalizeWithFollowup(void 0, queueKey, runFollowupTurn);';
+  "if (payloadArray.length === 0) return finalizeWithFollowup(void 0, queueKey, runFollowupTurn);";
 const STOP_FOLLOWUP_ON_EMPTY_REPLACEMENT =
-  'if (payloadArray.length === 0) return;';
+  "if (payloadArray.length === 0) return;";
 // Locale reader: reads nexu-credit-guard-state.json from OPENCLAW_STATE_DIR.
 // Cached by mtime. Falls back to "zh-CN" if file missing or unreadable.
 const LOCALE_READER_LINES = [
@@ -1150,7 +1150,10 @@ async function patchReplyOutcomeBridge(openclawPackageRoot) {
         );
       }
 
-      if (source.includes(COMPACTION_NEXU_EVENT_SEARCH) && !source.includes("NEXU_EVENT compaction.started")) {
+      if (
+        source.includes(COMPACTION_NEXU_EVENT_SEARCH) &&
+        !source.includes("NEXU_EVENT compaction.started")
+      ) {
         source = applyExactReplacement(
           source,
           COMPACTION_NEXU_EVENT_SEARCH,

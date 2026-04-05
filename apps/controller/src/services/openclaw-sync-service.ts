@@ -298,16 +298,15 @@ export class OpenClawSyncService {
     await this.runtimeModelWriter.write(runtimeModelRef);
 
     // Write locale state for the credit-guard patch in OpenClaw runtime.
-    const locale =
-      (config.desktop as Record<string, unknown>).locale === "en"
-        ? "en"
-        : "zh-CN";
+    // Match the controller's own locale default: unset → "en" (not "zh-CN").
+    const desktopLocale = (config.desktop as Record<string, unknown>).locale;
+    const locale = desktopLocale === "zh-CN" ? "zh-CN" : "en";
     await mkdir(path.dirname(this.env.creditGuardStatePath), {
       recursive: true,
     });
     await writeFile(
       this.env.creditGuardStatePath,
-      JSON.stringify({ locale }) + "\n",
+      `${JSON.stringify({ locale })}\n`,
       "utf8",
     );
 
