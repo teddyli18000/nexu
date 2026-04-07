@@ -691,10 +691,10 @@ async function runLaunchdColdStart(): Promise<void> {
     skillNodePath,
     openclawTmpDir,
     proxyEnv,
-    amplitudeApiKey:
-      process.env.AMPLITUDE_API_KEY ??
-      runtimeConfig.amplitudeApiKey ??
-      undefined,
+    posthogApiKey:
+      process.env.POSTHOG_API_KEY ?? runtimeConfig.posthogApiKey ?? undefined,
+    posthogHost:
+      process.env.POSTHOG_HOST ?? runtimeConfig.posthogHost ?? undefined,
     log: (message: string) => logColdStart(message),
     nodeV8Coverage: process.env.NODE_V8_COVERAGE,
     desktopE2ECoverage: process.env.NEXU_DESKTOP_E2E_COVERAGE,

@@ -108,7 +108,8 @@ function createRuntimeConfig(): DesktopRuntimeConfig {
     },
     sentryDsn: null,
     runtimeMode: "internal",
-    amplitudeApiKey: null,
+    posthogApiKey: null,
+    posthogHost: null,
   };
 }
 

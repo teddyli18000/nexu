@@ -554,6 +554,7 @@ export type GetApiInternalDesktopCloudStatusResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -571,6 +572,7 @@ export type GetApiInternalDesktopCloudStatusResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -619,6 +621,7 @@ export type PostApiInternalDesktopCloudProfileConnectResponses = {
         status: {
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -636,6 +639,7 @@ export type PostApiInternalDesktopCloudProfileConnectResponses = {
                 linkUrl: string;
                 connected: boolean;
                 polling?: boolean;
+                userId?: string;
                 userName?: string;
                 userEmail?: string;
                 connectedAt?: string;
@@ -662,6 +666,7 @@ export type PostApiInternalDesktopCloudRefreshResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -679,6 +684,7 @@ export type PostApiInternalDesktopCloudRefreshResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -710,6 +716,7 @@ export type PostApiInternalDesktopCloudProfileCreateResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -727,6 +734,7 @@ export type PostApiInternalDesktopCloudProfileCreateResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -760,6 +768,7 @@ export type PostApiInternalDesktopCloudProfileUpdateResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -777,6 +786,7 @@ export type PostApiInternalDesktopCloudProfileUpdateResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -805,6 +815,7 @@ export type PostApiInternalDesktopCloudProfileDeleteResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -822,6 +833,7 @@ export type PostApiInternalDesktopCloudProfileDeleteResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -868,6 +880,7 @@ export type PostApiInternalDesktopCloudProfileDisconnectResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -885,6 +898,7 @@ export type PostApiInternalDesktopCloudProfileDisconnectResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -913,6 +927,7 @@ export type PostApiInternalDesktopCloudProfileSelectResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -930,6 +945,7 @@ export type PostApiInternalDesktopCloudProfileSelectResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
@@ -962,6 +978,7 @@ export type PostApiInternalDesktopCloudProfilesImportResponses = {
     200: {
         connected: boolean;
         polling?: boolean;
+        userId?: string;
         userName?: string;
         userEmail?: string;
         connectedAt?: string;
@@ -979,6 +996,7 @@ export type PostApiInternalDesktopCloudProfilesImportResponses = {
             linkUrl: string;
             connected: boolean;
             polling?: boolean;
+            userId?: string;
             userName?: string;
             userEmail?: string;
             connectedAt?: string;
