@@ -55,6 +55,99 @@ describe("registerDesktopRewardsRoutes", () => {
     expect(payload.viewer.usingManagedModel).toBe(true);
   });
 
+  it("forwards desktop test balance updates to the config store", async () => {
+    const setDesktopRewardBalance = vi.fn().mockResolvedValue({
+      viewer: {
+        cloudConnected: true,
+        activeModelId: null,
+        activeModelProviderId: null,
+        usingManagedModel: false,
+      },
+      progress: {
+        claimedCount: 0,
+        totalCount: 0,
+        earnedCredits: 0,
+      },
+      tasks: [],
+      cloudBalance: {
+        totalBalance: 1337,
+        totalRecharged: 1337,
+        totalConsumed: 0,
+      },
+    });
+
+    const app = new OpenAPIHono<ControllerBindings>();
+    registerDesktopRewardsRoutes(app, {
+      configStore: {
+        getDesktopRewardsStatus: vi.fn(),
+        claimDesktopReward: vi.fn(),
+        setDesktopRewardBalance,
+      },
+      quotaFallbackService: {
+        triggerFallback: vi.fn(),
+      },
+      githubStarVerificationService: {
+        prepareSession: vi.fn(),
+        verifySession: vi.fn(),
+      },
+    } as never);
+
+    const response = await app.request(
+      "/api/internal/desktop/rewards/set-balance",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ balance: 1337 }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(setDesktopRewardBalance).toHaveBeenCalledOnce();
+    expect(setDesktopRewardBalance).toHaveBeenCalledWith(1337);
+    await expect(response.json()).resolves.toMatchObject({
+      cloudBalance: { totalBalance: 1337 },
+    });
+  });
+
+  it("returns the config store error message for failed balance updates", async () => {
+    const app = new OpenAPIHono<ControllerBindings>();
+    registerDesktopRewardsRoutes(app, {
+      configStore: {
+        getDesktopRewardsStatus: vi.fn(),
+        claimDesktopReward: vi.fn(),
+        setDesktopRewardBalance: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              "idempotencyKey is already bound to a different credit adjustment",
+            ),
+          ),
+      },
+      quotaFallbackService: {
+        triggerFallback: vi.fn(),
+      },
+      githubStarVerificationService: {
+        prepareSession: vi.fn(),
+        verifySession: vi.fn(),
+      },
+    } as never);
+
+    const response = await app.request(
+      "/api/internal/desktop/rewards/set-balance",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ balance: 1337 }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      message:
+        "idempotencyKey is already bound to a different credit adjustment",
+    });
+  });
+
   it("rejects invalid proof URLs before forwarding the claim", async () => {
     const claimDesktopReward = vi.fn();
     const app = new OpenAPIHono<ControllerBindings>();
@@ -87,9 +180,9 @@ describe("registerDesktopRewardsRoutes", () => {
     expect(claimDesktopReward).not.toHaveBeenCalled();
   });
 
-  it("rejects GitHub star claims while the verification flow is disabled", async () => {
-    const claimDesktopReward = vi.fn();
-    const verifySession = vi.fn();
+  it("verifies GitHub star sessions before forwarding the claim", async () => {
+    const claimDesktopReward = vi.fn().mockResolvedValue({ ok: true });
+    const verifySession = vi.fn().mockResolvedValue({ ok: true });
     const app = new OpenAPIHono<ControllerBindings>();
     registerDesktopRewardsRoutes(app, {
       configStore: {
@@ -116,16 +209,19 @@ describe("registerDesktopRewardsRoutes", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      message: "GitHub star reward is temporarily unavailable",
+    expect(response.status).toBe(200);
+    expect(verifySession).toHaveBeenCalledWith("github-session-1");
+    expect(claimDesktopReward).toHaveBeenCalledWith("github_star", {
+      githubSessionId: "github-session-1",
     });
-    expect(verifySession).not.toHaveBeenCalled();
-    expect(claimDesktopReward).not.toHaveBeenCalled();
   });
 
-  it("rejects creating GitHub star verification sessions while the flow is disabled", async () => {
-    const prepareSession = vi.fn();
+  it("prepares GitHub star verification sessions", async () => {
+    const prepareSession = vi.fn().mockResolvedValue({
+      sessionId: "session-1",
+      baselineStars: 10,
+      expiresAt: "2026-04-07T00:00:00.000Z",
+    });
     const app = new OpenAPIHono<ControllerBindings>();
     registerDesktopRewardsRoutes(app, {
       configStore: {
@@ -150,10 +246,12 @@ describe("registerDesktopRewardsRoutes", () => {
       },
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      message: "GitHub star reward is temporarily unavailable",
+      sessionId: "session-1",
+      baselineStars: 10,
+      expiresAt: "2026-04-07T00:00:00.000Z",
     });
-    expect(prepareSession).not.toHaveBeenCalled();
+    expect(prepareSession).toHaveBeenCalledOnce();
   });
 });

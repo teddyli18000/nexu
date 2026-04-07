@@ -17,6 +17,9 @@ import type { ControllerBindings } from "../types.js";
 const errorResponseSchema = z.object({
   message: z.string(),
 });
+const setDesktopRewardBalanceRequestSchema = z.object({
+  balance: z.number().int().nonnegative(),
+});
 const GITHUB_STAR_REWARD_DISABLED_MESSAGE =
   "GitHub star reward is temporarily unavailable";
 
@@ -153,6 +156,57 @@ export function registerDesktopRewardsRoutes(
         await container.configStore.claimDesktopReward(body.taskId, body.proof),
         200,
       );
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/internal/desktop/rewards/set-balance",
+      tags: ["Desktop"],
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: setDesktopRewardBalanceRequestSchema,
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: desktopRewardsStatusSchema },
+          },
+          description: "Update the desktop test balance",
+        },
+        400: {
+          content: {
+            "application/json": { schema: errorResponseSchema },
+          },
+          description: "Unable to update the desktop test balance",
+        },
+      },
+    }),
+    async (c) => {
+      const body = c.req.valid("json");
+
+      try {
+        return c.json(
+          await container.configStore.setDesktopRewardBalance(body.balance),
+          200,
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to update the desktop test balance";
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "desktop_reward_balance_update_failed",
+        );
+        return c.json({ message }, 400);
+      }
     },
   );
 }

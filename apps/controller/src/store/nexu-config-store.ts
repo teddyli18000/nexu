@@ -21,6 +21,7 @@ import {
   type integrationResponseSchema,
   type providerResponseSchema,
   type refreshIntegrationSchema,
+  rewardTaskIdSchema,
   type updateAuthSourceSchema,
   type updateUserProfileSchema,
   type upsertProviderBodySchema,
@@ -320,19 +321,26 @@ function convertCloudStatusToDesktop(
       usingManagedModel: activeManagedModel != null,
     },
     progress: cloudStatus.progress,
-    tasks: cloudStatus.tasks.map((task) => ({
-      id: task.id as RewardTaskId,
-      group: task.groupId as "daily" | "opensource" | "social",
-      icon: task.icon ?? "gift",
-      reward: task.rewardPoints,
-      shareMode: task.shareMode as "link" | "tweet" | "image",
-      repeatMode: task.repeatMode as "once" | "daily" | "weekly",
-      requiresScreenshot: task.shareMode === "image",
-      actionUrl: task.url,
-      isClaimed: task.isClaimed,
-      lastClaimedAt: task.lastClaimedAt,
-      claimCount: task.claimCount,
-    })),
+    tasks: cloudStatus.tasks.flatMap((task) => {
+      const parsedTaskId = rewardTaskIdSchema.safeParse(task.id);
+      if (!parsedTaskId.success) {
+        return [];
+      }
+
+      return {
+        id: parsedTaskId.data as RewardTaskId,
+        group: task.groupId as "daily" | "opensource" | "social",
+        icon: task.icon ?? "gift",
+        reward: task.rewardPoints,
+        shareMode: task.shareMode as "link" | "tweet" | "image",
+        repeatMode: task.repeatMode as "once" | "daily" | "weekly",
+        requiresScreenshot: task.shareMode === "image",
+        actionUrl: task.url,
+        isClaimed: task.isClaimed,
+        lastClaimedAt: task.lastClaimedAt,
+        claimCount: task.claimCount,
+      };
+    }),
     cloudBalance: cloudStatus.cloudBalance
       ? {
           totalBalance: cloudStatus.cloudBalance.totalBalance,
@@ -1597,6 +1605,34 @@ export class NexuConfigStore {
         activeManagedModel: activeManagedModel2,
       }),
     };
+  }
+
+  async setDesktopRewardBalance(
+    balance: number,
+  ): Promise<DesktopRewardsStatus> {
+    const config = await this.getConfig();
+    const cloud = readDesktopCloud(config);
+
+    if (!cloud.connected || !cloud.apiKey) {
+      throw new Error("Desktop cloud is not connected");
+    }
+
+    const { activeProfile } =
+      await this.readConfiguredDesktopCloudProfile(config);
+    const service = createCloudRewardService({
+      cloudUrl: activeProfile.cloudUrl.replace(/\/+$/, ""),
+      apiKey: cloud.apiKey,
+    });
+    const result = await service.setRewardBalance(balance);
+
+    if (!result.ok) {
+      throw new Error(
+        result.message ??
+          `Failed to set desktop reward balance: ${result.reason}`,
+      );
+    }
+
+    return this.getDesktopRewardsStatus();
   }
 
   async getStoredDesktopLocale(): Promise<"en" | "zh-CN" | null> {

@@ -469,6 +469,9 @@ export type HostDesktopCommand =
       type: "desktop:check-for-updates";
     }
   | {
+      type: "develop:open-set-balance";
+    }
+  | {
       type: "setup:complete";
     };
 

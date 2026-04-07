@@ -15,6 +15,7 @@ import {
   getApiInternalDesktopRewards,
   postApiInternalDesktopRewardsClaim,
   postApiInternalDesktopRewardsGithubStarSession,
+  postApiInternalDesktopRewardsSetBalance,
 } from "../../lib/api/sdk.gen";
 
 export const DESKTOP_REWARDS_QUERY_KEY = ["desktop-rewards"] as const;
@@ -83,6 +84,18 @@ async function prepareGithubStarSession(): Promise<PrepareGithubStarSessionRespo
   return prepareGithubStarSessionResponseSchema.parse(data);
 }
 
+async function setDesktopRewardBalance(input: { balance: number }) {
+  const { data, error } = await postApiInternalDesktopRewardsSetBalance({
+    body: input,
+  });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to set desktop reward balance");
+  }
+
+  return desktopRewardsStatusSchema.parse(data);
+}
+
 export function useDesktopRewardsStatus() {
   const queryClient = useQueryClient();
   const rewardsQuery = useQuery({
@@ -101,6 +114,12 @@ export function useDesktopRewardsStatus() {
   const githubStarSessionMutation = useMutation({
     mutationFn: prepareGithubStarSession,
   });
+  const setRewardBalanceMutation = useMutation({
+    mutationFn: setDesktopRewardBalance,
+    onSuccess: (status) => {
+      queryClient.setQueryData(DESKTOP_REWARDS_QUERY_KEY, status);
+    },
+  });
 
   return {
     status: rewardsQuery.data ?? createFallbackRewardsStatus(),
@@ -110,10 +129,12 @@ export function useDesktopRewardsStatus() {
     refresh: rewardsQuery.refetch,
     claimTask: claimMutation.mutateAsync,
     prepareGithubStarSession: githubStarSessionMutation.mutateAsync,
+    setRewardBalance: setRewardBalanceMutation.mutateAsync,
     claimingTaskId: claimMutation.isPending
       ? (claimMutation.variables?.taskId ?? null)
       : null,
     isClaiming: claimMutation.isPending,
     isPreparingGithubStarSession: githubStarSessionMutation.isPending,
+    isSettingRewardBalance: setRewardBalanceMutation.isPending,
   };
 }
