@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCloudRewardService } from "../src/services/cloud-reward-service.js";
 
+vi.mock("node:crypto", () => ({
+  randomUUID: vi.fn(() => "uuid-123"),
+}));
+
 const CLOUD_URL = "https://nexu.io";
 const API_KEY = "test-api-key";
 
@@ -80,7 +84,7 @@ describe("createCloudRewardService", () => {
         "fetch",
         vi.fn(
           async () =>
-            new Response(JSON.stringify({ error: "Unauthorized" }), {
+            new Response(JSON.stringify({ message: "Unauthorized" }), {
               status: 401,
             }),
         ),
@@ -182,7 +186,7 @@ describe("createCloudRewardService", () => {
       expect(result.reason).toBe("parse_error");
     });
 
-    it("returns ok:false reason:parse_error when cloud returns unknown task enum values", async () => {
+    it("keeps parsing rewards status when cloud returns unknown task ids", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn(
@@ -194,9 +198,6 @@ describe("createCloudRewardService", () => {
                   {
                     ...mockRewardStatusResponse.tasks[0],
                     id: "new_reward",
-                    groupId: "new_group",
-                    repeatMode: "monthly",
-                    shareMode: "qr",
                   },
                 ],
               }),
@@ -213,9 +214,10 @@ describe("createCloudRewardService", () => {
       });
       const result = await service.getRewardsStatus();
 
-      expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("unreachable");
-      expect(result.reason).toBe("parse_error");
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("unreachable");
+      expect(result.data.tasks[0]?.id).toBe("new_reward");
+      expect(result.data.cloudBalance?.totalBalance).toBe(500);
     });
 
     it("strips trailing slash from cloudUrl", async () => {
@@ -363,7 +365,7 @@ describe("createCloudRewardService", () => {
         "fetch",
         vi.fn(
           async () =>
-            new Response(JSON.stringify({ error: "Unauthorized" }), {
+            new Response(JSON.stringify({ message: "Unauthorized" }), {
               status: 401,
             }),
         ),
@@ -446,6 +448,91 @@ describe("createCloudRewardService", () => {
 
       expect(capturedMethod).toBe("POST");
       expect(JSON.parse(capturedBody)).toEqual({ taskId: "daily_checkin" });
+    });
+  });
+
+  describe("setRewardBalance", () => {
+    it("returns ok:true and posts the requested balance", async () => {
+      let capturedUrl = "";
+      let capturedBody = "";
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string | URL, init?: RequestInit) => {
+          capturedUrl = String(url);
+          capturedBody = init?.body as string;
+          return new Response(null, { status: 204 });
+        }),
+      );
+
+      const service = createCloudRewardService({
+        cloudUrl: CLOUD_URL,
+        apiKey: API_KEY,
+      });
+      const result = await service.setRewardBalance(4200);
+
+      expect(result.ok).toBe(true);
+      expect(capturedUrl).toBe(
+        "https://nexu.io/api/v1/test/credits/set-balance",
+      );
+      expect(JSON.parse(capturedBody)).toEqual({
+        targetBalance: 4200,
+        idempotencyKey: "desktop-set-balance-uuid-123",
+      });
+    });
+
+    it("returns ok:false reason:auth_failed on 401", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ message: "Unauthorized" }), {
+              status: 401,
+            }),
+        ),
+      );
+
+      const service = createCloudRewardService({
+        cloudUrl: CLOUD_URL,
+        apiKey: API_KEY,
+      });
+      const result = await service.setRewardBalance(1);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("unreachable");
+      expect(result.reason).toBe("auth_failed");
+      expect(result.message).toBe("Unauthorized");
+    });
+
+    it("returns cloud 4xx message on other non-2xx statuses", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                message:
+                  "idempotencyKey is already bound to a different credit adjustment",
+              }),
+              {
+                status: 409,
+              },
+            ),
+        ),
+      );
+
+      const service = createCloudRewardService({
+        cloudUrl: CLOUD_URL,
+        apiKey: API_KEY,
+      });
+      const result = await service.setRewardBalance(1);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("unreachable");
+      expect(result.reason).toBe("network_error");
+      expect(result.message).toBe(
+        "idempotencyKey is already bound to a different credit adjustment",
+      );
     });
   });
 });

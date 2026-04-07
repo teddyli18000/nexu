@@ -27,6 +27,7 @@ import type {
   RuntimeUnitState,
 } from "../shared/host";
 import { getDesktopSentryBuildMetadata } from "../shared/sentry-build-metadata";
+import { DevelopSetBalanceDialog } from "./components/develop-set-balance-dialog";
 import { SurfaceFrame } from "./components/surface-frame";
 import { UpdateBanner } from "./components/update-banner";
 import { useAutoUpdate } from "./hooks/use-auto-update";
@@ -1085,6 +1086,7 @@ function DiagnosticsPage({
 function DesktopShell() {
   const isPackaged = window.nexuHost.bootstrap.isPackaged;
   const [activeSurface, setActiveSurface] = useState<DesktopSurface>("web");
+  const [showSetBalanceDialog, setShowSetBalanceDialog] = useState(false);
   const [chromeMode, setChromeMode] = useState<DesktopChromeMode>(
     isPackaged ? "immersive" : "full",
   );
@@ -1128,6 +1130,10 @@ function DesktopShell() {
     return onDesktopCommand((command) => {
       if (command.type === "desktop:check-for-updates") {
         void update.check();
+        return;
+      }
+      if (command.type === "develop:open-set-balance") {
+        setShowSetBalanceDialog(true);
         return;
       }
       if (command.type === "setup:complete") {
@@ -1218,6 +1224,11 @@ function DesktopShell() {
           : "desktop-shell"
       }
     >
+      <DevelopSetBalanceDialog
+        open={showSetBalanceDialog}
+        webBaseUrl={runtimeConfig?.urls.web ?? null}
+        onClose={() => setShowSetBalanceDialog(false)}
+      />
       <div className="window-drag-bar" />
       <aside className="desktop-sidebar">
         <div className="desktop-sidebar-brand">

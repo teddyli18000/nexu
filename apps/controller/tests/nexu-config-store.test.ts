@@ -316,6 +316,200 @@ describe("NexuConfigStore", () => {
     expect(result.alreadyClaimed).toBe(false);
   });
 
+  it("setDesktopRewardBalance posts the requested balance and refreshes rewards status", async () => {
+    await mkdir(path.join(rootDir, ".nexu"), { recursive: true });
+    await writeFile(
+      path.join(rootDir, ".nexu", "config.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          desktop: {
+            cloud: {
+              connected: true,
+              polling: false,
+              userName: "Cloud User",
+              userEmail: "user@nexu.io",
+              connectedAt: "2026-04-01T00:00:00.000Z",
+              linkUrl: "https://link.nexu.io",
+              apiKey: "valid-key",
+              models: [],
+            },
+          },
+          secrets: {},
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const store = new NexuConfigStore(env);
+
+    const statusResponse = {
+      tasks: [],
+      progress: { claimedCount: 0, totalCount: 0, earnedCredits: 0 },
+      cloudBalance: {
+        totalBalance: 4200,
+        totalRecharged: 4200,
+        totalConsumed: 0,
+        syncedAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      },
+    };
+
+    let fetchCalls = 0;
+    let capturedBody: string | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input, init) => {
+        fetchCalls += 1;
+        if (fetchCalls === 1) {
+          capturedBody = init?.body as string;
+          return new Response(null, { status: 204 });
+        }
+
+        return new Response(JSON.stringify(statusResponse), { status: 200 });
+      }),
+    );
+
+    try {
+      const status = await store.setDesktopRewardBalance(4200);
+      expect(fetchCalls).toBe(2);
+      expect(JSON.parse(capturedBody ?? "{}")).toEqual({
+        targetBalance: 4200,
+        idempotencyKey: expect.stringContaining("desktop-set-balance-"),
+      });
+      expect(status.cloudBalance?.totalBalance).toBe(4200);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("getDesktopRewardsStatus preserves cloud balance when cloud returns unknown task ids", async () => {
+    await mkdir(path.join(rootDir, ".nexu"), { recursive: true });
+    await writeFile(
+      path.join(rootDir, ".nexu", "config.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          runtime: {
+            defaultModelId: "gemini-3-flash-preview",
+          },
+          desktop: {
+            cloud: {
+              connected: true,
+              polling: false,
+              userName: "Cloud User",
+              userEmail: "user@nexu.io",
+              connectedAt: "2026-04-01T00:00:00.000Z",
+              linkUrl: "http://localhost:8080",
+              apiKey: "valid-key",
+              models: [],
+            },
+            activeCloudProfileName: "Local",
+            cloudSessions: {
+              Local: {
+                connected: true,
+                polling: false,
+                userName: "Cloud User",
+                userEmail: "user@nexu.io",
+                connectedAt: "2026-04-01T00:00:00.000Z",
+                linkUrl: "http://localhost:8080",
+                apiKey: "valid-key",
+                models: [],
+              },
+            },
+          },
+          secrets: {},
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, ".nexu", "cloud-profiles.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          profiles: [
+            {
+              name: "Local",
+              cloudUrl: "http://localhost:5173",
+              linkUrl: "http://localhost:8080",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const store = new NexuConfigStore(env);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              tasks: [
+                {
+                  id: "daily_checkin",
+                  displayName: "Daily Check-in",
+                  groupId: "daily",
+                  rewardPoints: 100,
+                  repeatMode: "daily",
+                  shareMode: "link",
+                  icon: "calendar",
+                  url: null,
+                  isClaimed: false,
+                  claimCount: 0,
+                  lastClaimedAt: null,
+                },
+                {
+                  id: "xiaohongshu",
+                  displayName: "Share on Xiaohongshu",
+                  groupId: "social",
+                  rewardPoints: 200,
+                  repeatMode: "weekly",
+                  shareMode: "image",
+                  icon: "xiaohongshu",
+                  url: null,
+                  isClaimed: false,
+                  claimCount: 0,
+                  lastClaimedAt: null,
+                },
+              ],
+              progress: {
+                claimedCount: 0,
+                totalCount: 2,
+                earnedCredits: 0,
+              },
+              cloudBalance: {
+                totalBalance: 1,
+                totalRecharged: 1210,
+                totalConsumed: 1209,
+                syncedAt: "2026-04-07T09:36:51.342Z",
+                updatedAt: "2026-04-07T09:36:51.342Z",
+              },
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    try {
+      const status = await store.getDesktopRewardsStatus();
+      expect(status.cloudBalance?.totalBalance).toBe(1);
+      expect(status.tasks).toHaveLength(1);
+      expect(status.tasks[0]?.id).toBe("daily_checkin");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("getDesktopRewardsStatus returns empty fallback when cloud is not connected", async () => {
     const store = new NexuConfigStore(env);
 

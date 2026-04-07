@@ -1,9 +1,8 @@
+import { randomUUID } from "node:crypto";
 import {
   type DesktopRewardClaimProof,
-  rewardGroupSchema,
   rewardRepeatModeSchema,
   rewardShareModeSchema,
-  rewardTaskIdSchema,
 } from "@nexu/shared";
 import { z } from "zod";
 import { logger } from "../lib/logger.js";
@@ -15,9 +14,9 @@ type CloudRewardServiceOptions = {
 };
 
 const cloudRewardTaskSchema = z.object({
-  id: rewardTaskIdSchema,
+  id: z.string(),
   displayName: z.string(),
-  groupId: rewardGroupSchema,
+  groupId: z.string(),
   rewardPoints: z.number(),
   repeatMode: rewardRepeatModeSchema,
   shareMode: rewardShareModeSchema,
@@ -57,6 +56,10 @@ const rewardClaimResponseSchema = z.object({
   status: rewardStatusResponseSchema,
 });
 
+const cloudErrorResponseSchema = z.object({
+  message: z.string(),
+});
+
 export type RewardStatusResponse = z.infer<typeof rewardStatusResponseSchema>;
 export type RewardClaimResponse = z.infer<typeof rewardClaimResponseSchema>;
 
@@ -67,7 +70,7 @@ export type CloudRewardErrorReason =
 
 export type CloudRewardResult<T> =
   | { ok: true; data: T }
-  | { ok: false; reason: CloudRewardErrorReason };
+  | { ok: false; reason: CloudRewardErrorReason; message?: string };
 
 export type CloudRewardService = {
   getRewardsStatus(): Promise<CloudRewardResult<RewardStatusResponse>>;
@@ -75,6 +78,7 @@ export type CloudRewardService = {
     taskId: string,
     proof?: DesktopRewardClaimProof,
   ): Promise<CloudRewardResult<RewardClaimResponse>>;
+  setRewardBalance(balance: number): Promise<CloudRewardResult<{ ok: true }>>;
 };
 
 export function createCloudRewardService(
@@ -97,12 +101,30 @@ export function createCloudRewardService(
     });
   }
 
+  async function readCloudErrorMessage(
+    response: Response,
+  ): Promise<string | undefined> {
+    try {
+      const data: unknown = await response.json();
+      const parsed = cloudErrorResponseSchema.safeParse(data);
+      if (parsed.success) {
+        return parsed.data.message;
+      }
+    } catch {}
+
+    return undefined;
+  }
+
   return {
     async getRewardsStatus() {
       try {
         const res = await fetchWithAuth("/api/v1/rewards/status");
         if (res.status === 401 || res.status === 403) {
-          return { ok: false, reason: "auth_failed" };
+          return {
+            ok: false,
+            reason: "auth_failed",
+            message: await readCloudErrorMessage(res),
+          };
         }
         if (!res.ok) {
           logger.warn(
@@ -147,7 +169,11 @@ export function createCloudRewardService(
           }),
         });
         if (res.status === 401 || res.status === 403) {
-          return { ok: false, reason: "auth_failed" };
+          return {
+            ok: false,
+            reason: "auth_failed",
+            message: await readCloudErrorMessage(res),
+          };
         }
         if (!res.ok) {
           return { ok: false, reason: "network_error" };
@@ -158,6 +184,39 @@ export function createCloudRewardService(
           return { ok: false, reason: "parse_error" };
         }
         return { ok: true, data: parsed.data };
+      } catch {
+        return { ok: false, reason: "network_error" };
+      }
+    },
+
+    async setRewardBalance(balance) {
+      try {
+        const res = await fetchWithAuth("/api/v1/test/credits/set-balance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetBalance: balance,
+            idempotencyKey: `desktop-set-balance-${randomUUID()}`,
+          }),
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          return {
+            ok: false,
+            reason: "auth_failed",
+            message: await readCloudErrorMessage(res),
+          };
+        }
+
+        if (!res.ok) {
+          return {
+            ok: false,
+            reason: "network_error",
+            message: await readCloudErrorMessage(res),
+          };
+        }
+
+        return { ok: true, data: { ok: true } };
       } catch {
         return { ok: false, reason: "network_error" };
       }

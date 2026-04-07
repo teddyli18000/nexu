@@ -1224,6 +1224,67 @@ export type PostApiInternalDesktopRewardsClaimResponses = {
 
 export type PostApiInternalDesktopRewardsClaimResponse = PostApiInternalDesktopRewardsClaimResponses[keyof PostApiInternalDesktopRewardsClaimResponses];
 
+export type PostApiInternalDesktopRewardsSetBalanceData = {
+    body?: {
+        balance: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal/desktop/rewards/set-balance';
+};
+
+export type PostApiInternalDesktopRewardsSetBalanceErrors = {
+    /**
+     * Unable to update the desktop test balance
+     */
+    400: {
+        message: string;
+    };
+};
+
+export type PostApiInternalDesktopRewardsSetBalanceError = PostApiInternalDesktopRewardsSetBalanceErrors[keyof PostApiInternalDesktopRewardsSetBalanceErrors];
+
+export type PostApiInternalDesktopRewardsSetBalanceResponses = {
+    /**
+     * Update the desktop test balance
+     */
+    200: {
+        viewer: {
+            cloudConnected: boolean;
+            activeModelId: string;
+            activeModelProviderId: string;
+            usingManagedModel: boolean;
+        };
+        progress: {
+            claimedCount: number;
+            totalCount: number;
+            earnedCredits: number;
+            availableCredits?: number;
+        };
+        tasks: Array<{
+            id: 'daily_checkin' | 'github_star' | 'x_share' | 'reddit' | 'mobile_share' | 'lingying' | 'facebook' | 'whatsapp';
+            group: 'daily' | 'opensource' | 'social';
+            icon: string;
+            reward: number;
+            shareMode: 'link' | 'tweet' | 'image';
+            repeatMode: 'once' | 'daily' | 'weekly';
+            requiresScreenshot: boolean;
+            actionUrl?: string;
+            isClaimed: boolean;
+            lastClaimedAt: string;
+            claimCount: number;
+        }>;
+        cloudBalance?: {
+            totalBalance: number;
+            totalRecharged: number;
+            totalConsumed: number;
+        };
+        autoFallbackTriggered?: boolean;
+    };
+};
+
+export type PostApiInternalDesktopRewardsSetBalanceResponse = PostApiInternalDesktopRewardsSetBalanceResponses[keyof PostApiInternalDesktopRewardsSetBalanceResponses];
+
 export type GetApiV1ChannelsData = {
     body?: never;
     path?: never;
