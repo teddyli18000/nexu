@@ -64,16 +64,30 @@ export class GithubStarVerificationService {
   }
 
   private async fetchStars(): Promise<number> {
+    const token = process.env.NEXU_GITHUB_TOKEN?.trim();
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "nexu-desktop",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
     const response = await proxyFetch(GITHUB_STARS_API, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "nexu-desktop",
-      },
+      headers,
       timeoutMs: 10_000,
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch GitHub stars: ${response.status}`);
+      const remaining = response.headers.get("x-ratelimit-remaining");
+      const reset = response.headers.get("x-ratelimit-reset");
+      throw new Error(
+        `Failed to fetch GitHub stars: ${response.status}` +
+          (remaining !== null
+            ? ` (remaining=${remaining} reset=${reset} authed=${token ? "yes" : "no"})`
+            : ` (authed=${token ? "yes" : "no"})`),
+      );
     }
 
     const parsed = githubRepoSchema.safeParse(await response.json());

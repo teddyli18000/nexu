@@ -11,6 +11,7 @@ import {
 } from "@nexu/shared";
 import { z } from "zod";
 import type { ControllerContainer } from "../app/container.js";
+import { logger } from "../lib/logger.js";
 import type { ControllerBindings } from "../types.js";
 
 const errorResponseSchema = z.object({
@@ -75,7 +76,17 @@ export function registerDesktopRewardsRoutes(
       },
     }),
     async (c) => {
-      return c.json({ message: GITHUB_STAR_REWARD_DISABLED_MESSAGE }, 400);
+      try {
+        const result =
+          await container.githubStarVerificationService.prepareSession();
+        return c.json(result, 200);
+      } catch (error) {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "github_star_session_failed",
+        );
+        return c.json({ message: GITHUB_STAR_REWARD_DISABLED_MESSAGE }, 400);
+      }
     },
   );
 
@@ -119,7 +130,23 @@ export function registerDesktopRewardsRoutes(
       }
 
       if (rewardTaskRequiresGithubStarSession(body.taskId)) {
-        return c.json({ message: GITHUB_STAR_REWARD_DISABLED_MESSAGE }, 400);
+        const sessionId = body.proof?.githubSessionId;
+        if (!sessionId) {
+          return c.json({ message: "Missing GitHub star session" }, 400);
+        }
+        const verifyResult =
+          await container.githubStarVerificationService.verifySession(
+            sessionId,
+          );
+        if (!verifyResult.ok) {
+          const reason =
+            verifyResult.reason === "not_increased"
+              ? "You haven't starred the repository yet"
+              : verifyResult.reason === "expired"
+                ? "Session expired, please start over"
+                : "Invalid session";
+          return c.json({ message: reason }, 400);
+        }
       }
 
       return c.json(

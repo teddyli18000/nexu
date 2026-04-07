@@ -223,8 +223,15 @@ function RewardConfirmModal({
 
 export function RewardsPage() {
   const { t, i18n } = useTranslation();
-  const { status, loading, refresh, claimTask, claimingTaskId } =
-    useDesktopRewardsStatus();
+  const {
+    status,
+    loading,
+    refresh,
+    claimTask,
+    claimingTaskId,
+    prepareGithubStarSession,
+    isPreparingGithubStarSession,
+  } = useDesktopRewardsStatus();
   const [confirmTaskId, setConfirmTaskId] = useState<
     RewardTaskStatus["id"] | null
   >(null);
@@ -280,8 +287,22 @@ export function RewardsPage() {
       return;
     }
 
-    // #819: github_star 当前后端不可用，直接返回
     if (rewardTaskRequiresGithubStarSession(task.id)) {
+      let sessionId: string | null = null;
+      try {
+        const session = await prepareGithubStarSession();
+        sessionId = session.sessionId;
+      } catch {
+        toast.error(t("rewards.githubSessionFailed"));
+        return;
+      }
+      setConfirmPhase("idle");
+      setConfirmProofUrl("");
+      setConfirmGithubSessionId(sessionId);
+      if (task.actionUrl) {
+        await openExternalUrl(task.actionUrl);
+      }
+      setConfirmTaskId(task.id);
       return;
     }
 
@@ -295,10 +316,6 @@ export function RewardsPage() {
 
     setConfirmTaskId(task.id);
   };
-
-  // #819: github_star 后端已禁用，按钮显示"暂不可用"
-  const isGithubStarUnavailable = (task: RewardTaskStatus) =>
-    rewardTaskRequiresGithubStarSession(task.id);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -430,24 +447,25 @@ export function RewardsPage() {
               const renderTaskList = (tasks: RewardTaskStatus[]) => (
                 <div className="space-y-0">
                   {tasks.map((task, index) => {
-                    // #819: github_star 后端已禁用
-                    const githubUnavailable = isGithubStarUnavailable(task);
+                    const isGithubStar = rewardTaskRequiresGithubStarSession(
+                      task.id,
+                    );
+                    const isPreparingThisTask =
+                      isGithubStar && isPreparingGithubStarSession;
                     const actionLabel = task.isClaimed
                       ? t("budget.cta.done").replace(
                           "${n}",
                           formatRewardAmount(task.reward),
                         )
-                      : githubUnavailable
-                        ? t("rewards.githubUnavailable")
-                        : loading
-                          ? "..."
-                          : task.repeatMode === "daily"
-                            ? t("budget.cta.checkin")
-                            : task.shareMode === "image"
-                              ? t("budget.cta.download")
-                              : task.shareMode === "tweet"
-                                ? t("budget.cta.share")
-                                : t("budget.cta.go");
+                      : loading
+                        ? "..."
+                        : task.repeatMode === "daily"
+                          ? t("budget.cta.checkin")
+                          : task.shareMode === "image"
+                            ? t("budget.cta.download")
+                            : task.shareMode === "tweet"
+                              ? t("budget.cta.share")
+                              : t("budget.cta.go");
 
                     return (
                       <div
@@ -460,7 +478,7 @@ export function RewardsPage() {
                         <div
                           className={cn(
                             "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-colors",
-                            task.isClaimed || githubUnavailable
+                            task.isClaimed
                               ? "border-border/50 bg-surface-2 opacity-50"
                               : "border-border bg-white",
                           )}
@@ -473,7 +491,7 @@ export function RewardsPage() {
                             <span
                               className={cn(
                                 "text-[13px] font-medium leading-tight",
-                                task.isClaimed || githubUnavailable
+                                task.isClaimed
                                   ? "text-text-muted"
                                   : "text-text-primary",
                               )}
@@ -488,7 +506,7 @@ export function RewardsPage() {
                           <div
                             className={cn(
                               "mt-0.5 text-[11px]",
-                              task.isClaimed || githubUnavailable
+                              task.isClaimed
                                 ? "text-text-muted/60"
                                 : "text-text-muted",
                             )}
@@ -502,18 +520,18 @@ export function RewardsPage() {
                           disabled={
                             loading ||
                             task.isClaimed ||
-                            githubUnavailable ||
+                            isPreparingThisTask ||
                             claimingTaskId === task.id
                           }
                           onClick={() => void handleTaskAction(task)}
                           className={cn(
                             "inline-flex h-[26px] shrink-0 items-center justify-center gap-2 rounded-full px-3 text-[11px] font-medium leading-none transition-all",
-                            task.isClaimed || githubUnavailable
+                            task.isClaimed
                               ? "bg-surface-2 text-text-muted"
                               : "border border-[var(--color-brand-primary)]/30 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/5",
                           )}
                         >
-                          {claimingTaskId === task.id ? (
+                          {claimingTaskId === task.id || isPreparingThisTask ? (
                             <Loader2 size={13} className="animate-spin" />
                           ) : null}
                           {actionLabel}
@@ -570,14 +588,7 @@ export function RewardsPage() {
                                 {t("rewards.mobileQrHint")}
                               </span>
                               <span className="text-[11px] font-semibold leading-none tabular-nums text-[var(--color-success)]">
-                                +
-                                {formatRewardAmount(
-                                  mobileTasks.reduce(
-                                    (sum, task) => sum + task.reward,
-                                    0,
-                                  ),
-                                )}{" "}
-                                {t("layout.sidebar.balanceUnit")}
+                                +200 {t("layout.sidebar.balanceUnit")}
                               </span>
                             </div>
                             <p className="mt-0.5 text-[11px] text-text-muted">
@@ -617,8 +628,7 @@ export function RewardsPage() {
                               }
                               if (earned > 0) {
                                 toast.success(
-                                  t("rewards.claimSuccess") +
-                                    ` +${formatRewardAmount(earned)} ${t("layout.sidebar.balanceUnit")}`,
+                                  `${t("rewards.claimSuccess")} +${formatRewardAmount(earned)} ${t("layout.sidebar.balanceUnit")}`,
                                 );
                               } else {
                                 toast.success(t("rewards.claimAlreadyDone"));
@@ -637,15 +647,7 @@ export function RewardsPage() {
                               <Loader2 size={13} className="animate-spin" />
                             ) : null}
                             {mobileTasks.every((task) => task.isClaimed)
-                              ? t("budget.cta.done").replace(
-                                  "${n}",
-                                  formatRewardAmount(
-                                    mobileTasks.reduce(
-                                      (sum, task) => sum + task.reward,
-                                      0,
-                                    ),
-                                  ),
-                                )
+                              ? t("budget.cta.done").replace("${n}", "200")
                               : t("budget.cta.go")}
                           </button>
                         </div>
