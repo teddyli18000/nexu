@@ -562,29 +562,64 @@ export function RewardsPage() {
                       <TabsContent value="web">
                         {renderTaskList(webTasks)}
                       </TabsContent>
-                      <TabsContent value="mobile">
+                      <TabsContent
+                        value="mobile"
+                        className="animate-fade-in-up"
+                      >
                         {mobileShareTask ? (
-                          <div className="flex items-center gap-4 rounded-lg px-3 py-3">
-                            <div className="shrink-0 rounded-xl border border-border bg-white p-1.5">
-                              <QRCodeSVG
-                                value={MOBILE_SHARE_QR_URL}
-                                size={56}
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[13px] font-medium text-text-primary">
+                          <div
+                            className={cn(
+                              "group flex flex-col items-center gap-4",
+                              "rounded-[20px] border border-[var(--color-border-subtle)] bg-surface-1",
+                              "px-6 py-6 shadow-[var(--shadow-refine)]",
+                              "transition-[box-shadow] duration-300 ease-out",
+                              "hover:shadow-[var(--shadow-elevated)]",
+                            )}
+                          >
+                            <div className="flex flex-col items-center gap-1.5 text-center">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[14px] font-semibold leading-tight text-text-primary">
                                   {t("rewards.mobileQrHint")}
                                 </span>
-                                <span className="text-[11px] font-semibold leading-none tabular-nums text-[var(--color-success)]">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center rounded-full px-2.5 py-0.5",
+                                    "text-[11px] font-semibold leading-none tabular-nums",
+                                    "bg-[var(--color-success-muted)] text-[var(--color-success)]",
+                                    "ring-1 ring-inset ring-[var(--color-success-border)]",
+                                  )}
+                                >
                                   +{formatRewardAmount(mobileShareTask.reward)}{" "}
                                   {t("layout.sidebar.balanceUnit")}
                                 </span>
                               </div>
-                              <p className="mt-0.5 text-[11px] text-text-muted">
+                              <p className="max-w-[320px] text-[12px] leading-relaxed text-text-muted">
                                 {t("rewards.mobileQrDesc")}
                               </p>
                             </div>
+
+                            <div
+                              className={cn(
+                                "animate-breathe rounded-[20px] border bg-white p-4",
+                                "transition-transform duration-300 ease-out",
+                                "group-hover:scale-[1.02]",
+                              )}
+                            >
+                              <QRCodeSVG
+                                value={MOBILE_SHARE_QR_URL}
+                                size={168}
+                                level="H"
+                                bgColor="#ffffff"
+                                fgColor="#1c1f23"
+                                imageSettings={{
+                                  src: "/favicon/apple-touch-icon.png",
+                                  height: 38,
+                                  width: 38,
+                                  excavate: true,
+                                }}
+                              />
+                            </div>
+
                             <button
                               type="button"
                               disabled={
@@ -596,10 +631,17 @@ export function RewardsPage() {
                                 void handleTaskAction(mobileShareTask)
                               }
                               className={cn(
-                                "inline-flex h-[26px] shrink-0 items-center justify-center gap-2 rounded-full px-3 text-[11px] font-medium leading-none transition-all",
+                                "inline-flex h-[36px] items-center justify-center gap-2 rounded-full px-5",
+                                "text-[12px] font-semibold leading-none",
+                                "transition-all duration-200 active:scale-[0.98]",
                                 mobileShareTask.isClaimed
                                   ? "bg-surface-2 text-text-muted"
-                                  : "border border-[var(--color-brand-primary)]/30 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/5",
+                                  : cn(
+                                      "bg-[var(--color-accent)] text-white",
+                                      "shadow-[var(--shadow-card)]",
+                                      "hover:bg-[var(--color-accent-hover)] hover:shadow-[var(--shadow-refine)]",
+                                      "disabled:cursor-not-allowed disabled:bg-[var(--color-accent)]/60",
+                                    ),
                               )}
                             >
                               {claimingTaskId === mobileShareTask.id ? (
