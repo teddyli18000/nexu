@@ -1081,7 +1081,7 @@ export type GetApiInternalDesktopRewardsResponses = {
             availableCredits?: number;
         };
         tasks: Array<{
-            id: 'daily_checkin' | 'github_star' | 'x_share' | 'mobile_share' | 'reddit' | 'xiaohongshu' | 'lingying' | 'jike' | 'wechat' | 'feishu' | 'facebook' | 'whatsapp';
+            id: 'daily_checkin' | 'github_star' | 'x_share' | 'reddit' | 'mobile_share' | 'lingying' | 'facebook' | 'whatsapp';
             group: 'daily' | 'opensource' | 'social';
             icon: string;
             reward: number;
@@ -1139,7 +1139,7 @@ export type PostApiInternalDesktopRewardsGithubStarSessionResponse = PostApiInte
 
 export type PostApiInternalDesktopRewardsClaimData = {
     body?: {
-        taskId: 'daily_checkin' | 'github_star' | 'x_share' | 'mobile_share' | 'reddit' | 'xiaohongshu' | 'lingying' | 'jike' | 'wechat' | 'feishu' | 'facebook' | 'whatsapp';
+        taskId: 'daily_checkin' | 'github_star' | 'x_share' | 'reddit' | 'mobile_share' | 'lingying' | 'facebook' | 'whatsapp';
         proof?: {
             url?: string;
             githubSessionId?: string;
@@ -1182,7 +1182,7 @@ export type PostApiInternalDesktopRewardsClaimResponses = {
                 availableCredits?: number;
             };
             tasks: Array<{
-                id: 'daily_checkin' | 'github_star' | 'x_share' | 'mobile_share' | 'reddit' | 'xiaohongshu' | 'lingying' | 'jike' | 'wechat' | 'feishu' | 'facebook' | 'whatsapp';
+                id: 'daily_checkin' | 'github_star' | 'x_share' | 'reddit' | 'mobile_share' | 'lingying' | 'facebook' | 'whatsapp';
                 group: 'daily' | 'opensource' | 'social';
                 icon: string;
                 reward: number;

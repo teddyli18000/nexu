@@ -163,9 +163,9 @@ const en = {
   "layout.sidebar.balancePopup.recharged": "Plan credits (cumulative)",
   "layout.sidebar.balancePopup.rechargedTooltip":
     "Total credits added from your subscription plan",
-  "layout.sidebar.balancePopup.earned": "Reward credits (cumulative)",
+  "layout.sidebar.balancePopup.earned": "Reward credits",
   "layout.sidebar.balancePopup.earnedTooltip":
-    "Total bonus credits earned from rewards and promotions",
+    "Earned from signup rewards, completed tasks, and activities. Consumption order: plan credits → credit packs → reward credits.",
   "layout.sidebar.balancePopup.consumed": "Consumed",
   "layout.sidebar.balancePopup.viewDetail": "View details",
   "layout.mobile.settings": "Settings",
@@ -299,15 +299,14 @@ const en = {
   "rewards.earnedLabel": "Earned",
   "rewards.totalCredits": "Reward credits {{n}}",
   "rewards.taskProgress": "Weekly tasks {{a}} / {{b}}",
-  "rewards.checkinTotal": "Daily check-ins claimed: ${n} credits",
   "rewards.group.daily": "Daily",
   "rewards.group.opensource": "Open Source",
   "rewards.group.social": "Social & messaging",
   "rewards.tab.web": "Web",
   "rewards.tab.mobile": "Mobile",
-  "rewards.mobileQrHint": "Scan to complete tasks and earn credits",
+  "rewards.mobileQrHint": "Scan with WeChat, Xiaohongshu, Jike, or Feishu",
   "rewards.mobileQrDesc":
-    "Open nexu on mobile, complete sharing tasks to earn credits",
+    "Open WeChat, Xiaohongshu, Jike, Feishu or similar clients to scan and complete sharing tasks",
   "rewards.cloudBalance": "Cloud Balance",
   "rewards.totalEarned": "Total earned",
   "rewards.totalUsed": "Total used",
@@ -335,6 +334,9 @@ const en = {
     "Only public URLs that match the platform format can be claimed.",
   "rewards.proofUrlInvalid":
     "The URL does not match the current platform format.",
+  "rewards.proofUrlReopen": "Reopen share page",
+  "rewards.proofUrlLoginGuidance":
+    'If the browser landed on the platform\'s homepage, log in first, then click "Reopen share page" to jump to the pre-filled post page.',
   "rewards.progress": "{{earned}} / {{total}} completed",
   "rewards.card.cycle":
     "Available per weekly cycle, excluding daily repeat claims",
@@ -360,7 +362,7 @@ const en = {
   "budget.confirm.screenshotDesc":
     "Share first on the target platform, then come back and confirm to receive +${n} credits.",
   "budget.confirm.imageDesc":
-    "Download the share card, post it on the platform, then come back and confirm to receive +${n} credits.",
+    "After you complete the share, come back and confirm to receive +${n} credits.",
   "budget.confirm.downloadImage": "Download share card",
   "budget.confirm.done": "I've done it",
   "budget.confirm.cancel": "Not yet",
@@ -412,16 +414,11 @@ const en = {
   "reward.x_share.desc": "Once per week",
   "reward.reddit.name": "Post on Reddit",
   "reward.reddit.desc": "Once per week",
-  "reward.xiaohongshu.name": "Post on 小红书",
-  "reward.xiaohongshu.desc": "Once per week",
+  "reward.mobile_share.name": "Share via mobile clients",
+  "reward.mobile_share.desc":
+    "Scan with WeChat, Xiaohongshu, Jike, or Feishu to share and earn credits",
   "reward.lingying.name": "Post on 瓴英",
   "reward.lingying.desc": "Once per week",
-  "reward.jike.name": "Post on 即刻",
-  "reward.jike.desc": "Once per week",
-  "reward.wechat.name": "Share to WeChat",
-  "reward.wechat.desc": "Once per week",
-  "reward.feishu.name": "Share to 飞书",
-  "reward.feishu.desc": "Once per week",
   "reward.facebook.name": "Share on Facebook",
   "reward.facebook.desc": "Once per week",
   "reward.whatsapp.name": "Share on WhatsApp",
