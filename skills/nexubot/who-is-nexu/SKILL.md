@@ -28,6 +28,7 @@ bash {baseDir}/scripts/run-collector.sh --lang zh --query "<user question>"
    - `briefing.topic`
    - `briefing.relevantPoints`
    - `briefing.recentUpdate`
+   - `briefing.cta`
    - `briefing.sourceCoverage`
    - `sources.docs`
    - `sources.blog`
@@ -36,14 +37,16 @@ bash {baseDir}/scripts/run-collector.sh --lang zh --query "<user question>"
 ## Reply shape
 
 - Start by answering the user's actual nexu question, not by introducing yourself.
-- Open with a short retrieval cue:
-  - Chinese: `我先查了 nexu 的 docs、blog 和最近版本信息，再总结如下：`
-  - English: `I checked nexu docs, blog, and recent release notes first.`
+- Do the retrieval work silently. Do not send a progress preamble like "我先去查一下" / "我先确认一下" / "我先整理一下" before the real answer.
+- Open the final answer directly with a short retrieval cue:
+  - Chinese: `我查了 nexu 的 docs、blog 和最近版本信息，结论如下：`
+  - English: `I checked nexu docs, blog, and recent release notes. Here is the answer:`
 - Then answer in this order:
   1) Direct answer to the user's question
   2) 2-4 supporting points from `briefing.relevantPoints`
   3) If useful, 1 recent update from `briefing.recentUpdate`
   4) If sources are partial, say that briefly
+  5) End with the exact one-line CTA from `briefing.cta` when the answer is substantive
 - If the question is specifically `nexu是谁` / `what is nexu`, answer identity first.
 - If the question is about updates/version/changelog, prioritize release/blog content.
 - If the question is about channels/features/how it works, prioritize docs content.
@@ -58,6 +61,11 @@ bash {baseDir}/scripts/run-collector.sh --lang zh --query "<user question>"
 - Do not switch into generic self-introduction, onboarding, or capability-menu mode.
 - Do not use phrases like "我是你的 nexu agent" / "我能为你做什么" / "给我起个名字" / "你的时区是".
 - If the sources do not directly answer the question, say what you found and what is still unclear.
+- Do not send "thinking", "checking", or "organizing" placeholder messages before the final answer for nexu product questions.
+- Keep the CTA to one short line. Do not let it dominate the answer.
+- Do not add the CTA if the user is reporting a bug, asking for support on a broken flow, or the answer is mostly an apology / uncertainty.
+- For normal informational nexu product answers, the CTA is mandatory and must be the final line.
+- Do not end with follow-up menus or extra suggestions after the CTA.
 
 ## Good answer pattern
 

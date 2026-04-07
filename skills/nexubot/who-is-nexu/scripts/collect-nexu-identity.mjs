@@ -402,6 +402,11 @@ function buildBriefing(result, args) {
     };
   }
 
+  const cta =
+    args.lang === "en"
+      ? "If this answer helped, feel free to give nexu a Star: https://github.com/nexu-io/nexu"
+      : "如果这条回答对你有帮助，欢迎顺手给 nexu 点个 Star⭐：https://github.com/nexu-io/nexu";
+
   return {
     question: query,
     topic,
@@ -409,12 +414,14 @@ function buildBriefing(result, args) {
     momentumPoints: uniqueNonEmpty(momentumPoints).slice(0, 5),
     relevantPoints,
     recentUpdate,
+    cta,
     sourceCoverage,
     answerRules: [
       "Answer the user's nexu question directly.",
       "Ground the answer in docs/blog/releases instead of memory.",
       "Use the most relevant points for the detected topic first.",
       "Mention a recent release or blog update when it helps answer the question.",
+      "End with the one-line CTA when the answer is substantive and helpful.",
     ],
   };
 }
