@@ -1,4 +1,5 @@
 import { openExternalUrl } from "@/lib/desktop-links";
+import type { AnalyticsAuthSource } from "@/lib/tracking";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,38 +22,43 @@ export function useCloudConnect({
   const queryClient = useQueryClient();
   const [cloudConnecting, setCloudConnecting] = useState(false);
 
-  const handleCloudConnect = useCallback(async () => {
-    setCloudConnecting(true);
-    try {
-      const { data } = await postApiInternalDesktopCloudConnect();
+  const handleCloudConnect = useCallback(
+    async (source?: AnalyticsAuthSource) => {
+      setCloudConnecting(true);
+      try {
+        const { data } = await postApiInternalDesktopCloudConnect({
+          body: source ? { source } : undefined,
+        });
 
-      if (data?.error === "Connection attempt already in progress") {
-        toast.info(t("welcome.cloudConnectInProgress"));
-        return;
-      }
+        if (data?.error === "Connection attempt already in progress") {
+          toast.info(t("welcome.cloudConnectInProgress"));
+          return;
+        }
 
-      if (data?.error === "Already connected. Disconnect first.") {
-        await syncDesktopCloudQueries(queryClient);
+        if (data?.error === "Already connected. Disconnect first.") {
+          await syncDesktopCloudQueries(queryClient);
+          setCloudConnecting(false);
+          await onConnected?.();
+          return;
+        }
+
+        if (data?.error) {
+          setCloudConnecting(false);
+          toast.error(data.error);
+          return;
+        }
+
+        if (data?.browserUrl) {
+          await openExternalUrl(data.browserUrl);
+          toast.info(t("welcome.browserOpened"));
+        }
+      } catch {
         setCloudConnecting(false);
-        await onConnected?.();
-        return;
+        toast.error(t("welcome.cloudConnectError"));
       }
-
-      if (data?.error) {
-        setCloudConnecting(false);
-        toast.error(data.error);
-        return;
-      }
-
-      if (data?.browserUrl) {
-        await openExternalUrl(data.browserUrl);
-        toast.info(t("welcome.browserOpened"));
-      }
-    } catch {
-      setCloudConnecting(false);
-      toast.error(t("welcome.cloudConnectError"));
-    }
-  }, [queryClient, t, onConnected]);
+    },
+    [queryClient, t, onConnected],
+  );
 
   useEffect(() => {
     if (!cloudConnecting || cloudConnected) {

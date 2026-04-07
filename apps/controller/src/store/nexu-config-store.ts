@@ -1777,7 +1777,7 @@ export class NexuConfigStore {
     });
   }
 
-  async connectDesktopCloud() {
+  async connectDesktopCloud(options?: { source?: string | null }) {
     const config = await this.getConfig();
     const current = readDesktopCloud(config);
     const { activeProfile } =
@@ -1788,6 +1788,11 @@ export class NexuConfigStore {
     if (current.connected && current.apiKey) {
       return { error: "Already connected. Disconnect first." };
     }
+    const trimmedSource = options?.source?.trim();
+    const sourceQuery =
+      trimmedSource && trimmedSource.length > 0
+        ? `&source=${encodeURIComponent(trimmedSource)}`
+        : "";
 
     const deviceId = crypto.randomUUID();
     const deviceSecret = crypto.randomUUID();
@@ -1844,7 +1849,7 @@ export class NexuConfigStore {
     );
 
     return {
-      browserUrl: `${activeProfile.cloudUrl}/auth?desktop=1&device_id=${encodeURIComponent(deviceId)}`,
+      browserUrl: `${activeProfile.cloudUrl}/auth?desktop=1&device_id=${encodeURIComponent(deviceId)}${sourceQuery}`,
       error: undefined,
     };
   }
@@ -2131,7 +2136,10 @@ export class NexuConfigStore {
     return this.getDesktopCloudStatus();
   }
 
-  async connectDesktopCloudProfile(name: string) {
+  async connectDesktopCloudProfile(
+    name: string,
+    options?: { source?: string | null },
+  ) {
     const config = await this.getConfig();
     const activeProfileName = readDesktopActiveCloudProfileName(config);
 
@@ -2147,7 +2155,7 @@ export class NexuConfigStore {
       return { browserUrl: undefined, error: undefined, status };
     }
 
-    const result = await this.connectDesktopCloud();
+    const result = await this.connectDesktopCloud(options);
     return {
       browserUrl: result.browserUrl,
       error: result.error,

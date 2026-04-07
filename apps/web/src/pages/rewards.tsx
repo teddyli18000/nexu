@@ -256,7 +256,7 @@ export function RewardsPage() {
     // #818 + #816: 未登录时直接引导登录，不发起 claim 请求
     if (!status.viewer.cloudConnected) {
       toast.info(t("rewards.loginRequired"));
-      void handleCloudConnect();
+      void handleCloudConnect("home");
       return;
     }
 
@@ -373,7 +373,7 @@ export function RewardsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => void handleCloudConnect()}
+                onClick={() => void handleCloudConnect("home")}
                 className="inline-flex h-[32px] items-center justify-center gap-2 rounded-full bg-neutral-900 px-4 text-[12px] font-medium text-white transition hover:bg-neutral-800"
               >
                 {cloudConnecting ? (

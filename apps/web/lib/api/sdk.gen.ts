@@ -193,7 +193,11 @@ export const getApiInternalDesktopCloudStatus = <ThrowOnError extends boolean = 
 export const postApiInternalDesktopCloudConnect = <ThrowOnError extends boolean = false>(options?: Options<PostApiInternalDesktopCloudConnectData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).post<PostApiInternalDesktopCloudConnectResponse, unknown, ThrowOnError>({
         url: '/api/internal/desktop/cloud-connect',
-        ...options
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options?.headers
+        }
     });
 };
 

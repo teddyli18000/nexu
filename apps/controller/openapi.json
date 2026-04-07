@@ -1499,6 +1499,22 @@
         "tags": [
           "Desktop"
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Cloud connect",
@@ -1534,6 +1550,10 @@
                 "type": "object",
                 "properties": {
                   "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source": {
                     "type": "string",
                     "minLength": 1
                   }

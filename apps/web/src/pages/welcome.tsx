@@ -153,7 +153,9 @@ export function WelcomePage() {
     setCloudConnecting(true);
     setLoginError(null);
     try {
-      let { data } = await postApiInternalDesktopCloudConnect();
+      let { data } = await postApiInternalDesktopCloudConnect({
+        body: { source: "welcome_page" },
+      });
       // If a stale polling session exists, disconnect and retry once. But if
       // the desktop runtime is already polling, keep the current waiting state
       // instead of resetting the browser auth flow.
@@ -186,7 +188,9 @@ export function WelcomePage() {
       }
       if (data?.error) {
         await postApiInternalDesktopCloudDisconnect().catch(() => {});
-        ({ data } = await postApiInternalDesktopCloudConnect());
+        ({ data } = await postApiInternalDesktopCloudConnect({
+          body: { source: "welcome_page" },
+        }));
       }
       if (data?.error) {
         setLoginError(data.error ?? t("welcome.connectFailed"));

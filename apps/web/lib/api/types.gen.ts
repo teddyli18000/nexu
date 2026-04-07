@@ -584,7 +584,9 @@ export type GetApiInternalDesktopCloudStatusResponses = {
 export type GetApiInternalDesktopCloudStatusResponse = GetApiInternalDesktopCloudStatusResponses[keyof GetApiInternalDesktopCloudStatusResponses];
 
 export type PostApiInternalDesktopCloudConnectData = {
-    body?: never;
+    body?: {
+        source?: string;
+    };
     path?: never;
     query?: never;
     url: '/api/internal/desktop/cloud-connect';
@@ -605,6 +607,7 @@ export type PostApiInternalDesktopCloudConnectResponse = PostApiInternalDesktopC
 export type PostApiInternalDesktopCloudProfileConnectData = {
     body: {
         name: string;
+        source?: string;
     };
     path?: never;
     query?: never;

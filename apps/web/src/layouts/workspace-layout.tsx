@@ -922,7 +922,11 @@ function WorkspaceLayoutInner() {
               <button
                 type="button"
                 data-sidebar-growth-card="login"
-                onClick={() => void handleCloudConnect()}
+                onClick={() =>
+                  void handleCloudConnect(
+                    isHomePage ? "home" : isModelsPage ? "settings" : "home",
+                  )
+                }
                 className="group flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
               >
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-border bg-surface-2">
