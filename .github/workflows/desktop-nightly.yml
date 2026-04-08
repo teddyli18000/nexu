@@ -72,7 +72,7 @@ jobs:
           "build_date=$buildDate" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "short_sha=$shortSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Build custom Windows installer
+      - name: Build Windows installer
         shell: pwsh
         env:
           NEXU_CLOUD_URL: https://nexu.powerformer.net
@@ -85,7 +85,7 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
         run: |
           $env:NEXU_DESKTOP_BUILD_TIME = (Get-Date).ToUniversalTime().ToString('o')
-          pnpm --filter @nexu/desktop dist:win:custom
+          pnpm --filter @nexu/desktop dist:win
 
       - name: Prepare Windows release artifacts
         id: artifacts
@@ -102,7 +102,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $channelArtifacts | Out-Null
           Get-ChildItem -Path $channelArtifacts -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
-          $sourceInstaller = Join-Path $releaseDir "nexu-setup-custom-$env:VERSION-x64.exe"
+          $sourceInstaller = Join-Path $releaseDir "nexu-setup-$env:VERSION-x64.exe"
           if (-not (Test-Path $sourceInstaller)) {
             throw "Missing Windows installer: $sourceInstaller"
           }

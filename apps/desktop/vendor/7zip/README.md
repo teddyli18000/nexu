@@ -12,8 +12,8 @@
 - SHA256 (`7z.dll`): `BBD705E3B58CA7677C1E9E67473F166A6712DA034DCB567D571FBB67507A443F`
 - SHA256 (`License.txt`): `519AC0A4BDED9C18EA02E0AFB71F663D8C47373BD9FACD3AC96A79F51D77765D`
 
-These binaries are vendored only for the custom Windows installer build at
-`apps/desktop/scripts/dist-win-custom.mjs`.
+These binaries are vendored only for the Windows installer build at
+`apps/desktop/scripts/dist-win.mjs`.
 
 These files remain subject to the upstream 7-Zip license and are not relicensed
 under this repository's MIT license.

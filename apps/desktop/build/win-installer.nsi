@@ -29,7 +29,7 @@ RequestExecutionLevel user
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
-!include "win-custom-installer-lang.nsh"
+!include "win-installer-lang.nsh"
 
 !define PRODUCT_PUBLISHER "Powerformer, Inc."
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\Nexu.exe"
