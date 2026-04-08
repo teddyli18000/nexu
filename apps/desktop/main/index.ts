@@ -382,8 +382,12 @@ async function warnIfRunningUnderRosetta(): Promise<void> {
   }
 }
 
-/** When true, the Develop menu and reload shortcuts are visible in production. */
-let productionDebugMode = false;
+/**
+ * Controls whether the Develop menu is visible. In local dev it starts enabled
+ * so the menu matches today's default behavior, but the same shortcut can
+ * still toggle it for validation. In packaged builds it starts disabled.
+ */
+let productionDebugMode = !app.isPackaged;
 let sleepGuard: SleepGuard | null = null;
 let launchdResult: LaunchdBootstrapResult | null = null;
 let proxyManager: ProxyManager | null = null;
@@ -587,8 +591,8 @@ function installApplicationMenu(): void {
       submenu: [
         // Reload shortcuts are dev-only — in production they expose
         // internal "starting local service" screens (see #399).
-        // They can be unlocked at runtime via Cmd+Shift+Alt+D.
-        ...(!app.isPackaged || productionDebugMode
+        // They can be unlocked at runtime via Cmd/Ctrl+Shift+Alt+D.
+        ...(productionDebugMode
           ? ([
               { role: "reload" },
               { role: "forceReload" },
@@ -604,7 +608,7 @@ function installApplicationMenu(): void {
         { role: "togglefullscreen" },
       ],
     },
-    ...(!app.isPackaged || productionDebugMode ? [developMenu] : []),
+    ...(productionDebugMode ? [developMenu] : []),
     { role: "windowMenu" },
     helpMenu,
   ];
@@ -1091,21 +1095,34 @@ app.on("web-contents-created", (_event, contents) => {
     return { action: "deny" };
   });
 
-  // In production, block reload shortcuts (Cmd+R, Ctrl+R, Ctrl+Shift+R, F5)
-  // at the webContents level to prevent exposing internal startup screens (#399).
-  // Unlockable at runtime via Cmd+Shift+Alt+D (toggles productionDebugMode).
-  if (app.isPackaged) {
-    contents.on("before-input-event", (event, input) => {
-      if (productionDebugMode) return;
-      if (input.type !== "keyDown") return;
-      const isReload =
-        (input.key.toLowerCase() === "r" && (input.meta || input.control)) ||
-        input.key === "F5";
-      if (isReload) {
-        event.preventDefault();
-      }
-    });
-  }
+  // In packaged builds, block reload shortcuts (Cmd+R, Ctrl+R, Ctrl+Shift+R,
+  // F5) at the webContents level to prevent exposing internal startup screens
+  // (#399). The same focused-window event path also toggles the Develop menu in
+  // dev so the shortcut can be validated without a packaged build.
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    // Toggle debug mode: Cmd+Shift+Alt+D (mac) / Ctrl+Shift+Alt+D (win/linux).
+    // Handled here in addition to globalShortcut so it works on Windows even
+    // when system-level registration is blocked by other software.
+    if (
+      input.key.toLowerCase() === "d" &&
+      input.shift &&
+      input.alt &&
+      (input.meta || input.control)
+    ) {
+      event.preventDefault();
+      productionDebugMode = !productionDebugMode;
+      installApplicationMenu();
+      return;
+    }
+    if (!app.isPackaged || productionDebugMode) return;
+    const isReload =
+      (input.key.toLowerCase() === "r" && (input.meta || input.control)) ||
+      input.key === "F5";
+    if (isReload) {
+      event.preventDefault();
+    }
+  });
 
   if (contentType !== "webview") {
     return;
@@ -1201,14 +1218,13 @@ app.whenReady().then(async () => {
   await proxyManager.applyPolicy(runtimeConfig.proxy);
   installApplicationMenu();
 
-  // Hidden shortcut to toggle debug mode in production (Develop menu + reload).
-  // Harmless in dev since those items are always visible.
-  if (app.isPackaged) {
-    globalShortcut.register("CommandOrControl+Shift+Alt+D", () => {
-      productionDebugMode = !productionDebugMode;
-      installApplicationMenu();
-    });
-  }
+  // Hidden shortcut to toggle the Develop menu and packaged-only reload items.
+  // Registered in both dev and packaged builds so the shortcut itself can be
+  // validated locally, while before-input-event remains the Windows fallback.
+  globalShortcut.register("CommandOrControl+Shift+Alt+D", () => {
+    productionDebugMode = !productionDebugMode;
+    installApplicationMenu();
+  });
   diagnosticsReporter = new DesktopDiagnosticsReporter(orchestrator);
   await refreshProxyDiagnostics();
   diagnosticsReporter.recordStartupProbe({
