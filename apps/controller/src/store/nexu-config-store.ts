@@ -34,6 +34,7 @@ import { logger } from "../lib/logger.js";
 import { resolveManagedCloudModel } from "../lib/managed-models.js";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 import {
+  type CreditSummaryResponse,
   type RewardStatusResponse,
   createCloudRewardService,
 } from "../services/cloud-reward-service.js";
@@ -310,6 +311,7 @@ function convertCloudStatusToDesktop(
     activeModelId: string | null;
     activeManagedModel: { provider?: string } | null | undefined;
   },
+  creditsSummary: CreditSummaryResponse | null,
 ): DesktopRewardsStatus {
   const { cloudConnected, activeModelId, activeManagedModel } = viewer;
   const tasks = cloudStatus.tasks.flatMap((task) => {
@@ -349,13 +351,18 @@ function convertCloudStatusToDesktop(
       totalCount: tasks.length,
     },
     tasks,
-    cloudBalance: cloudStatus.cloudBalance
-      ? {
-          totalBalance: cloudStatus.cloudBalance.totalBalance,
-          totalRecharged: cloudStatus.cloudBalance.totalRecharged,
-          totalConsumed: cloudStatus.cloudBalance.totalConsumed,
-        }
-      : null,
+    cloudBalance:
+      creditsSummary?.balance ??
+      (cloudStatus.cloudBalance
+        ? {
+            totalBalance: cloudStatus.cloudBalance.totalBalance,
+            giftBalance: 0,
+            totalRecharged: cloudStatus.cloudBalance.totalRecharged,
+            totalConsumed: cloudStatus.cloudBalance.totalConsumed,
+            syncedAt: cloudStatus.cloudBalance.syncedAt,
+            updatedAt: cloudStatus.cloudBalance.updatedAt,
+          }
+        : null),
   };
 }
 
@@ -1520,6 +1527,7 @@ export class NexuConfigStore {
       activeModelId,
       cloud.models ?? [],
     );
+    let creditsBalance: CreditSummaryResponse["balance"] | null = null;
 
     if (cloud.connected && cloud.apiKey) {
       const { activeProfile } =
@@ -1529,15 +1537,36 @@ export class NexuConfigStore {
         cloudUrl,
         apiKey: cloud.apiKey,
       });
-      const cloudResult = await service.getRewardsStatus();
+      const [cloudResult, creditsSummaryResult] = await Promise.all([
+        service.getRewardsStatus(),
+        service.getCreditsSummary(),
+      ]);
+      creditsBalance = creditsSummaryResult.ok
+        ? creditsSummaryResult.data.balance
+        : null;
 
       if (cloudResult.ok) {
         const cloudStatus = cloudResult.data;
-        return convertCloudStatusToDesktop(cloudStatus, {
-          cloudConnected: true,
-          activeModelId,
-          activeManagedModel,
-        });
+        const creditsSummary = creditsSummaryResult.ok
+          ? creditsSummaryResult.data
+          : null;
+
+        if (!creditsSummaryResult.ok) {
+          logger.warn(
+            { reason: creditsSummaryResult.reason },
+            "desktop_credits_summary_cloud_fallback",
+          );
+        }
+
+        return convertCloudStatusToDesktop(
+          cloudStatus,
+          {
+            cloudConnected: true,
+            activeModelId,
+            activeManagedModel,
+          },
+          creditsSummary,
+        );
       }
 
       if (cloudResult.reason === "auth_failed") {
@@ -1554,7 +1583,7 @@ export class NexuConfigStore {
           },
           progress: { claimedCount: 0, totalCount: 0, earnedCredits: 0 },
           tasks: [],
-          cloudBalance: null,
+          cloudBalance: creditsBalance,
         };
       }
 
@@ -1577,7 +1606,7 @@ export class NexuConfigStore {
       },
       progress: { claimedCount: 0, totalCount: 0, earnedCredits: 0 },
       tasks: [],
-      cloudBalance: null,
+      cloudBalance: creditsBalance,
     };
   }
 
@@ -1621,15 +1650,26 @@ export class NexuConfigStore {
       activeModelId2,
       cloud2.models ?? [],
     );
+    const creditsSummaryResult = await service.getCreditsSummary();
+    if (!creditsSummaryResult.ok) {
+      logger.warn(
+        { reason: creditsSummaryResult.reason },
+        "desktop_credits_summary_cloud_fallback",
+      );
+    }
 
     return {
       ok: claimData.ok,
       alreadyClaimed: claimData.alreadyClaimed,
-      status: convertCloudStatusToDesktop(claimData.status, {
-        cloudConnected: true,
-        activeModelId: activeModelId2,
-        activeManagedModel: activeManagedModel2,
-      }),
+      status: convertCloudStatusToDesktop(
+        claimData.status,
+        {
+          cloudConnected: true,
+          activeModelId: activeModelId2,
+          activeManagedModel: activeManagedModel2,
+        },
+        creditsSummaryResult.ok ? creditsSummaryResult.data : null,
+      ),
     };
   }
 
@@ -2154,11 +2194,16 @@ export class NexuConfigStore {
     await this.store.update((currentConfig) => {
       const sessions = readDesktopCloudSessions(currentConfig);
       const nextSession = sessions[nextProfile.name];
+      const currentProfile = readLocalProfile(currentConfig);
 
       return {
         ...currentConfig,
         desktop: {
           ...currentConfig.desktop,
+          localProfile: {
+            ...currentProfile,
+            authSource: "desktop-local",
+          },
           activeCloudProfileName: nextProfile.name,
           cloud: nextSession
             ? {
