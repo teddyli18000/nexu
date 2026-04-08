@@ -380,6 +380,7 @@ export function createRuntimeUnitManifests(
   const skillNodePath = buildSkillNodePath(electronRoot, isPackaged);
   const proxyEnv = buildChildProcessProxyEnv(runtimeConfig.proxy);
   const openclawSkillsDir = getOpenclawSkillsDir(userDataPath);
+  const openclawMdnsHostname = "openclaw";
   const skillhubStaticSkillsDir = isPackaged
     ? path.resolve(electronRoot, "static", "bundled-skills")
     : path.resolve(repoRoot, "apps", "desktop", "static", "bundled-skills");
@@ -426,6 +427,7 @@ export function createRuntimeUnitManifests(
       OPENCLAW_GATEWAY_PORT: String(openclawPort),
       OPENCLAW_GATEWAY_TOKEN: runtimeConfig.tokens.gateway,
       OPENCLAW_BASE_URL: runtimeConfig.urls.openclawBase,
+      OPENCLAW_MDNS_HOSTNAME: openclawMdnsHostname,
       OPENCLAW_STATE_DIR: openclawStateDir,
       OPENCLAW_CONFIG_PATH: path.resolve(openclawStateDir, "openclaw.json"),
       OPENCLAW_LOG_DIR: path.resolve(
@@ -490,6 +492,7 @@ export function createRuntimeUnitManifests(
     env: {
       ...(openclawNodePath ? { NODE_PATH: openclawNodePath } : {}),
       OPENCLAW_CONFIG_PATH: path.resolve(openclawStateDir, "openclaw.json"),
+      OPENCLAW_MDNS_HOSTNAME: openclawMdnsHostname,
       OPENCLAW_STATE_DIR: openclawStateDir,
     },
   };
