@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
@@ -263,6 +263,35 @@ describe("deploy skill core", () => {
           Authorization: "Bearer nxk_test_local_key",
         }),
       }),
+    );
+  });
+
+  it("loads jszip in a packaged-runtime-safe way and desktop bundles it", async () => {
+    const skillSource = await readFile(
+      path.join(
+        process.cwd(),
+        "apps/desktop/static/bundled-skills/deploy-skill/scripts/deploy_skill_core.js",
+      ),
+      "utf8",
+    );
+    const desktopPackage = JSON.parse(
+      await readFile(
+        path.join(process.cwd(), "apps/desktop/package.json"),
+        "utf8",
+      ),
+    );
+
+    expect(skillSource).not.toContain('import JSZip from "jszip"');
+    expect(skillSource).toContain("createRequire(import.meta.url)");
+    expect(skillSource).toContain('require("jszip")');
+    expect(desktopPackage.dependencies.jszip).toBeTruthy();
+    expect(desktopPackage.build.extraResources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: "node_modules/jszip",
+          to: "bundled-node-modules/jszip",
+        }),
+      ]),
     );
   });
 

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import JSZip from "jszip";
 
 const CONFIG_FILENAME = "deploy-skill.json";
 const JOBS_FILENAME = "deploy-skill-jobs.json";
@@ -29,6 +29,26 @@ const FINAL_HOST_SUFFIX = ".nexu.space";
 const FALLBACK_HOST_SUFFIX = ".pages.dev";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_ROOT = path.resolve(SCRIPT_DIR, "../templates");
+const require = createRequire(import.meta.url);
+
+let cachedJSZip;
+
+function loadJSZip() {
+  if (cachedJSZip) {
+    return cachedJSZip;
+  }
+
+  try {
+    const loaded = require("jszip");
+    cachedJSZip = loaded?.default ?? loaded;
+    return cachedJSZip;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `deploy-skill requires jszip to be bundled into this desktop runtime (${reason}).`,
+    );
+  }
+}
 
 function configPath(nexuHome) {
   return path.join(nexuHome, CONFIG_FILENAME);
@@ -726,6 +746,7 @@ async function renderTemplateFiles(templateId, content, deps = {}) {
 }
 
 async function createTemplateZip(nexuHome, templateId, files) {
+  const JSZip = loadJSZip();
   const zip = new JSZip();
   for (const [fileName, content] of Object.entries(files)) {
     zip.file(fileName, content);
