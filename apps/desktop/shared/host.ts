@@ -488,6 +488,63 @@ export type DiagnosticsInfo = {
   };
 };
 
+export type DesktopDevDiagnosticsLogLevel =
+  | "debug"
+  | "info"
+  | "warning"
+  | "error";
+
+export type DesktopDevRendererLogEntry = {
+  id: string;
+  ts: string;
+  source: "console" | "page-error";
+  level: DesktopDevDiagnosticsLogLevel;
+  message: string;
+  url: string | null;
+  sourceId: string | null;
+  line: number | null;
+};
+
+export type DesktopDevRendererLogSnapshot = {
+  entries: DesktopDevRendererLogEntry[];
+  truncated: boolean;
+};
+
+export type DesktopDevScreenshotResult = {
+  mimeType: "image/png";
+  base64: string;
+  width: number;
+  height: number;
+  scaleFactor: number;
+};
+
+export type DesktopDevEvalSerializableValue =
+  | null
+  | boolean
+  | number
+  | string
+  | DesktopDevEvalSerializableValue[]
+  | { [key: string]: DesktopDevEvalSerializableValue };
+
+export type DesktopDevEvalResult = {
+  ok: boolean;
+  valueType: string;
+  value: DesktopDevEvalSerializableValue;
+  error?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
+};
+
+export type DesktopDevDomSnapshotResult = {
+  title: string;
+  url: string;
+  readyState: string;
+  htmlLength: number;
+  htmlSummary: string;
+};
+
 export type DesktopSurface =
   | "web"
   | "openclaw"
@@ -626,6 +683,11 @@ export type HostBridge = {
     payload: HostInvokePayloadMap[TChannel],
   ): Promise<HostInvokeResultMap[TChannel]>;
   reportStartupProbe(payload: StartupProbePayload): void;
+  reportRendererDiagnosticsLog(
+    payload: Omit<DesktopDevRendererLogEntry, "id" | "ts" | "source"> & {
+      source: "page-error";
+    },
+  ): void;
   onDesktopCommand(listener: (command: HostDesktopCommand) => void): () => void;
   onRuntimeEvent(listener: (event: RuntimeEvent) => void): () => void;
 };
