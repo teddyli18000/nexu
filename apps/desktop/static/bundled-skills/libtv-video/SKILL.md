@@ -22,13 +22,21 @@ The backend agent automatically selects the best model. **When sending prompts, 
 
 - Python 3.8+
 - `apiKey` configured in `~/.nexu/libtv.json`
+- default `videoRatio` configured in `~/.nexu/libtv.json` or implicit default `16:9`
+- Production gateway: `https://seedance.nexu.io/`
 
 ## First-Time Setup
 
 If the user has not configured an API Key, guide them to:
 1. Contact the admin to obtain an API Key starting with `mgk_`
-2. Run: `python3 scripts/libtv_video.py setup --api-key mgk_yourkey`
+2. Run: `python3 scripts/libtv_video.py setup --api-key mgk_yourkey --video-ratio 16:9`
 3. Run: `python3 scripts/libtv_video.py check` to confirm the configuration is correct
+
+To change only the default ratio later:
+
+```bash
+python3 scripts/libtv_video.py update-ratio --video-ratio 9:16
+```
 
 ## Pre-Generation Check (must run before each generation)
 
@@ -63,6 +71,7 @@ python3 scripts/libtv_video.py create-session "user's video description"
 ```
 
 The script automatically appends "please use Seedance 2.0" unless the user specifies another model.
+The script also relays the configured video ratio. If no ratio is configured, it defaults to `16:9`.
 
 ### Image+Text Generation (image-to-video)
 
@@ -84,9 +93,11 @@ python3 scripts/libtv_video.py create-session "new description" --session-id SES
 ### After Submission
 
 1. `create-session` returns immediately without blocking
-2. **Reply to the user immediately**: "Your video is being generated. It typically takes 1-3 minutes and will be sent to you automatically when ready."
+2. **Reply to the user immediately**: "Your video task has been submitted and is now generating. I will notify you when it finishes."
 3. **Do not wait** — resume normal conversation
-4. A sub-agent will automatically wait in the background and deliver the results
+4. A sub-agent will automatically wait in the background and continue checking the job
+5. If the job is still running, send a heartbeat progress notification roughly every 60 seconds
+6. When the job finishes or fails, send the terminal success/failure/timeout notification with the final links or explicit error
 
 ## When the User Asks "Is my video ready?"
 
@@ -103,7 +114,7 @@ If you don't remember whether a video was previously generated:
 1. Run `python3 scripts/libtv_video.py recover`
 2. It reads historical sessions from the local persistence file and queries the gateway for latest status
 3. Completed sessions → send the result URLs to the user directly
-4. Still in progress → inform the user it's still generating
+4. Still in progress → inform the user it's still generating and keep the periodic heartbeat schedule
 
 ## Presenting Results
 
@@ -173,6 +184,36 @@ When any command returns an error:
 | "Unsupported file type" | Only image and video files are supported |
 | "Cannot connect to gateway" | Check network connectivity |
 
+## Mandatory Guard Checklist
+
+This skill has a hard anti-hallucination rule. The model must verify each step before it can describe that step as successful.
+
+Submit step checks:
+- confirm `~/.nexu/libtv.json` exists and contains a non-empty `apiKey`
+- confirm the key starts with `mgk_`
+- confirm the skill is targeting `https://seedance.nexu.io/` unless a deliberate local test override is set
+- confirm the effective video ratio is set, defaulting to `16:9`
+- confirm `create-session` returns a real `sessionId`
+- confirm `create-session` returns a real `projectUuid`
+- confirm the accepted session was persisted locally with matching `session_id`, `project_uuid`, `status=submitted`, and the current delivery target/session metadata when available
+- confirm persisted delivery metadata includes a gateway-ready target (`to`), the original target (`raw_to`) when present, `session_key`, and an idempotency-safe prefix for notification sends
+- confirm notification bookkeeping was persisted locally before claiming a submit or progress notification was sent
+- only after those checks pass may the skill emit `sessions_spawn` and tell the user generation was submitted
+
+Polling / terminal delivery checks:
+- confirm the queried session already exists in `~/.nexu/libtv-sessions.json`
+- while the session is still running, send a generic progress heartbeat about every 60 seconds using the persisted delivery target
+- progress heartbeats must use persisted timestamps / counters so they do not duplicate on retries or restart recovery
+- confirm success only when at least one result URL is extracted from the valid LibTV result domain
+- if success is reached, send both the result links and the project canvas link
+- if terminal polling times out, report timeout explicitly and do not claim success
+- if the gateway reports an explicit error, relay it instead of inventing a friendlier explanation
+
+Output rule:
+- If any guard check fails, stop and return the explicit guard-check error
+- Never claim a video is ready until the terminal success checks have passed
+- Never invent session ids, project ids, URLs, or completion state
+
 ## Command Reference
 
 | Scenario | Command | Blocking? |
@@ -180,6 +221,7 @@ When any command returns an error:
 | First-time setup | `setup --api-key mgk_xxx` | No |
 | Check status | `check` | No |
 | Update key | `update-key --api-key mgk_xxx` | No |
+| Update ratio | `update-ratio --video-ratio 9:16` | No |
 | Remove key | `remove-key` | No |
 | Upload file | `upload --file /path/to/file` | No |
 | **Create session / send message** | **`create-session "description"`** | **No** |
