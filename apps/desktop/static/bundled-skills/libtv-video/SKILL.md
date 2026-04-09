@@ -1,6 +1,6 @@
 ---
-name: LibTV Video
-description: Unified LibTV video and image generation skill for Nexu-managed Seedance keys and user-owned direct LibTV keys. Trigger when users ask to generate or edit AI images or videos, mention seedance, libtv, liblib, upload reference media, or ask about generation progress.
+name: LibTV - Image&Video（Seedance 2.0）
+description: Unified LibTV skill for generating BOTH AI images AND videos, powered by Seedance 2.0. Handles text-to-image, image-to-image, text-to-video, and image-to-video workflows via Nexu-managed Seedance keys or user-owned direct LibTV keys. Trigger when users ask to generate, create, edit, or modify AI images or videos; mention seedance, libtv, liblib, image, picture, illustration, video, animation; upload reference media; or ask about generation progress.
 homepage: https://www.liblib.tv/
 metadata:
   {
@@ -12,9 +12,9 @@ metadata:
   }
 ---
 
-# LibTV Video / Image Generation
+# LibTV - Image & Video Generation (Seedance 2.0)
 
-Generate AI videos and images through one bundled LibTV skill. It supports both Nexu-managed Seedance execution and direct LibTV execution with a user-owned `sk-libtv-...` key.
+Generate AI **images** and **videos** through one bundled LibTV skill, powered by Seedance 2.0. Supports text-to-image, image-to-image, text-to-video, and image-to-video workflows, via both Nexu-managed Seedance execution and direct LibTV execution with a user-owned `sk-libtv-...` key.
 
 Key routing:
 

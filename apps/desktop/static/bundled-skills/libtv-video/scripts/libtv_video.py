@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LibTV Video Skill - AI video/image generation via Nexu Seedance or direct LibTV
+"""LibTV - Image & Video (Seedance 2.0) - AI image and video generation via Nexu Seedance or direct LibTV
 
 Delivery architecture:
   - `create-session` submits the job, captures the channel + chat_id from
@@ -1146,7 +1146,7 @@ def cmd_change_project(args):
 # ── CLI entry point ──
 
 def main():
-    parser = argparse.ArgumentParser(description="LibTV Video Skill")
+    parser = argparse.ArgumentParser(description="LibTV - Image&Video (Seedance 2.0) Skill")
     sub = parser.add_subparsers(dest="command")
 
     # setup
