@@ -1,0 +1,238 @@
+name: Issue Lifecycle Manager
+
+on:
+  issues:
+    types: [labeled, closed, assigned]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  # ── When maintainer confirms a bug ──
+  on-confirmed:
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'confirmed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(l => l.name);
+
+            // Remove needs-triage since it's now triaged
+            if (labels.includes('needs-triage')) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                name: 'needs-triage',
+              }).catch(() => {});
+            }
+
+            // If good-first-issue, add help-wanted + a guide comment
+            if (labels.includes('good-first-issue')) {
+              if (!labels.includes('help-wanted')) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['help-wanted'],
+                });
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  `✅ This bug has been **confirmed** and marked as \`good-first-issue\`.`,
+                  ``,
+                  `**Want to contribute a fix?** Here's how:`,
+                  `1. Comment "I'd like to work on this" below`,
+                  `2. Fork the repo and create a branch: \`fix/issue-${issue.number}\``,
+                  `3. Follow the [Contributing Guide](https://github.com/nexu-io/nexu/blob/main/CONTRIBUTING.md)`,
+                  `4. Submit a PR referencing this issue`,
+                  ``,
+                  `A mentor will be available to help if you get stuck. 🚀`,
+                ].join('\n'),
+              });
+            }
+
+  # ── When maintainer accepts a feature ──
+  on-accepted:
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'accepted'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(l => l.name);
+
+            if (labels.includes('needs-triage')) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                name: 'needs-triage',
+              }).catch(() => {});
+            }
+
+            if (!labels.includes('help-wanted')) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['help-wanted'],
+              });
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                `🎯 This feature request has been **accepted**.`,
+                ``,
+                `**Want to implement it?** Comment "I'd like to work on this" and we'll assign it to you.`,
+                ``,
+                `Please check the priority label for expected timeline.`,
+              ].join('\n'),
+            });
+
+  # ── Auto-assign when contributor claims an issue ──
+  on-claim:
+    if: github.event.action == 'created' && github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const issue = context.payload.issue;
+            const body = (comment.body || '').toLowerCase();
+
+            const claimPatterns = [
+              /i'?d like to work on this/,
+              /i want to work on this/,
+              /i'?ll take this/,
+              /can i work on this/,
+              /i'?d like to take this/,
+              /assign me/,
+              /我来做/,
+              /我认领/,
+              /我想做这个/,
+            ];
+
+            const isClaim = claimPatterns.some(rx => rx.test(body));
+            if (!isClaim) return;
+
+            const user = comment.user.login;
+
+            // Don't assign if already assigned to someone else
+            if (issue.assignee && issue.assignee.login !== user) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Hey @${user}, this issue is currently assigned to @${issue.assignee.login}. If they're no longer working on it, a maintainer can reassign it to you.`,
+              });
+              return;
+            }
+
+            // Assign the user
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              assignees: [user],
+            });
+
+            const labels = issue.labels.map(l => l.name);
+            const area = labels.find(l => l.startsWith('area/')) || '';
+            const difficulty = labels.find(l => ['good-first-issue', 'intermediate', 'advanced'].includes(l)) || '';
+
+            let tips = '';
+            if (difficulty === 'good-first-issue') {
+              tips = [
+                `**Quick start tips:**`,
+                `- Branch name: \`fix/issue-${issue.number}\` or \`feat/issue-${issue.number}\``,
+                `- Run \`pnpm install && pnpm dev start\` to get the local env running`,
+                `- Check \`CONTRIBUTING.md\` for PR conventions`,
+                `- Feel free to ask questions right here in this issue`,
+              ].join('\n');
+            } else {
+              tips = [
+                `**Before you start:**`,
+                `- Review the [Architecture Guide](https://github.com/nexu-io/nexu/blob/main/ARCHITECTURE.md)`,
+                `- Check related issues/PRs for context`,
+                `- Discuss your approach in a comment before starting major changes`,
+              ].join('\n');
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                `Great, @${user} — this issue is now assigned to you! 🎉`,
+                ``,
+                tips,
+                ``,
+                `If you need help or get stuck, tag a maintainer and we'll assist you.`,
+                `Please submit your PR within **2 weeks** — if you need more time, just let us know!`,
+              ].join('\n'),
+            });
+
+  # ── Auto-thank on issue close ──
+  on-close:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(l => l.name);
+
+            // Only thank external contributors (not team)
+            const TEAM_MEMBERS = [
+              'isfareen', 'bielurfun', 'zifrom', 'PerishCode',
+              'caiqiling958-cmd', 'nettee', 'shangxinyu1',
+              'qiongyu1999', 'nexu-io', 'lefarcen',
+            ];
+
+            // Check if resolved by external PR
+            const { data: events } = await github.rest.issues.listEventsForTimeline({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 50,
+            });
+
+            const linkedPR = events.find(e =>
+              e.event === 'cross-referenced' &&
+              e.source?.issue?.pull_request
+            );
+
+            if (linkedPR) {
+              const prAuthor = linkedPR.source?.issue?.user?.login;
+              if (prAuthor && !TEAM_MEMBERS.includes(prAuthor)) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    `🎉 This issue has been resolved! Thanks to @${prAuthor} for the contribution.`,
+                    ``,
+                    `Your work helps make Nexu better for everyone. We'd love to see you contribute again — check out our [open issues](https://github.com/nexu-io/nexu/issues?q=is:open+label:good-first-issue+no:assignee) for more opportunities!`,
+                  ].join('\n'),
+                });
+              }
+            }

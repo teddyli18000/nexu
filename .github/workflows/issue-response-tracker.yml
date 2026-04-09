@@ -1,0 +1,149 @@
+name: 24h Issue Response Tracker
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check-response-time:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const TEAM_MEMBERS = [
+              'isfareen', 'bielurfun', 'zifrom', 'PerishCode',
+              'caiqiling958-cmd', 'nettee', 'shangxinyu1',
+              'qiongyu1999', 'nexu-io', 'lefarcen',
+            ];
+            const RESPONSE_DEADLINE_HOURS = 24;
+            const WARNING_LABEL = 'response-needed';
+
+            const now = new Date();
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'created',
+              direction: 'asc',
+              per_page: 100,
+            });
+
+            const stats = { bugResponded: 0, bugPending: 0, featureResponded: 0, featurePending: 0 };
+
+            for (const issue of openIssues) {
+              if (issue.pull_request) continue;
+
+              const createdAt = new Date(issue.created_at);
+              const hoursSinceCreation = (now - createdAt) / (1000 * 60 * 60);
+              if (hoursSinceCreation < RESPONSE_DEADLINE_HOURS) continue;
+
+              const labels = issue.labels.map(l => l.name);
+              const isBug = labels.includes('type:bug') || labels.includes('bug');
+              const isFeature = labels.includes('type:feature') || labels.includes('enhancement');
+
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 20,
+              });
+
+              const hasTeamResponse = comments.some(c =>
+                TEAM_MEMBERS.includes(c.user?.login) &&
+                !c.body.includes('AI Translation') &&
+                !c.user?.login?.includes('[bot]')
+              );
+
+              if (hasTeamResponse) {
+                if (isBug) stats.bugResponded++;
+                else stats.featureResponded++;
+
+                if (labels.includes(WARNING_LABEL)) {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    name: WARNING_LABEL,
+                  }).catch(() => {});
+                }
+                continue;
+              }
+
+              // --- No team response yet: add warning label + auto-comment ---
+              if (isBug) stats.bugPending++;
+              else stats.featurePending++;
+
+              if (!labels.includes(WARNING_LABEL)) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: [WARNING_LABEL],
+                });
+              }
+
+              // Only auto-comment once (check if bot already commented)
+              const botAlreadyCommented = comments.some(c =>
+                c.user?.login === 'github-actions[bot]' &&
+                c.body.includes('⏰')
+              );
+              if (botAlreadyCommented) continue;
+
+              const hoursOverdue = Math.round(hoursSinceCreation - RESPONSE_DEADLINE_HOURS);
+
+              if (isBug) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    `⏰ **Response reminder** — This bug report has been open for ${Math.round(hoursSinceCreation)}h without a team response.`,
+                    ``,
+                    `**Maintainers**: Please triage this issue:`,
+                    `1. Try to reproduce the bug`,
+                    `2. If confirmed → add \`confirmed\` label + priority (\`priority:p0\` / \`p1\` / \`p2\`)`,
+                    `3. If needs more info → reply asking for details + add \`needs-information\` label`,
+                    `4. Assess difficulty → add \`good-first-issue\` / \`intermediate\` / \`advanced\``,
+                    ``,
+                    `cc @nexu-io/maintainers`,
+                  ].join('\n'),
+                });
+              } else if (isFeature) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    `⏰ **Response reminder** — This feature request has been open for ${Math.round(hoursSinceCreation)}h without a team response.`,
+                    ``,
+                    `**Maintainers**: Please review this request:`,
+                    `1. Does it align with the [roadmap](https://github.com/nexu-io/nexu/discussions)?`,
+                    `2. If accepted → add \`accepted\` + priority label`,
+                    `3. If needs discussion → reply with initial thoughts`,
+                    `4. If out of scope → close with explanation`,
+                    ``,
+                    `cc @nexu-io/maintainers`,
+                  ].join('\n'),
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    `⏰ **Response reminder** — This issue has been open for ${Math.round(hoursSinceCreation)}h without a team response.`,
+                    ``,
+                    `A maintainer will look into this shortly. cc @nexu-io/maintainers`,
+                  ].join('\n'),
+                });
+              }
+            }
+
+            console.log('=== 24h Response Report ===');
+            console.log(`Bugs:     ${stats.bugResponded} responded, ${stats.bugPending} pending`);
+            console.log(`Features: ${stats.featureResponded} responded, ${stats.featurePending} pending`);

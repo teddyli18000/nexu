@@ -1,0 +1,189 @@
+name: Issue Triage Bot
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = (issue.title || '').toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const text = title + ' ' + body;
+            const labelsToAdd = [];
+            const currentLabels = issue.labels.map(l => l.name);
+
+            // ============================================================
+            // 1. TYPE DETECTION (from template labels + keyword fallback)
+            // ============================================================
+            const isBug = currentLabels.includes('bug')
+              || /bug|crash|error|broken|exception|闪退|崩溃|报错|不能|无法|失败|卡住|卡死|白屏|黑屏/.test(text);
+            const isFeature = currentLabels.includes('enhancement')
+              || /feature request|feature|enhancement|建议|希望|期望|能否|可以增加|可以添加|请求/.test(text);
+            const isI18n = /i18n|翻译|translation|国际化|locale|多语言/.test(text);
+            const isDocs = /doc[s]?\b|readme|contributing|guide|教程|文档|说明/.test(text);
+
+            if (isBug && !currentLabels.includes('type:bug')) labelsToAdd.push('type:bug');
+            if (isFeature && !currentLabels.includes('type:feature')) labelsToAdd.push('type:feature');
+            if (isI18n && !currentLabels.includes('type:i18n')) labelsToAdd.push('type:i18n');
+            if (isDocs && !currentLabels.includes('type:docs')) labelsToAdd.push('type:docs');
+            if (/skill|插件|plugin/.test(text) && !currentLabels.includes('type:skill')) labelsToAdd.push('type:skill');
+
+            // ============================================================
+            // 2. AREA DETECTION
+            // ============================================================
+            const areaRules = [
+              {
+                label: 'area/frontend',
+                pattern: /electron|desktop|tray|window|启动|托盘|界面|ui\b|页面|按钮|菜单|设置|拖[动拽]|跳转|返回|显示|样式|布局|图标|弹窗|对话框|滚动|输入框|搜索框|sidebar|toolbar|tab|标签栏|导航|主题|暗[色黑]|dark\s*mode|font|字体|颜色|color/,
+              },
+              {
+                label: 'area/backend',
+                pattern: /controller|backend|api\b|server|数据库|database|配置|config|runtime|服务|service|端口|port|启动失败|连接/,
+              },
+              {
+                label: 'area/skill-engine',
+                pattern: /skill|clawhub|skillhub|openclaw|技能|插件|marketplace/,
+              },
+              {
+                label: 'area/docs',
+                pattern: /doc[s]?\b|readme|contributing|guide|教程|文档|说明|wiki/,
+              },
+              {
+                label: 'area/channels',
+                pattern: /wechat|微信|dingtalk|钉钉|qq\b|discord|slack|telegram|feishu|飞书|whatsapp|channel|频道|消息|聊天|im\b/,
+              },
+              {
+                label: 'area/credit',
+                pattern: /credit|积分|reward|奖励|points|余额|balance|充值|消耗|额度|token.*用[量完光]|用量/,
+              },
+            ];
+
+            for (const rule of areaRules) {
+              if (rule.pattern.test(text) && !currentLabels.includes(rule.label)) {
+                labelsToAdd.push(rule.label);
+              }
+            }
+
+            // ============================================================
+            // 3. PLATFORM DETECTION
+            // ============================================================
+            if (/windows|win版|win\d|win\b/.test(text) && !currentLabels.includes('windows')) {
+              labelsToAdd.push('windows');
+            }
+
+            // ============================================================
+            // 4. GOOD-FIRST-ISSUE AUTO-DETECTION
+            //    Criteria: user-facing UX issues that are clearly described,
+            //    don't require deep architectural knowledge, and have
+            //    immediate impact on product experience.
+            //    Examples:
+            //      - Can't view login email in product
+            //      - Tab bar not draggable (#595)
+            //      - Missing button / UI element
+            //      - Display / layout glitch
+            // ============================================================
+            const uxSignals = [
+              /找不到|看不到|没有.*按钮|没有.*入口|无法查看|不能查看|不能拖|无法拖/,
+              /显示不[对全正]|显示错|显示异常|样式[问错异]|布局[问错异]/,
+              /点击无[效反]|点[了击]没[有反]|按钮.*无效|操作无响应/,
+              /跳转[错异问]|返回.*默认|返回.*错|导航.*问题/,
+              /文[字案].*截断|文[字案].*溢出|文[字案].*重叠|文字.*显示不全/,
+              /图[标片].*不显示|图[标片].*丢失|图[标片].*加载失败|icon.*missing/,
+              /scroll|滚动.*问题|滚动.*异常|拖[动拽].*问题|拖[动拽].*异常|不能.*滚动/,
+              /密码|password|登[录录].*问题|login.*issue|邮箱.*看不到|email.*not.*show/,
+              /missing.*button|missing.*feature|can'?t find|cannot find|unable to see/,
+              /not draggable|can'?t drag|unable to drag|not clickable|can'?t click/,
+              /layout.*broken|display.*wrong|ui.*bug|ui.*issue|ux.*issue/,
+            ];
+
+            const isUxIssue = uxSignals.some(rx => rx.test(text));
+            const isSingleArea = labelsToAdd.filter(l => l.startsWith('area/')).length <= 1;
+            const noDeepArch = !/架构|architecture|重构|refactor|性能|performance|数据[库迁]|migration|安全|security|并发|concurrent/.test(text);
+
+            if (isUxIssue && isSingleArea && noDeepArch && isBug) {
+              if (!currentLabels.includes('good-first-issue')) {
+                labelsToAdd.push('good-first-issue');
+              }
+            }
+
+            // ============================================================
+            // 5. PRIORITY AUTO-SUGGESTION
+            //    P0: crash / data loss / can't start
+            //    P1: core feature broken but workaround exists
+            //    P2: cosmetic / nice-to-have
+            // ============================================================
+            const hasPriority = currentLabels.some(l => l.startsWith('priority:'));
+            if (!hasPriority && isBug) {
+              if (/crash|闪退|崩溃|data.*loss|数据丢失|无法启动|can'?t start|白屏|black screen|黑屏/.test(text)) {
+                labelsToAdd.push('priority:p0');
+              } else if (/无法|不能|失败|broken|error|报错|doesn'?t work|not working/.test(text)) {
+                labelsToAdd.push('priority:p1');
+              } else {
+                labelsToAdd.push('priority:p2');
+              }
+            }
+
+            // ============================================================
+            // 6. PROCESS LABEL: needs-triage
+            // ============================================================
+            if (!hasPriority && !currentLabels.includes('needs-triage')) {
+              labelsToAdd.push('needs-triage');
+            }
+
+            // ============================================================
+            // 7. APPLY LABELS
+            // ============================================================
+            const newLabels = [...new Set(labelsToAdd)].filter(l => !currentLabels.includes(l));
+            if (newLabels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: newLabels,
+              });
+              console.log(`Added labels: ${newLabels.join(', ')}`);
+            } else {
+              console.log('No new labels to add');
+            }
+
+  welcome:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const creator = context.payload.issue.user.login;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: creator,
+              state: 'all',
+              per_page: 2,
+            });
+
+            if (issues.length <= 1) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: [
+                  `Welcome to Nexu! 👋 Thanks for opening your first issue — we really appreciate it.`,
+                  ``,
+                  `A maintainer will respond within **24 hours**. In the meantime:`,
+                  `- Make sure you've included reproduction steps and environment info`,
+                  `- Check [Discussions](https://github.com/nexu-io/nexu/discussions) for related topics`,
+                  ``,
+                  `If you're interested in contributing a fix, look for the \`good-first-issue\` label!`,
+                ].join('\n'),
+              });
+            }
