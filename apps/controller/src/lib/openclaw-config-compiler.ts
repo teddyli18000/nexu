@@ -357,19 +357,19 @@ export function compileOpenClawConfig(
   );
 
   const openClawConfig: OpenClawConfig = {
+    ...(disableMdnsDiscovery
+      ? {
+          discovery: {
+            mdns: {
+              mode: "off",
+            },
+          },
+        }
+      : {}),
     gateway: {
       port: env.openclawGatewayPort,
       mode: "local",
       bind: config.runtime.gateway.bind,
-      ...(disableMdnsDiscovery
-        ? {
-            discovery: {
-              mdns: {
-                mode: "off",
-              },
-            },
-          }
-        : {}),
       auth: {
         mode: config.runtime.gateway.authMode,
         ...(env.openclawGatewayToken
