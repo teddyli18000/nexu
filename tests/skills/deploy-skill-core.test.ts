@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
@@ -284,6 +284,9 @@ describe("deploy skill core", () => {
     expect(skillSource).not.toContain('import JSZip from "jszip"');
     expect(skillSource).toContain("createRequire(import.meta.url)");
     expect(skillSource).toContain('require("jszip")');
+    expect(skillSource).not.toContain(
+      "/Users/alche/Downloads/distill-campaign-clone/images",
+    );
     expect(desktopPackage.dependencies.jszip).toBeTruthy();
     expect(desktopPackage.build.extraResources).toEqual(
       expect.arrayContaining([
@@ -292,6 +295,29 @@ describe("deploy skill core", () => {
           to: "bundled-node-modules/jszip",
         }),
       ]),
+    );
+  });
+
+  it("bundles portrait images inside the skill package instead of relying on Downloads", async () => {
+    const bundledPortraitDir = path.join(
+      process.cwd(),
+      "apps/desktop/static/bundled-skills/deploy-skill/templates/distill-campaign/assets/portraits",
+    );
+    const portraitFiles = [
+      "05ece7aece7d5a8c3ad9aae3ecfbd20b_pixian_ai.png",
+      "1d8f55fb0ef3d2a6149d2d999aa79c06_pixian_ai.png",
+      "24a229ae040e9ccb578c01cc6821a2f2_pixian_ai.png",
+      "4b7b55f162dafff58baf54d05463eb5e_pixian_ai.png",
+      "b0ed8642ea2fdfbf2e6440772bc9d89b_pixian_ai.png",
+      "bd74a1adfbec68bf008cba7ce62d22b6_pixian_ai.png",
+      "f1763ea5ebb1d7b6cc1ddcf41b177f40_pixian_ai.png",
+    ];
+
+    await Promise.all(
+      portraitFiles.map(async (fileName) => {
+        const bytes = await readFile(path.join(bundledPortraitDir, fileName));
+        expect(bytes.byteLength).toBeGreaterThan(0);
+      }),
     );
   });
 
@@ -325,6 +351,141 @@ describe("deploy skill core", () => {
     ).rejects.toThrow(/log in to your Nexu account/i);
 
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the Nexu desktop app config when nexuHome has no desktop.cloud section", async () => {
+    rootDir = await mkdtemp(path.join(tmpdir(), "deploy-skill-"));
+    const fakeHome = await mkdtemp(path.join(tmpdir(), "deploy-skill-home-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      // nexuHome's config.json explicitly has no desktop.cloud section —
+      // this simulates the user's real ~/.nexu/config.json which lives next
+      // to the Nexu desktop app's actual login state.
+      await writeFile(
+        path.join(rootDir, "config.json"),
+        JSON.stringify({ desktop: {} }, null, 2),
+      );
+
+      // The real login state lives under the desktop app's data directory,
+      // inside HOME. The fallback resolver must find it there.
+      const desktopNexuDir = path.join(
+        fakeHome,
+        "Library",
+        "Application Support",
+        "@nexu",
+        "desktop",
+        ".nexu",
+      );
+      await mkdir(desktopNexuDir, { recursive: true });
+      await writeFile(
+        path.join(desktopNexuDir, "config.json"),
+        JSON.stringify(
+          {
+            desktop: {
+              cloud: {
+                connected: true,
+                apiKey: "nxk_desktop_fallback_key",
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      const zipPath = path.join(rootDir, "site.zip");
+      await writeFile(zipPath, "zip");
+      await savePageDeployConfig(rootDir, {
+        baseUrl: "https://deploy.example.com",
+      });
+
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            jobId: "fallback-job",
+            taskType: "static-deploy",
+            status: "queued",
+            createdAt: "2026-04-09T00:00:00.000Z",
+          }),
+          { status: 202 },
+        ),
+      );
+
+      const result = await submitPageDeployJob(
+        {
+          nexuHome: rootDir,
+          zipPath,
+          botId: "bot-1",
+          chatId: "C123",
+          chatType: "channel",
+          channel: "slack",
+          sessionKey: "session-1",
+        },
+        { fetchImpl },
+      );
+
+      expect(result.job.jobId).toBe("fallback-job");
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const [, init] = fetchImpl.mock.calls[0];
+      expect(init.headers.Authorization).toBe(
+        "Bearer nxk_desktop_fallback_key",
+      );
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      await rm(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it("reports all candidate paths when no Nexu cloud config can be found", async () => {
+    rootDir = await mkdtemp(path.join(tmpdir(), "deploy-skill-"));
+    const fakeHome = await mkdtemp(path.join(tmpdir(), "deploy-skill-home-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      // nexuHome has a config.json but no desktop section — falls through.
+      // HOME is a pristine tempdir — neither of the fallback candidates exist.
+      await writeFile(
+        path.join(rootDir, "config.json"),
+        JSON.stringify({}, null, 2),
+      );
+
+      const zipPath = path.join(rootDir, "site.zip");
+      await writeFile(zipPath, "zip");
+      await savePageDeployConfig(rootDir, {
+        baseUrl: "https://deploy.example.com",
+      });
+
+      const fetchImpl = vi.fn();
+
+      await expect(
+        submitPageDeployJob(
+          {
+            nexuHome: rootDir,
+            zipPath,
+            botId: "bot-1",
+            chatId: "C123",
+            chatType: "channel",
+            channel: "slack",
+            sessionKey: "session-1",
+          },
+          { fetchImpl },
+        ),
+      ).rejects.toThrow(/could not find a Nexu cloud configuration/i);
+
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      await rm(fakeHome, { recursive: true, force: true });
+    }
   });
 
   it("rejects a title outside the 2-10 character limit", async () => {
@@ -543,90 +704,144 @@ describe("deploy skill core", () => {
     );
 
     const zip = await JSZip.loadAsync(uploadedZipBuffer);
-    expect(Object.keys(zip.files)).toEqual(
+    const fileNames = Object.keys(zip.files);
+    expect(fileNames).toEqual(
       expect.arrayContaining([
         "index.html",
         "styles.css",
         "assets/logo.png",
-        "assets/qr.png",
-        "assets/poster-bg.png",
+        "assets/poster.png",
       ]),
     );
-    expect(
-      Object.keys(zip.files).some((name) => name.startsWith("images/")),
-    ).toBe(true);
+    expect(fileNames).not.toContain("assets/qr.png");
+    expect(fileNames).not.toContain("assets/poster-bg.png");
+    expect(fileNames.some((name) => name.startsWith("assets/portraits/"))).toBe(
+      true,
+    );
+
     const indexHtml = await zip.file("index.html").async("string");
+    // basic content
     expect(indexHtml).toContain("Alice分身");
     expect(indexHtml).toContain("牛马指数 88/100 — AI Builder");
     expect(indexHtml).toContain("https://github.com/nexu-io/roast-skill");
     expect(indexHtml).toContain("https://github.com/nexu-io/nexu");
+    // header + profile (left sidebar)
     expect(indexHtml).toContain('class="theme-toggle"');
     expect(indexHtml).toContain('class="profile-main"');
     expect(indexHtml).toContain('class="profile-info"');
     expect(indexHtml).toContain('class="profile-name">Alice分身<');
+    expect(indexHtml).toContain(
+      'class="profile-sub">牛马指数 88/100 — AI Builder<',
+    );
+    expect(indexHtml).toContain('data-theme="dark"');
+    // share buttons (moved to left sidebar)
     expect(indexHtml).toContain("𝕏 分享");
     expect(indexHtml).toContain("📕 小红书");
     expect(indexHtml).toContain("⚡ 即刻");
     expect(indexHtml).toContain("📸 海报");
-    expect(indexHtml).toContain('src="assets/logo.png"');
-    expect(indexHtml).toContain(
-      'src="images/1d8f55fb0ef3d2a6149d2d999aa79c06_pixian_ai.png"',
-    );
-    expect(indexHtml).toContain("https://twitter.com/intent/tweet");
-    expect(indexHtml).toContain("xhsdiscover://post");
-    expect(indexHtml).toContain("https://web.okjike.com");
-    expect(indexHtml).toContain("function openPoster()");
-    expect(indexHtml).toContain("function toggleTheme()");
-    expect(indexHtml).toContain("document.documentElement.dataset.theme");
-    expect(indexHtml).not.toContain("scroll to run");
-    expect(indexHtml).toContain('class="poster-card"');
-    expect(indexHtml).toContain('class="poster-canvas"');
-    expect(indexHtml).toContain('class="poster-qr-block"');
-    expect(indexHtml).toContain('class="poster-orbit"');
-    expect(indexHtml).toContain('class="poster-artwork"');
-    expect(indexHtml).toContain('class="poster-title"');
-    expect(indexHtml).toContain('class="poster-divider"');
-    expect(indexHtml).toContain(
-      'class="poster-tags poster-tags-row poster-tags-row-1"',
-    );
-    expect(indexHtml).toContain(
-      'class="poster-tags poster-tags-row poster-tags-row-2"',
-    );
-    expect(indexHtml).toContain('class="poster-species-card"');
-    expect(indexHtml).toContain('class="poster-score"');
-    expect(indexHtml).toContain('class="poster-score-label"');
-    expect(indexHtml).toContain('src="assets/qr.png"');
-    expect(indexHtml).toContain("办公室物种鉴定");
+    // tab navigation with four section targets
+    expect(indexHtml).toContain('class="tab-nav"');
+    expect(indexHtml).toContain('data-target="sec-metrics"');
+    expect(indexHtml).toContain('data-target="sec-roast"');
+    expect(indexHtml).toContain('data-target="sec-chat"');
+    expect(indexHtml).toContain('data-target="sec-skill"');
+    expect(indexHtml).toContain('id="sec-metrics"');
+    expect(indexHtml).toContain('id="sec-roast"');
+    expect(indexHtml).toContain('id="sec-chat"');
+    expect(indexHtml).toContain('id="sec-skill"');
+    // metrics card content
+    expect(indexHtml).toContain('class="stat-val">96<');
+    expect(indexHtml).toContain("🐂🐴 牛马指数");
     expect(indexHtml).toContain("画饼能力");
-    expect(indexHtml).toContain('class="poster-score">96<');
+    expect(indexHtml).toContain("信息密度");
+    expect(indexHtml).toContain("摸鱼强度");
+    expect(indexHtml).toContain("办公室物种鉴定");
+    expect(indexHtml).toContain("龙虾成瘾者");
+    expect(indexHtml).toContain('class="roast-text"');
+    expect(indexHtml).toContain('class="bar-list"');
+    expect(indexHtml).toContain('class="bar-fill red"');
+    // analysis card (driven by qaCards)
+    expect(indexHtml).toContain('class="dim-list"');
+    expect(indexHtml).toContain("致命优势");
+    expect(indexHtml).toContain("人生建议");
+    // chat card (driven by dialogs)
+    expect(indexHtml).toContain('class="chat-list"');
     expect(indexHtml).toContain("我是 Alice 的赛博分身，随时在线，永不关机。");
+    expect(indexHtml).toContain('class="chat-prompts"');
+    // skill file card
     expect(indexHtml).toContain(
       "复制链接发给你的 nexu agent：https://github.com/nexu-io/roast-skill",
     );
-    expect(
-      (indexHtml.match(/class="poster-tag\b[^"]*"/g) ?? []).length,
-    ).toBeGreaterThanOrEqual(3);
+    expect(indexHtml).toContain('id="copy-btn"');
+    // assets
+    expect(indexHtml).toContain('src="assets/logo.png"');
+    expect(indexHtml).toContain(
+      'src="assets/portraits/1d8f55fb0ef3d2a6149d2d999aa79c06_pixian_ai.png"',
+    );
+    // static poster with text overlay
+    expect(indexHtml).toContain('class="poster-image-wrap"');
+    expect(indexHtml).toContain('src="assets/poster.png"');
+    expect(indexHtml).toContain('class="poster-text-layer"');
+    expect(indexHtml).toContain('class="poster-text-title">Alice分身<');
+    expect(indexHtml).toContain(
+      'class="poster-text-sub">牛马指数 88/100 — AI Builder<',
+    );
+    expect(indexHtml).toContain('class="poster-text-score">96<');
+    expect(indexHtml).toContain('class="poster-text-species"');
+    expect(indexHtml).toContain('download="poster.png"');
+    // share platforms
+    expect(indexHtml).toContain("https://twitter.com/intent/tweet");
+    expect(indexHtml).toContain("xhsdiscover://post");
+    expect(indexHtml).toContain("https://web.okjike.com");
+    // client scripts
+    expect(indexHtml).toContain("function openPoster()");
+    expect(indexHtml).toContain("function closePoster()");
+    expect(indexHtml).toContain("function toggleTheme()");
+    expect(indexHtml).toContain("function cycleAvatar()");
+    expect(indexHtml).toContain("document.documentElement.dataset.theme");
+    expect(indexHtml).toContain("updateActiveTab");
+    // GitHub stars pill
+    expect(indexHtml).toContain('id="github-link"');
+    expect(indexHtml).toContain('id="github-stars"');
+    expect(indexHtml).toContain('id="github-stars-count"');
+    expect(indexHtml).toContain("fetchGithubStars");
+    expect(indexHtml).toContain("api.github.com/repos/nexu-io/nexu");
+    // negative assertions — the old poster-composition DOM is fully gone
+    expect(indexHtml).not.toContain('class="poster-card"');
+    expect(indexHtml).not.toContain('class="poster-canvas"');
+    expect(indexHtml).not.toContain('class="poster-orbit"');
+    expect(indexHtml).not.toContain('class="poster-artwork"');
+    expect(indexHtml).not.toContain('class="poster-qr-block"');
+    expect(indexHtml).not.toContain("assets/qr.png");
+    expect(indexHtml).not.toContain("assets/poster-bg.png");
+    expect(indexHtml).not.toContain("scroll to run");
+
     const stylesCss = await zip.file("styles.css").async("string");
-    expect(stylesCss).toContain(
-      'background-image: url("./assets/poster-bg.png")',
-    );
-    expect(stylesCss).toContain('font-family: "Apple Braille", var(--sans);');
-    expect(stylesCss).toContain("font-size: 77px;");
-    expect(stylesCss).toContain(
-      'font-family: "PingFang SC", "Inter", sans-serif;',
-    );
-    expect(stylesCss).toContain("font-size: 13px;");
-    expect(stylesCss).toContain(
-      'font-family: "Archivo Black", "Inter", sans-serif;',
-    );
-    expect(stylesCss).toContain("font-size: 123px;");
-    expect(stylesCss).toContain(
-      'font-family: "Abhaya Libre", "Times New Roman", serif;',
-    );
-    expect(stylesCss).toContain("font-size: 17px;");
-    expect(stylesCss).toContain("--header-bg: rgba(0, 0, 0, 0.88);");
-    expect(stylesCss).toContain("--header-bg: rgba(255, 255, 255, 0.92);");
-    expect(stylesCss).toContain("background: var(--header-bg);");
+    // clone CSS base — layout primitives
+    expect(stylesCss).toContain(".site-header");
+    expect(stylesCss).toContain(".profile-main");
+    expect(stylesCss).toContain(".tab-nav");
+    expect(stylesCss).toContain(".tab-btn.active");
+    expect(stylesCss).toContain(".stats-row");
+    expect(stylesCss).toContain(".bar-track");
+    expect(stylesCss).toContain(".dim-list");
+    expect(stylesCss).toContain(".chat-msg");
+    expect(stylesCss).toContain(".code-block");
+    expect(stylesCss).toContain(".poster-overlay");
+    // static poster overlay styles (our addition)
+    expect(stylesCss).toContain(".poster-image-wrap");
+    expect(stylesCss).toContain(".poster-text-layer");
+    expect(stylesCss).toContain(".poster-text-title");
+    expect(stylesCss).toContain(".poster-text-score");
+    // github star pill styles
+    expect(stylesCss).toContain(".github-stars");
+    expect(stylesCss).toContain(".github-stars--loaded");
+    // theme variables
+    expect(stylesCss).toContain("--bg: #000000");
+    expect(stylesCss).toContain('html[data-theme="light"]');
+    // dead rules from the old composed-poster design should be gone
+    expect(stylesCss).not.toContain("poster-bg.png");
+    expect(stylesCss).not.toContain("poster-orbit-blue");
   });
 
   it("rejects unknown template ids before submission", async () => {
@@ -837,7 +1052,7 @@ describe("deploy skill core", () => {
               phase: "completed",
               progress: 100,
               result: {
-                url: "https://xyz789.nexu.space",
+                url: "https://nexu.space/deploy/xyz789",
                 siteSlug: "xyz789",
                 projectName: "xyz789",
               },
@@ -854,7 +1069,7 @@ describe("deploy skill core", () => {
     );
 
     expect(finalResult.message).toBe(
-      "Your website is ready, the link is https://xyz789.nexu.space",
+      "Your website is ready, the link is https://nexu.space/deploy/xyz789",
     );
   });
 

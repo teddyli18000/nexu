@@ -12,11 +12,28 @@ Default production gateway:
 
 This skill is self-contained:
 - it reads its own deploy server config from `~/.nexu/deploy-skill.json`
-- it reads the Nexu cloud API key from `~/.nexu/config.json`
+- it resolves the Nexu cloud API key using a multi-path fallback (see below)
 - it stores submitted jobs in `~/.nexu/deploy-skill-jobs.json`
 - it can either submit an existing zip or render a built-in template into a zip first
 - it submits the resulting zip directly to the deploy server
 - it emits a follow-up async payload so the final completion message is delivered later
+
+### Nexu cloud credential lookup
+
+The skill searches the following `config.json` locations in order and uses the
+first one that contains a valid `desktop.cloud` section with `connected: true`
+and a non-empty `apiKey`:
+
+1. `{NEXU_HOME}/config.json` — respects an explicit `NEXU_HOME` env var, otherwise `~/.nexu/config.json`.
+2. `~/Library/Application Support/@nexu/desktop/.nexu/config.json` — the real location used by the Nexu desktop app on macOS.
+3. `~/.nexu/config.json` — legacy fallback (skipped if already covered by candidate 1).
+
+Resolution rules:
+- If a candidate file exists and has a `desktop.cloud` section, that file is authoritative — the skill either uses its `apiKey` or fails with a specific error for that file. It does **not** fall through to the next candidate in that case.
+- If a candidate file is missing, or exists but has no `desktop.cloud` section at all, the skill moves on to the next candidate.
+- If every candidate falls through, the skill fails with a "could not find a Nexu cloud configuration" error that lists every path it checked.
+
+This means a user who has logged into the Nexu desktop app (which writes to candidate 2) will have their API key picked up automatically, even if the older `~/.nexu/config.json` is empty or legacy.
 
 ## Requirements
 
@@ -78,20 +95,27 @@ node scripts/deploy_skill.js submit \
   [--user-id USER_ID]
 ```
 
-The content file must be structured JSON with this exact frame:
-- `title`: 2-10 characters
-- `subtitle`: 15-30 characters and must include `牛马指数`, `/100`, and `—`
-- `portraitId`: must be one of `portrait-1` through `portrait-7`
-- `tags`: 1-8 strings, each 2-8 characters
-- `metrics`: 4-6 items total
-- `posterSpeciesEmoji`
-- `posterSpeciesName`: 3-8 characters
-- `posterSpeciesSub`: 5-8 characters
-- `description`: 150-250 characters, no markdown, HTML, or newlines
-- `qaCards`: 2-3 items
-- `dialogs`: 3-6 items
-- `ctaText`: must equal `⭐ 生成我的牛马锐评`
-- `installText`: must equal `复制链接发给你的 nexu agent：https://github.com/nexu-io/roast-skill`
+The content file must be structured JSON with this exact frame. Each field maps to a specific slot in the rendered page layout — write content with the target slot in mind.
+
+Left sidebar (identity panel):
+- `title`: 2-10 characters — user's name / cyber-persona headline, shown in `.profile-name` under the avatar.
+- `subtitle`: 15-30 characters and must include `牛马指数`, `/100`, and `—` — short signature line rendered as `.profile-sub` directly under the name. Example format: `牛马指数 92/100 — 龙虾成瘾者`.
+- `portraitId`: must be one of `portrait-1` through `portrait-7` — chooses the avatar image shown in the sidebar AND on each `bot` chat bubble.
+- `tags`: 1-8 strings, each 2-8 characters — rendered both as the social-tag chips in the sidebar and as the quick-reply prompt buttons in the chat card (first 4). Keep tags punchy, noun-like, suitable for both roles.
+
+Right column (tabbed layout: 核心指标 / 深度扒皮 / 和我对话 / 技能文件):
+- `metrics`: 4-6 items total. `metrics[0]` becomes the hero score card (big number + label) in the 核心指标 tab and also drives the poster overlay score; its `value` should be a bare integer (e.g. `"92"`, no `%`). `metrics[1..]` become the horizontal bar chart rows below the species card, each with an SVG icon and a percentage bar — their `value` should be a percentage string (e.g. `"88%"`).
+- `posterSpeciesEmoji`: short emoji (1-4 chars) — shown in the species card next to the name and in the poster text overlay.
+- `posterSpeciesName`: 3-8 characters — the "物种" name in the species card (e.g. `龙虾成瘾者`).
+- `posterSpeciesSub`: 5-8 characters — small subtitle under the species name (e.g. `办公室物种鉴定`).
+- `description`: 150-250 characters, no markdown, HTML, or newlines — the main roast paragraph rendered as `.roast-text` inside the 核心指标 tab, above the bar chart. Write it as one dense paragraph; the template does not support paragraph breaks here.
+- `qaCards`: 2-3 items, each `{ question, answer }` — the 深度扒皮 tab. Each card gets a rotating icon (🔥 💪 💀 …). `question` is the title (short, label-style), `answer` is the body (1-3 sentences per card).
+- `dialogs`: 3-6 items, each `{ speaker: "bot" | "user", text }` — the 和我对话 tab. The first message should usually be a `bot` intro. The template alternates bubbles and shows the avatar next to `bot` messages.
+- `ctaText`: must equal `⭐ 生成我的牛马锐评` — shown in the "蒸馏完成度" progress header in the 技能文件 tab.
+- `installText`: must equal `复制链接发给你的 nexu agent：https://github.com/nexu-io/roast-skill` — shown inside the copy-to-clipboard code block in the 技能文件 tab.
+
+Poster (share modal):
+- The template ships a static `assets/poster.png` artwork as the backdrop. The following fields are overlaid as text on top of the artwork: `title`, `subtitle`, `metrics[0].value`, `metrics[0].label`, and `posterSpeciesEmoji` + `posterSpeciesName`. There is no per-user image composition — the poster artwork is the same PNG for every user; only the text overlay changes.
 
 If any field violates the frame, the skill rejects the payload and does not render. It never truncates, rewrites, or invents missing values.
 
