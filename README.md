@@ -283,7 +283,17 @@ We use GitHub as the primary hub for community interaction. Before opening a new
   </tr>
 </table>
 
+### Nexu Open Source Co-creation
+
+Nexu is actively recruiting open-source contributors — write code, earn points, and get featured on the leaderboard. To get started with minimal friction, check out the [Good First Issue Contributor Guide](https://docs.nexu.io/zh/guide/first-pr).
+
+We maintain a [Good First Issue list](https://github.com/nexu-io/nexu/labels/good-first-issue) with clearly scoped tasks focused on a single area, plus AI Prompt templates to help you ramp up quickly. For first-time contributors and `good-first-issue` claimers, we do our best to provide guidance and feedback. See [Contributor Rewards & Support](https://docs.nexu.io/zh/guide/contributor-rewards) for more details.
+
 ### Contributors
+
+Thanks to everyone who has contributed to making nexu better — whether through code, documentation, feedback, or creative ideas, every contribution counts.
+
+Special thanks to [NickHood1984](https://github.com/NickHood1984) for submitting and successfully merging a PR into nexu. Every real contribution like this is truly valued, and we welcome more friends to join in.
 
 <a href="https://github.com/nexu-io/nexu/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=nexu-io/nexu" />
