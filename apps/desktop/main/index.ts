@@ -944,11 +944,17 @@ async function runLaunchdColdStart(): Promise<void> {
     posthogHost:
       process.env.POSTHOG_HOST ?? runtimeConfig.posthogHost ?? undefined,
     langfusePublicKey:
-      process.env.LANGFUSE_PUBLIC_KEY ?? runtimeConfig.langfusePublicKey ?? undefined,
+      process.env.LANGFUSE_PUBLIC_KEY ??
+      runtimeConfig.langfusePublicKey ??
+      undefined,
     langfuseSecretKey:
-      process.env.LANGFUSE_SECRET_KEY ?? runtimeConfig.langfuseSecretKey ?? undefined,
+      process.env.LANGFUSE_SECRET_KEY ??
+      runtimeConfig.langfuseSecretKey ??
+      undefined,
     langfuseBaseUrl:
-      process.env.LANGFUSE_BASE_URL ?? runtimeConfig.langfuseBaseUrl ?? undefined,
+      process.env.LANGFUSE_BASE_URL ??
+      runtimeConfig.langfuseBaseUrl ??
+      undefined,
     log: (message: string) => logColdStart(message),
     nodeV8Coverage: process.env.NODE_V8_COVERAGE,
     desktopE2ECoverage: process.env.NEXU_DESKTOP_E2E_COVERAGE,
