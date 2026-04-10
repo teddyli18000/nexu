@@ -205,7 +205,13 @@ pnpm test
 
 ## 🤝 Contributing
 
-Contributions are welcome! The full English guide is [CONTRIBUTING.md](CONTRIBUTING.md) at the repo root (what GitHub shows when you open a PR). The same content is published at [docs.nexu.io — Contributing](https://docs.nexu.io/guide/contributing). **Chinese:** [docs.nexu.io (zh)](https://docs.nexu.io/zh/guide/contributing) · [docs/zh/guide/contributing.md](docs/zh/guide/contributing.md).
+Contributions are welcome! The full English guide is [CONTRIBUTING.md](CONTRIBUTING.md) at the repo root (what GitHub shows when you open a PR). The same content is published at [docs.nexu.io — Contributing](https://docs.nexu.io/guide/contributing).
+
+For Chinese-speaking contributors, we recommend starting from these entry points:
+
+- **How to contribute**: [docs.nexu.io (zh) — Contributing](https://docs.nexu.io/zh/guide/contributing)
+- **Rewards and support**: [贡献奖励与支持](https://docs.nexu.io/zh/guide/contributor-rewards)
+- **Looking for a first PR?** We are actively looking for **Good First Issue** contributors: [First PR guide (zh)](https://docs.nexu.io/zh/guide/first-pr) · [good-first-issue list](https://github.com/nexu-io/nexu/labels/good-first-issue)
 
 1. 🍴 Fork this repo
 2. 🌿 Create a feature branch (`git checkout -b feature/amazing-feature`)
