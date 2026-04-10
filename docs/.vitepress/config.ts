@@ -155,6 +155,8 @@ const enSidebar = [
     text: "Community",
     items: [
       { text: "Contributing", link: "/guide/contributing" },
+      { text: "Good First Issue Contributor Guide", link: "/guide/first-pr" },
+      { text: "Contributor Rewards & Support", link: "/guide/contributor-rewards" },
       { text: "Contact Us", link: "/guide/contact" },
       { text: "Star Us on GitHub", link: "/guide/star" },
       { text: "Changelog", link: "https://github.com/nexu-io/nexu/releases" },
@@ -211,6 +213,8 @@ const jaSidebar = [
     text: "コミュニティ",
     items: [
       { text: "コントリビュート", link: "/ja/guide/contributing" },
+      { text: "Good First Issue コントリビューターガイド", link: "/ja/guide/first-pr" },
+      { text: "コントリビューター報酬＆サポート", link: "/ja/guide/contributor-rewards" },
       { text: "お問い合わせ", link: "/ja/guide/contact" },
       { text: "GitHub で Star", link: "/ja/guide/star" },
       { text: "更新ログ", link: "https://github.com/nexu-io/nexu/releases" },
